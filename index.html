@@ -3,98 +3,68 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Orb Hunt — Aether</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
-  html,body { width:100%; height:100%; overflow:hidden; background:#0a0a0f; font-family:'Segoe UI',system-ui,sans-serif; }
-  #app { position:fixed; inset:0; }
-  canvas { display:block; touch-action:none; }
-  #hud { position:fixed; inset:0; pointer-events:none; opacity:0; transition:opacity .6s; }
-  #hud.on { opacity:1; }
-  #crosshair { position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px; border-radius:50%; background:rgba(255,255,255,.85); box-shadow:0 0 6px rgba(0,0,0,.6); display:none; }
-  #topbar { position:absolute; top:18px; right:20px; display:flex; flex-direction:column; align-items:flex-end; gap:10px; }
-  .stat { background:rgba(255,252,244,.14); backdrop-filter:blur(10px); border:1px solid rgba(255,245,220,.30); border-radius:14px; padding:8px 18px; color:#fff; text-align:right; min-width:132px; box-shadow:0 4px 18px rgba(20,30,50,.25); }
-  .stat .label { font-size:10px; letter-spacing:2.5px; text-transform:uppercase; color:rgba(255,252,240,.7); }
-  .stat .value { font-size:23px; font-weight:600; margin-top:2px; font-variant-numeric:tabular-nums; }
-  #orbStat .value { color:#ffe9a3; text-shadow:0 0 14px rgba(255,205,95,.75); }
-  #staminaWrap{position:absolute;left:50%;bottom:62px;transform:translateX(-50%);width:200px;height:8px;border-radius:6px;background:rgba(20,14,10,.45);border:1px solid rgba(255,240,210,.32);overflow:hidden;opacity:0;transition:opacity .35s;box-shadow:0 2px 10px rgba(0,0,0,.35)}
-  #staminaWrap.show{opacity:1}
-  #staminaBar{height:100%;width:100%;border-radius:5px;background:linear-gradient(90deg,#8fe6b0,#e8f59a,#ffd76a);transition:width .08s linear}
-  #staminaWrap.low #staminaBar{background:linear-gradient(90deg,#ff8a6a,#ffb347)}
-  #speedLines{position:absolute;inset:0;opacity:0;pointer-events:none;background:radial-gradient(ellipse at center, rgba(255,255,255,0) 34%, rgba(255,246,220,.30) 100%);transition:opacity .12s}
-  #vignette { position:absolute; inset:0; box-shadow:inset 0 0 200px rgba(60,35,20,.46); }
-  #touchUI { position:fixed; inset:0; pointer-events:none; display:none; z-index:5; }
-  #touchUI.on { display:block; }
-  #stickBase { position:absolute; width:110px; height:110px; border-radius:50%; border:2px solid rgba(255,255,255,.35); background:rgba(0,0,0,.22); display:none; }
-  #stickKnob { position:absolute; width:46px; height:46px; border-radius:50%; background:rgba(255,255,255,.6); left:32px; top:32px; }
-  .tBtn{position:absolute;width:76px;height:76px;border-radius:50%;border:2px solid rgba(255,238,190,.48);background:rgba(255,190,90,.22);color:#fff3cf;font-size:30px;pointer-events:auto;backdrop-filter:blur(6px);box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;touch-action:none;z-index:6}
-  .tBtn:active{transform:scale(.90)}
-  .tBtn.off{opacity:.34}
-  #dashBtn{right:22px;bottom:28px}
-  #atkBtn{right:22px;bottom:118px;width:82px;height:82px;font-size:34px;background:rgba(120,180,255,.22);border-color:rgba(180,210,255,.5)}
-  #jumpBtn{right:112px;bottom:28px;width:66px;height:66px;font-size:26px;background:rgba(180,255,180,.18);border-color:rgba(180,255,180,.4)}
-  #pauseBtn { position:absolute; top:14px; right:14px; width:44px; height:44px; border-radius:12px; border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.3); color:#fff; font-size:18px; pointer-events:auto; z-index:6; }
-  .overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(ellipse at center, rgba(120,175,215,.55), rgba(28,48,78,.93)); color:#fff; text-align:center; z-index:10; cursor:pointer; padding:20px; }
-  .overlay.hidden { display:none; }
-  .overlay h1 { font-size:clamp(34px,8vw,54px); font-weight:700; letter-spacing:2px; background:linear-gradient(120deg,#fffbe8,#ffd98a,#7fd8c8); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  .overlay p.sub { margin-top:10px; font-size:16px; color:rgba(255,255,255,.88); max-width:540px; line-height:1.6; }
-  .keys { margin-top:28px; display:flex; gap:14px; flex-wrap:wrap; justify-content:center; }
-  .key { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.24); border-radius:10px; padding:10px 16px; font-size:13px; color:#f4f8ff; }
-  .key b { display:block; font-size:16px; margin-bottom:4px; color:#ffe08a; }
-  .cta { margin-top:34px; font-size:15px; letter-spacing:3px; text-transform:uppercase; color:#ffe08a; animation:pulse 1.8s ease-in-out infinite; }
-  @keyframes pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
-  #winTime { font-size:26px; margin-top:14px; color:#8ff0c0; font-weight:600; }
-  .credit { position:absolute; bottom:16px; font-size:11px; color:rgba(255,255,255,.45); letter-spacing:1px; }
-  .installHint { margin-top:18px; font-size:12px; color:rgba(255,255,255,.6); max-width:440px; }
-  #attackFlash{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 70% 50%, rgba(120,200,255,.18), transparent 60%);transition:opacity .15s;z-index:4}
-  #attackFlash.on{opacity:1}
-  #loadStatus{position:absolute; bottom:46px; font-size:11px; color:#8ff0c0; letter-spacing:1px;}
-</style>
+<title>Orb Hunt — Whispering Valley</title>
+<link rel="stylesheet" href="./game/hud.css">
 </head>
 <body>
 <div id="app"></div>
 <div id="attackFlash"></div>
 
 <div id="hud">
-  <div id="cameraHint" style="display:none;position:absolute;bottom:20px;left:20px;color:white;font-size:13px">Kamera: tahan klik kanan dan geser · Esc: pause</div>
   <div id="vignette"></div>
-  <div id="crosshair"></div>
-  <div id="topbar">
-    <div class="stat" id="orbStat"><div class="label">Orb</div><div class="value">0 / 12</div></div>
-    <div class="stat"><div class="label">Waktu</div><div class="value" id="timeVal">0.0s</div></div>
-  </div>
-  <div id="staminaWrap"><div id="staminaBar"></div></div>
-  <div id="speedLines"></div>
+  <div id="cameraHint" style="display:none">Kamera: tahan klik kanan dan geser · Esc: pause</div>
+  <button id="mapBtn" aria-label="Buka peta"><canvas id="minimap" width="256" height="256"></canvas><span class="north">N</span><span class="map-caption">WHISPERING VALLEY</span></button>
+  <div id="topbar"><div class="stat" id="orbStat"><span class="label">Orb purba</span><span class="value">0 / 12</span></div><div class="stat" id="timeStat"><span class="label">Eksplorasi</span><span id="timeVal" class="value">0.0s</span></div></div>
+  <nav id="topActions" aria-label="Menu permainan">
+    <button id="settingsBtn" class="icon-button" aria-label="Pengaturan"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m13 3-1 4-4 2-4-1-2 5 3 3-1 4 4 3 4-1 3 3 5-2 1-4 4-2-1-5-4-1-2-4Z"/><circle cx="14" cy="14" r="4"/></svg></button>
+    <button id="pauseBtn" class="icon-button" aria-label="Jeda permainan"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M11 7v18M21 7v18"/></svg></button>
+  </nav>
+  <div id="healthHUD"><span class="level">Lv. 1</span><div class="hp-main"><div class="hp-text" id="hpValue">1000 / 1000</div><div class="hp-track"><div class="hp-fill" id="hpFill"></div></div><div class="hp-name">WANDERER</div></div></div>
+  <div id="staminaWrap"><div id="staminaBar"></div></div><div id="speedLines"></div>
 </div>
-
 <div id="touchUI">
   <div id="stickBase"><div id="stickKnob"></div></div>
-  <button class="tBtn" id="dashBtn" type="button">⚡</button>
-  <button class="tBtn" id="atkBtn" type="button">⚔️</button>
-  <button class="tBtn" id="jumpBtn" type="button">⤴</button>
-  <button id="pauseBtn">⏸</button>
+  <button class="tBtn" id="dashBtn" type="button" aria-label="Dash"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m15 7 7 5-5 7 8 7M17 19l-8 7M20 12l6 4M10 9H4M8 15H2M9 21H4"/><circle cx="21" cy="5" r="2"/></svg></button>
+  <button class="tBtn" id="jumpBtn" type="button" aria-label="Lompat"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="19" cy="5" r="2" fill="currentColor" stroke="none"/><path d="m16 10-5 6-6-2m11-4 5 3 5-6m-10 3-3 10 6 7m-6-7-7 6" stroke-width="2.8"/></svg></button>
+  <span id="attackHint">TAP TO STRIKE</span>
 </div>
+<div id="settingsPanel" class="panel-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle"><section class="panel">
+  <header class="panel-header"><h2 id="settingsTitle">Pengaturan</h2><button class="close-panel" data-close-panel aria-label="Tutup pengaturan"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m8 8 16 16M24 8 8 24"/></svg></button></header>
+  <label class="setting">Sensitivitas kamera <output id="sensitivityValue">1.0×</output><input id="sensitivityInput" type="range" min="0.4" max="2" step="0.1"></label>
+  <label class="setting">Jarak kamera <output id="distanceValue">5.0 m</output><input id="distanceInput" type="range" min="3" max="8" step="0.1"></label>
+  <label class="setting">Resolusi render<select id="qualityInput"><option value="low">Ringan</option><option value="balanced">Seimbang</option><option value="high">Tinggi</option></select></label>
+  <label class="setting">Bayangan<input id="shadowsInput" type="checkbox"></label>
+  <label class="setting">Suara orb<input id="soundInput" type="checkbox"></label>
+  <p class="panel-note">Perubahan langsung diterapkan dan disimpan di perangkat ini. Tap singkat area kanan untuk menyerang; geser untuk kamera.</p>
+  <button class="panel-button" data-close-panel>Kembali ke permainan</button>
+</section></div>
+<div id="mapPanel" class="panel-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="mapTitle"><section class="panel map-panel">
+  <header class="panel-header"><h2 id="mapTitle">Whispering Valley</h2><button class="close-panel" data-close-panel aria-label="Tutup peta"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m8 8 16 16M24 8 8 24"/></svg></button></header>
+  <canvas id="worldMap" width="512" height="512" aria-label="Peta lembah, posisi pemain, dan orb tersisa"></canvas>
+  <div class="map-legend"><span>▲ Posisi kamu</span><span>◇ Orb purba</span><span>N ↑</span></div>
+</section></div>
 
 <div class="overlay" id="startOverlay">
   <h1>ORB HUNT</h1>
-  <p class="sub">Jelajahi lembah sejuk di kala senja dan kumpulkan <b style="color:#ffe08a">12 orb purba</b>. Cari <b style="color:#8ff0c0">pilar cahaya</b> yang menjulang di kejauhan — di sanalah orb menunggu.<br><span style="color:#8ff0c0;font-size:13px">+ AETHER CHARACTER</span></p>
+  <p class="sub">Jelajahi lembah sejuk di kala senja dan kumpulkan <b style="color:#ffe08a">12 orb purba</b>. Cari <b style="color:#8ff0c0">pilar cahaya</b> yang menjulang di kejauhan — di sanalah orb menunggu.<br><span style="color:#8ff0c0;font-size:13px">WHISPERING VALLEY</span></p>
   <div class="keys" id="keysDesktop">
     <div class="key"><b>W A S D</b>Bergerak</div>
     <div class="key"><b>Mouse</b>Lihat sekeliling</div>
     <div class="key"><b>Shift</b>Lari / Dash</div>
     <div class="key"><b>Klik Kiri / J / F</b>Attack</div>
     <div class="key"><b>Space</b>Lompat</div>
+    <div class="key"><b>M / O</b>Peta / Pengaturan</div>
   </div>
   <div class="keys" id="keysTouch" style="display:none">
     <div class="key"><b>Joystick kiri</b>Gerak (dorong penuh = lari)</div>
     <div class="key"><b>Geser kanan</b>Lihat</div>
-    <div class="key"><b>⚡</b>Dash</div>
-    <div class="key"><b>⚔️</b>Attack</div>
+    <div class="key"><b>Dash</b>Gerak cepat</div>
+    <div class="key"><b>Lompat</b>Tombol panah</div>
     <div class="key"><b>Tap kanan</b>Attack</div>
   </div>
   <div class="cta" id="ctaText">— Klik untuk memulai —</div>
   <p class="installHint" id="installHint" style="display:none">💡 Di Android: menu Chrome ⋮ → <b>Tambahkan ke layar utama</b> untuk full-screen.</p>
-  <div class="credit">Three.js · Aether · Cel Shading · GPU Grass & Fauna</div>
+  <div class="credit">ORB HUNT · WHISPERING VALLEY</div>
   <div id="loadStatus">Loading...</div>
 </div>
 
@@ -113,8 +83,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import {samplePose, damp, joystickAxis} from './game/locomotion.mjs';
+import {readSettings, initHUD} from './game/hud.mjs';
+let settings;
+try { settings=readSettings(localStorage); } catch { settings=readSettings(null); }
 
-console.log('[BOOT] Old stable + Aether character');
+console.log('[BOOT] Orb Hunt — Whispering Valley');
 
 // ===== DETEKSI PERANGKAT - SAMA PERSIS VERSI LAWAS =====
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches);
@@ -123,7 +97,7 @@ if (isTouch){
   document.getElementById('keysTouch').style.display = 'flex';
   document.getElementById('installHint').style.display = 'block';
   document.getElementById('ctaText').textContent = '— Ketuk untuk memulai —';
-  document.getElementById('touchUI').classList.add('on');
+  // Touch controls are revealed only while playing.
 }
 
 // ===== RENDERER - VERSI LAWAS =====
@@ -133,7 +107,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.5 : 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.02;
+renderer.toneMappingExposure = 0.95;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.domElement.style.touchAction = 'none';
 document.getElementById('app').appendChild(renderer.domElement);
@@ -188,7 +162,7 @@ const skyMat = new THREE.ShaderMaterial({
 });
 scene.add(new THREE.Mesh(skyGeo, skyMat));
 
-const sun = new THREE.DirectionalLight(0xffc184, 3.3);
+const sun = new THREE.DirectionalLight(0xffdbb0, 2.5);
 sun.castShadow = true;
 sun.shadow.mapSize.set(isTouch?1024:2048, isTouch?1024:2048);
 sun.shadow.camera.left=-62; sun.shadow.camera.right=62; sun.shadow.camera.top=62; sun.shadow.camera.bottom=-62; sun.shadow.camera.near=1; sun.shadow.camera.far=420; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
@@ -299,26 +273,24 @@ const dust=new THREE.Points(pGeo,new THREE.PointsMaterial({size:0.16,map:dustTex
 ============================================================ */
 function createSlashTexture(){
   const C=document.createElement('canvas'); C.width=C.height=512; const ctx=C.getContext('2d');
-  const grad=ctx.createRadialGradient(256,256,20,256,256,220); grad.addColorStop(0,'rgba(255,255,255,0)'); grad.addColorStop(0.55,'rgba(140,210,255,0)'); grad.addColorStop(0.72,'rgba(180,230,255,0.85)'); grad.addColorStop(0.82,'rgba(255,255,255,0.95)'); ctx.fillStyle=grad; ctx.fillRect(0,0,512,512);
+  const grad=ctx.createRadialGradient(256,256,20,256,256,220); grad.addColorStop(0,'rgba(255,255,255,0)'); grad.addColorStop(0.55,'rgba(140,210,255,0)'); grad.addColorStop(0.72,'rgba(180,230,255,0.85)'); grad.addColorStop(0.82,'rgba(255,250,228,0.95)'); grad.addColorStop(1,'rgba(255,250,228,0)'); ctx.fillStyle=grad; ctx.fillRect(0,0,512,512);
   ctx.strokeStyle='rgba(200,240,255,0.9)'; ctx.lineWidth=18; ctx.shadowColor='rgba(100,180,255,1)'; ctx.shadowBlur=22; ctx.beginPath(); ctx.arc(256,300,180,Math.PI*1.05,Math.PI*1.95); ctx.stroke();
   const tex=new THREE.CanvasTexture(C); tex.colorSpace=THREE.SRGBColorSpace; return tex;
 }
 const slashTex=createSlashTexture();
 const slashPool=[]; const ghosts=[]; let ghostSpawnTimer=0;
 
-const CHAR={ model:null, bones:{}, restQuat:{}, ready:false, height:1.75, phase:0, lean:0, turnSmooth:Math.PI, cloakBones:[] };
+const CHAR={ model:null, bones:{}, restQuat:{}, ready:false, height:1.75, phase:0, lean:0, turnSmooth:0, cloakBones:[] };
 const charRoot=new THREE.Group(); scene.add(charRoot);
 function cleanBoneName(n){ return n.replace(/_\d+$/,'').replace(/\./g,'').replace(/\s+/g,'_').toUpperCase(); }
 
 new GLTFLoader().load('./character.glb', (gltf)=>{
   const model=gltf.scene;
-  const box=new THREE.Box3().setFromObject(model); const size=new THREE.Vector3(); box.getSize(size);
-  const scale=CHAR.height/(size.y||1); model.scale.setScalar(scale);
-  const box2=new THREE.Box3().setFromObject(model); model.position.y-=box2.min.y;
-  const DROP_MAT=/shadow|silk/i; const toRemove=[];
+  const DROP_MAT=/shadow|silk/i; const toRemove=[]; let weaponMesh=null;
   model.traverse(o=>{
     if(o.isMesh){
       const m0=Array.isArray(o.material)?o.material[0]:o.material; const mname=(m0&&m0.name)||'';
+      if(/needle/i.test(mname)) weaponMesh=o;
       if(DROP_MAT.test(mname)){ toRemove.push(o); return; }
       o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false;
       const oldMats=Array.isArray(o.material)?o.material:[o.material];
@@ -333,9 +305,28 @@ new GLTFLoader().load('./character.glb', (gltf)=>{
     if(o.isBone){ const clean=cleanBoneName(o.name); CHAR.bones[clean]=o; CHAR.restQuat[clean]=o.quaternion.clone(); }
   });
   for(const o of toRemove){ if(o.parent) o.parent.remove(o); }
+  // Measure only the character, not the oversized needle or ground shadow.
+  model.updateMatrixWorld(true);
+  const bodyBox=new THREE.Box3();
+  model.traverse(o=>{if(o.isMesh&&o!==weaponMesh)bodyBox.union(new THREE.Box3().setFromObject(o));});
+  const size=new THREE.Vector3();bodyBox.getSize(size);
+  const bodyScale=CHAR.height/Math.max(size.y,.01);
+  model.scale.setScalar(bodyScale);model.position.y=-bodyBox.min.y*bodyScale;
+  if(weaponMesh && CHAR.bones.HANDR){
+    // This GLB's needle is rigid: bake its authored grip into hand-local space.
+    // Keep the supplied weapon, but remove its original back-mounted skinned mesh.
+    const geometry=weaponMesh.geometry.clone();
+    geometry.translate(0,-1.10,.4479);
+    const weapon=new THREE.Mesh(geometry,weaponMesh.material);
+    weapon.name='HeldNeedle';weapon.rotation.set(-.12,0,Math.PI);
+    weapon.scale.setScalar(.55);weapon.position.set(0,.028,0);
+    weapon.castShadow=true;weapon.frustumCulled=false;
+    CHAR.bones.HANDR.add(weapon);CHAR.weapon=weapon;
+    weaponMesh.removeFromParent();weaponMesh.geometry.dispose();
+  }
   charRoot.add(model); CHAR.baseY=model.position.y; CHAR.model=model; CHAR.ready=true;
   Object.keys(CHAR.bones).forEach(k=>{ if(k.includes('DRESS')) CHAR.cloakBones.push({bone:CHAR.bones[k], restQ:CHAR.bones[k].quaternion.clone(), curX:0, velX:0}); });
-  document.getElementById('loadStatus').textContent = `Aether Ready • ${Object.keys(CHAR.bones).length} bones • Tap to play`;
+  document.getElementById('loadStatus').textContent = `Character Ready • ${Object.keys(CHAR.bones).length} bones • Tap to play`;
   console.log('[CHAR] Ready', Object.keys(CHAR.bones).length, 'bones');
 }, undefined, e=>{ console.warn('char fail', e); document.getElementById('loadStatus').textContent='Char fail: '+e.message; });
 
@@ -347,37 +338,25 @@ function boneRot(name, rx,ry,rz, blend=1){
 }
 function animateAether(dt, speed01, moving, isRunning, isDashing, isJumping, isFalling, attackInfo){
   if(!CHAR.ready) return;
-  const blendBase=1-Math.pow(0.001, dt);
-  const stepRate=isDashing?11:(isRunning?9.2:5.6);
-  if(moving && !attackInfo.active) CHAR.phase+=dt*stepRate; else if(!attackInfo.active) CHAR.phase+=dt*1.2;
-  const p=CHAR.phase, sw=Math.sin(p), cw=Math.cos(p);
-  if(attackInfo.active){
-    const t=attackInfo.t;
-    boneRot('PELVIS',0,0.6*Math.sin(t*Math.PI),0,blendBase);
-    boneRot('CHEST',0.15,0.9*Math.sin(t*Math.PI),0,blendBase);
-    boneRot('SHOULDERR',-0.4+1.0*Math.sin(t*Math.PI),0,0,blendBase);
-    boneRot('ARMR',0.3,0,0,blendBase);
-    boneRot('FOREARMR',0.5+0.8*Math.sin(t*Math.PI),0,0,blendBase);
-    CHAR.cloakBones.forEach(c=>{ c.curX+=(0.6*Math.sin(t*Math.PI)-c.curX)*dt*8; _e.set(c.curX,0,0); _q.setFromEuler(_e); _q.premultiply(c.restQ); c.bone.quaternion.slerp(_q, blendBase); });
-  } else if(isDashing){
-    boneRot('PELVIS',0.55,0,0,blendBase);
-    boneRot('THIGHR',sw*0.95,0,0,blendBase); boneRot('THIGHL',-sw*0.95,0,0,blendBase);
-    boneRot('KNEER',Math.max(0,-sw)*1.15+0.25,0,0,blendBase); boneRot('KNEEL',Math.max(0,sw)*1.15+0.25,0,0,blendBase);
-    CHAR.cloakBones.forEach(c=>{ c.curX+=(-0.9-c.curX)*dt*12; _e.set(c.curX,0,0); _q.setFromEuler(_e); _q.premultiply(c.restQ); c.bone.quaternion.slerp(_q, blendBase); });
-  } else if(isJumping||isFalling){
-    boneRot('THIGHR',0.25,0,0,blendBase); boneRot('THIGHL',0.25,0,0,blendBase); boneRot('KNEER',0.55,0,0,blendBase); boneRot('KNEEL',0.55,0,0,blendBase);
-  } else if(moving){
-    const thighAmp=isRunning?0.92:0.58, armAmp=isRunning?0.72:0.42;
-    boneRot('THIGHR',sw*thighAmp,0,0.04*Math.abs(sw),blendBase); boneRot('THIGHL',-sw*thighAmp,0,-0.04*Math.abs(sw),blendBase);
-    boneRot('KNEER',(sw<0?0.55:0.12),0,0,blendBase); boneRot('KNEEL',(sw>0?0.55:0.12),0,0,blendBase);
-    boneRot('SHOULDERR',-sw*armAmp,0,0.12,blendBase); boneRot('SHOULDERL',sw*armAmp,0,-0.12,blendBase);
-    boneRot('CHEST',0.04,-sw*0.12,sw*0.04,blendBase);
-    CHAR.cloakBones.forEach(c=>{ const target=-0.15-speed01*0.35; c.curX+=(target-c.curX)*dt*6; _e.set(c.curX,sw*0.12,0); _q.setFromEuler(_e); _q.premultiply(c.restQ); c.bone.quaternion.slerp(_q, blendBase); });
-  } else {
-    const br=Math.sin(p*0.85)*0.035; boneRot('BELLY',br,0,0,blendBase); boneRot('CHEST',br*0.7,Math.sin(p*0.3)*0.04,0,blendBase); boneRot('HEAD',br*0.4,Math.sin(p*0.42)*0.11,0,blendBase);
-    CHAR.cloakBones.forEach((c,i)=>{ const target=Math.sin(p*0.4+i*0.7)*0.08; c.curX+=(target-c.curX)*dt*2.2; _e.set(c.curX,0,0); _q.setFromEuler(_e); _q.premultiply(c.restQ); c.bone.quaternion.slerp(_q, blendBase*0.6); });
-  }
-  if(CHAR.model) CHAR.model.position.y=CHAR.baseY+(moving&&!attackInfo.active?Math.abs(Math.cos(p))*0.055*(isRunning?1:0.6):0);
+  CHAR.animTime=(CHAR.animTime||0)+dt;
+  CHAR.move=damp(CHAR.move||0,moving?Math.min(1,speed01*2.2):0,9,dt);
+  CHAR.run=damp(CHAR.run||0,isRunning?1:0,7,dt);
+  CHAR.dash=damp(CHAR.dash||0,isDashing?1:0,14,dt);
+  CHAR.phase+=dt*(5.8+CHAR.run*3.4+CHAR.dash*3)*CHAR.move;
+  const pose=samplePose({phase:CHAR.phase,time:CHAR.animTime,move:CHAR.move,run:CHAR.run,dash:CHAR.dash,
+    airborne:isJumping||isFalling,falling:isFalling,attack:attackInfo.active?attackInfo.t:null,combo:attackInfo.combo});
+  const blend=1-Math.exp(-(attackInfo.active?20:13)*dt);
+  for(const [name,angles] of Object.entries(pose))boneRot(name,...angles,blend);
+  // Secondary motion: substepped damped spring, stable even on slower mobile frames.
+  CHAR.cloakBones.forEach((c,i)=>{
+    const target=-CHAR.move*.18-CHAR.dash*.25+Math.sin(CHAR.animTime*2+i*.7)*.035;
+    const steps=Math.max(1,Math.ceil(dt/.008)),h=dt/steps;
+    for(let j=0;j<steps;j++){c.velX+=((target-c.curX)*65-c.velX*12)*h;c.curX+=c.velX*h;}
+    _e.set(c.curX,Math.sin(CHAR.phase+i)*.035*CHAR.move,0);_q.setFromEuler(_e);_q.premultiply(c.restQ);c.bone.quaternion.slerp(_q,blend);
+  });
+  const bob=(1-Math.cos(CHAR.phase*2))*.012*CHAR.move;
+  CHAR.bob=damp(CHAR.bob||0,bob,14,dt);
+  CHAR.model.position.y=CHAR.baseY+CHAR.bob;
 }
 // Geometry and textures on ghosts are shared with the live character.
 function disposeGhost(group){
@@ -407,21 +386,22 @@ function spawnGhost(){
     clone.traverse(o=>{ if(o.isMesh){ const mats=Array.isArray(o.material)?o.material:[o.material]; const newMats=mats.map(m=>{ const nm=m.clone(); nm.transparent=true; nm.opacity=0.55; nm.depthWrite=false; nm.emissive=new THREE.Color(0x6ec8ff); nm.emissiveIntensity=0.35; return nm; }); o.material=Array.isArray(o.material)?newMats:newMats[0]; o.castShadow=false; } });
     const gRoot=new THREE.Group(); gRoot.position.copy(charRoot.position); gRoot.quaternion.copy(charRoot.quaternion);
     clone.position.copy(CHAR.model.position); clone.rotation.copy(CHAR.model.rotation); clone.scale.copy(CHAR.model.scale);
+    gRoot.position.set(player.pos.x,terrainH(player.pos.x,player.pos.z)+player.pos.y,player.pos.z);
     gRoot.add(clone); scene.add(gRoot); ghosts.push({group:gRoot, life:0.45, max:0.45});
   }catch(e){ console.warn('Ghost effect failed', e); }
 }
 function spawnSlash(charPos, charYaw){
   const forward=new THREE.Vector3(Math.sin(charYaw),0,Math.cos(charYaw));
   const basePos=charPos.clone().add(new THREE.Vector3(0,1.1,0)).addScaledVector(forward,1.2);
-  const geo=new THREE.PlaneGeometry(5.2,3.2); const mat=new THREE.MeshBasicMaterial({map:slashTex, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide});
-  const mesh=new THREE.Mesh(geo,mat); mesh.position.copy(basePos); mesh.lookAt(mesh.position.clone().add(forward)); mesh.rotateZ(Math.PI*0.15); scene.add(mesh); slashPool.push({mesh, life:0.28, max:0.28});
+  const geo=new THREE.PlaneGeometry(2.4,1.6); const mat=new THREE.MeshBasicMaterial({map:slashTex, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide});
+  const mesh=new THREE.Mesh(geo,mat); mesh.position.copy(basePos); mesh.lookAt(mesh.position.clone().add(forward)); mesh.rotateZ(ATTACK.combo===2?Math.PI*.5:(ATTACK.combo%2?-.3:.3)); scene.add(mesh); slashPool.push({mesh, life:0.28, max:0.28});
   document.getElementById('attackFlash').classList.add('on'); setTimeout(()=>document.getElementById('attackFlash').classList.remove('on'),90);
 }
 
 /* ============================================================
    KONTROL + GAME STATE - SAMA PERSIS VERSI LAWAS YANG WORK!
 ============================================================ */
-const player = { pos:new THREE.Vector3(0,0,6), yaw:Math.PI, pitch:0.12, vel:new THREE.Vector3(), vy:0, grounded:true, jumpCooldown:0, bob:0 };
+const player = { hp:1000, maxHP:1000, pos:new THREE.Vector3(0,0,6), yaw:Math.PI, pitch:0.04, vel:new THREE.Vector3(), vy:0, grounded:true, jumpCooldown:0, bob:0 };
 const cam3={dist:5.0, distNow:5.0, height:1.92, minPitch:-0.55, maxPitch:1.05};
 const DASH={ stamina:100, max:100, cost:26, runDrain:20, regen:32, regenDelay:0.55, sinceUse:9, timer:0, dur:0.30, cooldown:0, power:40, dir:new THREE.Vector3(), trail:0, exhausted:false };
 const COMBO_DURATIONS=[0.52,0.58,0.68,0.82];
@@ -464,6 +444,7 @@ document.addEventListener('pointerlockerror', pointerLockFailed);
 renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 // INI KUNCI VERSI LAWAS YANG WORK - JANGAN UBAH!
 startOverlay.addEventListener('click', () => {
+  if(!CHAR.ready) return;
   if (isTouch){ if (state === 'ready' || state === 'paused') startGame(); }
   else requestLock();
 });
@@ -473,6 +454,7 @@ document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === renderer.domElement;
   if (locked){ mouseLookFallback = false; document.getElementById('cameraHint').style.display='none'; }
   if (locked){
+    if(!CHAR.ready){ document.exitPointerLock(); return; }
     if (state === 'ready' || state === 'paused') startGame();
     hud.classList.add('on');
     startOverlay.classList.add('hidden');
@@ -482,8 +464,8 @@ document.addEventListener('pointerlockchange', () => {
 });
 document.addEventListener('mousemove', e => {
   if (state !== 'playing' || (!locked && !(mouseLookFallback && (e.buttons & 2)))) return;
-  player.yaw   -= e.movementX * 0.0022;
-  player.pitch -= e.movementY * 0.0022;
+  player.yaw   -= e.movementX * 0.0022 * settings.sensitivity;
+  player.pitch -= e.movementY * 0.0022 * settings.sensitivity;
   player.pitch = Math.max(cam3.minPitch, Math.min(cam3.maxPitch, player.pitch));
 });
 renderer.domElement.addEventListener('click', () => {
@@ -526,8 +508,8 @@ function onTM(e){
       stickKnob.style.top  = (32+dy)+'px';
     } else if (t.identifier === lookId){
       if (lookGesture && Math.hypot(t.clientX-lookGesture.x, t.clientY-lookGesture.y)>12) lookGesture.moved=true;
-      player.yaw   -= (t.clientX - lastLX) * 0.005;
-      player.pitch -= (t.clientY - lastLY) * 0.005;
+      player.yaw   -= (t.clientX - lastLX) * 0.005 * settings.sensitivity;
+      player.pitch -= (t.clientY - lastLY) * 0.005 * settings.sensitivity;
       player.pitch = Math.max(cam3.minPitch, Math.min(cam3.maxPitch, player.pitch));
       lastLX = t.clientX; lastLY = t.clientY;
     }
@@ -574,10 +556,8 @@ function tryAttack(){
   ATTACK.active=true; ATTACK.timer=0; ATTACK.t=0; ATTACK.slashSpawned=false; ATTACK.queue=false;
 }
 document.getElementById('dashBtn').addEventListener('click', tryDash);
-document.getElementById('atkBtn').addEventListener('click', tryAttack);
 document.getElementById('jumpBtn').addEventListener('click', tryJump);
 document.getElementById('dashBtn').addEventListener('touchstart', e=>{ e.preventDefault(); tryDash(); }, {passive:false});
-document.getElementById('atkBtn').addEventListener('touchstart', e=>{ e.preventDefault(); tryAttack(); }, {passive:false});
 document.getElementById('jumpBtn').addEventListener('touchstart', e=>{ e.preventDefault(); tryJump(); }, {passive:false});
 addEventListener('keydown', e=>{
   if (state==='playing' && ['Space','ShiftLeft','ShiftRight','KeyJ','KeyF','Escape'].includes(e.code)) e.preventDefault();
@@ -591,6 +571,7 @@ renderer.domElement.addEventListener('mousedown', e=>{ if(e.button===0 && state=
 
 let audioCtx = null;
 function chime(){
+  if(!settings.sound) return;
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const notes = [660, 880, 1320];
@@ -608,8 +589,22 @@ function chime(){
 
 let state = 'ready';
 let score = 0, elapsed = 0;
+function applySettings(_settings=settings,key=null){
+  if(key && !['quality','shadows'].includes(key)) return;
+  const cap=settings.quality==='low'?1:settings.quality==='high'?(isTouch?1.75:2):1.25;
+  renderer.setPixelRatio(Math.min(devicePixelRatio,cap));
+  renderer.shadowMap.enabled=settings.shadows;
+  if(!key || key==='shadows') scene.traverse(o=>{if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate=true);});
+}
+applySettings();
+const gameHUD=initHUD({terrainH,waterY:WATER_Y,worldSize:T_SIZE,settings,onSettings:applySettings,
+  onPause:pauseGame,onResume:()=>{if(isTouch)startGame();else requestLock();},
+  getState:()=>({state,x:player.pos.x,z:player.pos.z,yaw:player.yaw,facing:CHAR.turnSmooth,orbs,hp:player.hp,maxHP:player.maxHP})});
 function startGame(){
+  if(!CHAR.ready) return;
   state = 'playing';
+  document.body.classList.add('playing');
+  if(isTouch) document.getElementById('touchUI').classList.add('on');
   hud.classList.add('on');
   startOverlay.classList.add('hidden');
   console.log('[GAME] playing - character ready?', CHAR.ready);
@@ -623,6 +618,8 @@ addEventListener('blur', () => { if(state==='playing') pauseGame(); });
 document.addEventListener('visibilitychange', () => { if(document.hidden && state==='playing') pauseGame(); });
 function pauseGame(){
   state = 'paused';
+  document.body.classList.remove('playing');
+  document.getElementById('touchUI').classList.remove('on');
   clearTouchInput();
   if(document.pointerLockElement) document.exitPointerLock();
   player.vel.set(0,0,0);
@@ -633,11 +630,12 @@ function pauseGame(){
 }
 function resetGame(){
   clearTouchInput(); clearKeys(); clearEffects();
+  player.hp=player.maxHP;
   score = 0; elapsed = 0; lastShownTime = -1;
   orbs.forEach(o => { o.visible = true; });
-  player.pos.set(0, 0, 6); player.yaw = Math.PI; player.pitch = 0.12;
+  player.pos.set(0, 0, 6); player.yaw = Math.PI; player.pitch = 0.04;
   player.vel.set(0,0,0); player.vy=0; player.grounded=true;
-  CHAR.turnSmooth=Math.PI; CHAR.phase=0;
+  CHAR.turnSmooth=0; CHAR.phase=0; CHAR.move=0; CHAR.run=0; CHAR.dash=0; CHAR.bob=0;
   DASH.stamina=DASH.max; DASH.timer=0; DASH.cooldown=0; DASH.trail=0;
   ATTACK.active=false; ATTACK.timer=0; ATTACK.t=0; ATTACK.combo=0; ATTACK.cooldown=0; ATTACK.queue=false; ATTACK.slashSpawned=false; ATTACK.duration=COMBO_DURATIONS[0];
   DASH.exhausted=false; DASH.sinceUse=9; player.jumpCooldown=0;
@@ -648,6 +646,8 @@ function resetGame(){
 function updateHUD(){ elOrb.textContent = score + ' / ' + ORB_COUNT; }
 function winGame(){
   state = 'won';
+  document.body.classList.remove('playing');
+  document.getElementById('touchUI').classList.remove('on');
   clearTouchInput(); clearKeys();
   if (document.pointerLockElement) document.exitPointerLock();
   hud.classList.remove('on');
@@ -688,8 +688,8 @@ function animate(){
     if (keys.KeyA) tmpV.x -= 1;
     if (keys.KeyD) tmpV.x += 1;
     if (stick.id !== null){
-      tmpV.x += stick.dx/MAX_R;
-      tmpV.z += stick.dy/MAX_R;
+      const axis=joystickAxis(stick.dx,stick.dy,MAX_R);
+      tmpV.x += axis.x; tmpV.z += axis.y;
     }
     if(DASH.cooldown>0) DASH.cooldown-=dt;
     if(DASH.timer>0){
@@ -773,10 +773,10 @@ function animate(){
   }
 
   // CAMERA THIRD PERSON (bukan first person lagi)
-  _camTarget.set(player.pos.x, groundY+1.92, player.pos.z);
+  _camTarget.set(player.pos.x, groundY+1.30, player.pos.z);
   const cp=Math.cos(player.pitch), sp2=Math.sin(player.pitch);
-  _camDir.set(Math.sin(player.yaw)*cp, sp2+0.26, Math.cos(player.yaw)*cp).normalize();
-  let want=cam3.dist;
+  _camDir.set(Math.sin(player.yaw)*cp, sp2+0.16, Math.cos(player.yaw)*cp).normalize();
+  let want=settings.cameraDistance;
   for(let i=0;i<COLLIDERS.length;i++){ const c=COLLIDERS[i]; const dx=c.x-_camTarget.x, dz=c.z-_camTarget.z; const along=dx*_camDir.x+dz*_camDir.z; if(along<=0||along>want) continue; const px2=dx-_camDir.x*along, pz2=dz-_camDir.z*along; const perp=Math.hypot(px2,pz2); const rr=c.r+0.55; if(perp<rr){ const back=Math.sqrt(Math.max(0,rr*rr-perp*perp)); const hit=along-back; if(hit<want) want=Math.max(1.4,hit);} }
   const rate=want<cam3.distNow?18:5; cam3.distNow+=(want-cam3.distNow)*Math.min(1,dt*rate);
   _camDesired.copy(_camTarget).addScaledVector(_camDir,cam3.distNow);
@@ -820,6 +820,7 @@ function animate(){
   for(let i=ghosts.length-1;i>=0;i--){ const g=ghosts[i]; g.life-=dt; const k=g.life/g.max; if(g.life<=0){ disposeGhost(g.group); ghosts.splice(i,1); continue; } g.group.traverse(o=>{ if(o.isMesh&&o.material){ if(Array.isArray(o.material)) o.material.forEach(m=>{ m.opacity=k*0.55; }); else o.material.opacity=k*0.55; } }); g.group.scale.setScalar(1+(1-k)*0.08); }
   for(let i=slashPool.length-1;i>=0;i--){ const s=slashPool[i]; s.life-=dt; const k=s.life/s.max; if(s.life<=0){ disposeSlash(s.mesh); slashPool.splice(i,1); continue; } s.mesh.material.opacity=k; s.mesh.scale.setScalar(0.9+k*0.25); }
 
+  gameHUD.update();
   renderer.render(scene, camera);
 }
 animate();
@@ -828,7 +829,7 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
 });
-console.log('[INIT] Old stable + Aether - START should work like before!');
+console.log('[INIT] Orb Hunt ready');
 </script>
 </body>
 </html>

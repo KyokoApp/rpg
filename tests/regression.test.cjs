@@ -50,7 +50,7 @@ test('touch only attacks for a short stationary right-side tap',()=>{
   }
 });
 test('camera drag remains marked even when finger returns to starting point',()=>{
-  const c={state:'playing',stick:{id:null},lookId:2,lookGesture:{x:900,y:200,moved:false},lastLX:900,lastLY:200,player:{yaw:0,pitch:0},cam3:{minPitch:-.55,maxPitch:1.05},Math,e:{preventDefault(){},changedTouches:[{identifier:2,clientX:930,clientY:200}]}};
+  const c={state:'playing',settings:{sensitivity:1},stick:{id:null},lookId:2,lookGesture:{x:900,y:200,moved:false},lastLX:900,lastLY:200,player:{yaw:0,pitch:0},cam3:{minPitch:-.55,maxPitch:1.05},Math,e:{preventDefault(){},changedTouches:[{identifier:2,clientX:930,clientY:200}]}};
   run('onTM',c,'e');assert.equal(c.lookGesture.moved,true);
 });
 test('stationary attack retains facing direction',()=>{
