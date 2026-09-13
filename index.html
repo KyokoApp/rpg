@@ -25,58 +25,59 @@
   #vignette{position:absolute;inset:0;box-shadow:inset 0 0 200px rgba(60,35,20,.46)}
   #touchUI{position:fixed;inset:0;pointer-events:none;display:none;z-index:5}
   #touchUI.on{display:block}
-  #stickBase{position:absolute;width:120px;height:120px;border-radius:50%;border:2px solid rgba(255,255,255,.38);background:rgba(0,0,0,.22);display:none;backdrop-filter:blur(4px)}
-  #stickKnob{position:absolute;width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.95), rgba(255,255,255,.55));left:35px;top:35px;box-shadow:0 2px 8px rgba(0,0,0,.4)}
-  .tBtn{position:absolute;width:76px;height:76px;border-radius:50%;border:2px solid rgba(255,238,190,.48);background:rgba(255,190,90,.22);color:#fff3cf;font-size:30px;pointer-events:auto;backdrop-filter:blur(6px);box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;transition:transform .08s, background .12s; touch-action:none}
+  #stickBase{position:absolute;width:120px;height:120px;border-radius:50%;border:2px solid rgba(255,255,255,.38);background:rgba(0,0,0,.22);display:none;backdrop-filter:blur(4px); pointer-events:none}
+  #stickKnob{position:absolute;width:50px;height:50px;border-radius:50%;background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.95), rgba(255,255,255,.55));left:35px;top:35px;box-shadow:0 2px 8px rgba(0,0,0,.4); pointer-events:none}
+  .tBtn{position:absolute;width:76px;height:76px;border-radius:50%;border:2px solid rgba(255,238,190,.48);background:rgba(255,190,90,.22);color:#fff3cf;font-size:30px;pointer-events:auto;backdrop-filter:blur(6px);box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;transition:transform .08s, background .12s; touch-action:none; z-index:6}
   .tBtn:active{transform:scale(.90);background:rgba(255,200,110,.45)}
   .tBtn.off{opacity:.34}
   #dashBtn{right:22px;bottom:28px}
   #atkBtn{right:22px;bottom:118px;width:82px;height:82px;font-size:34px;background:rgba(120,180,255,.22);border-color:rgba(180,210,255,.5)}
   #jumpBtn{right:112px;bottom:28px;width:66px;height:66px;font-size:26px;background:rgba(180,255,180,.18);border-color:rgba(180,255,180,.4)}
   #pauseBtn{position:absolute;top:14px;right:14px;width:44px;height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.3);color:#fff;font-size:18px;pointer-events:auto;z-index:6}
-  .overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at center, rgba(18,32,52,.92), rgba(8,12,22,.98));color:#fff;text-align:center;z-index:10;padding:20px;overflow:auto}
-  .overlay.hidden{display:none}
+  .overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at center, rgba(18,32,52,.96), rgba(8,12,22,.99));color:#fff;text-align:center;z-index:100;padding:20px;overflow:auto}
+  .overlay.hidden{display:none !important}
   .overlay h1{font-size:clamp(36px,9vw,62px);font-weight:800;letter-spacing:3px;background:linear-gradient(120deg,#fffbe8,#ffd98a,#7fd8c8);-webkit-background-clip:text;background-clip:text;color:transparent; line-height:1.1}
   .overlay h2{font-size:clamp(22px,5vw,32px);font-weight:700;letter-spacing:2px;color:#ffe08a; margin-bottom:12px}
-  .overlay p.sub{margin-top:12px;font-size:15px;color:rgba(255,255,255,.78);max-width:520px;line-height:1.6}
-  .overlay p.subtitle{font-size:14px;letter-spacing:6px;color:#8ff0c0; margin-top:6px; font-weight:600}
-  .menuBtns{margin-top:32px; display:flex; flex-direction:column; gap:14px; width:100%; max-width:320px}
-  .mainBtn{width:100%; padding:16px 20px; border-radius:14px; border:1px solid rgba(255,238,190,.35); background:linear-gradient(135deg, rgba(255,220,120,.22), rgba(255,180,80,.18)); color:#fff8e0; font-size:16px; font-weight:700; letter-spacing:2px; cursor:pointer; backdrop-filter:blur(8px); box-shadow:0 6px 20px rgba(0,0,0,.35); transition:all .15s; pointer-events:auto}
-  .mainBtn:hover{transform:translateY(-2px); background:linear-gradient(135deg, rgba(255,220,120,.32), rgba(255,180,80,.28)); box-shadow:0 10px 28px rgba(0,0,0,.45)}
-  .mainBtn:active{transform:scale(.97)}
-  .mainBtn.secondary{background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.18); color:rgba(255,255,255,.85)}
-  .mainBtn.secondary:hover{background:rgba(255,255,255,.14)}
-  .mainBtn.big{font-size:18px; padding:18px 24px; background:linear-gradient(135deg, #ffd76a, #ffb347); color:#2a1a05; border-color:rgba(255,220,120,.6); box-shadow:0 8px 24px rgba(255,180,60,.35)}
-  .mainBtn.big:hover{background:linear-gradient(135deg, #ffe08a, #ffc46a); box-shadow:0 12px 32px rgba(255,180,60,.5)}
-  .credit{margin-top:28px;font-size:11px;color:rgba(255,255,255,.38);letter-spacing:1px}
+  .overlay p.sub{margin-top:12px;font-size:14px;color:rgba(255,255,255,.78);max-width:520px;line-height:1.6}
+  .overlay p.subtitle{font-size:13px;letter-spacing:6px;color:#8ff0c0; margin-top:8px; font-weight:600}
+  .menuBtns{margin-top:28px; display:flex; flex-direction:column; gap:14px; width:100%; max-width:340px; pointer-events:auto}
+  .mainBtn{width:100%; padding:18px 20px; border-radius:14px; border:1px solid rgba(255,238,190,.38); background:linear-gradient(135deg, rgba(255,220,120,.24), rgba(255,180,80,.20)); color:#fff8e0; font-size:16px; font-weight:800; letter-spacing:2px; cursor:pointer; backdrop-filter:blur(8px); box-shadow:0 6px 20px rgba(0,0,0,.35); transition:all .15s; pointer-events:auto; touch-action:manipulation; user-select:none}
+  .mainBtn:hover{transform:translateY(-2px); background:linear-gradient(135deg, rgba(255,220,120,.34), rgba(255,180,80,.30)); box-shadow:0 10px 28px rgba(0,0,0,.45)}
+  .mainBtn:active{transform:scale(.96)}
+  .mainBtn.secondary{background:rgba(255,255,255,.09); border-color:rgba(255,255,255,.20); color:rgba(255,255,255,.90)}
+  .mainBtn.secondary:hover{background:rgba(255,255,255,.16)}
+  .mainBtn.big{font-size:18px; padding:20px 24px; background:linear-gradient(135deg, #ffd76a, #ffb347); color:#2a1a05; border-color:rgba(255,220,120,.7); box-shadow:0 8px 24px rgba(255,180,60,.40); letter-spacing:3px}
+  .mainBtn.big:hover{background:linear-gradient(135deg, #ffe08a, #ffc46a); box-shadow:0 12px 32px rgba(255,180,60,.55)}
+  .credit{margin-top:26px;font-size:11px;color:rgba(255,255,255,.38);letter-spacing:1px; line-height:1.4}
   #attackFlash{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 70% 50%, rgba(120,200,255,.18), transparent 60%);transition:opacity .15s;z-index:4}
   #attackFlash.on{opacity:1}
-  /* SETTING */
-  #settingOverlay{background:radial-gradient(ellipse at center, rgba(22,28,48,.96), rgba(10,14,26,.99))}
-  .settingWrap{width:100%; max-width:560px; max-height:88vh; overflow:auto; padding:8px 4px}
-  .settingGroup{margin-top:22px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.10); border-radius:16px; padding:16px 18px; text-align:left}
+  #settingOverlay{background:radial-gradient(ellipse at center, rgba(22,28,48,.98), rgba(10,14,26,.995))}
+  .settingWrap{width:100%; max-width:580px; max-height:90vh; overflow:auto; padding:8px 4px; pointer-events:auto}
+  .settingGroup{margin-top:20px; background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.12); border-radius:16px; padding:16px 18px; text-align:left}
   .settingGroup label.title{font-size:13px; letter-spacing:2px; text-transform:uppercase; color:#ffe08a; font-weight:700; display:block; margin-bottom:12px}
   .presetGrid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-  .presetBtn{padding:14px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:rgba(255,255,255,.75); font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; text-align:left; pointer-events:auto; line-height:1.3}
-  .presetBtn b{display:block; font-size:15px; margin-bottom:4px; color:#fff}
+  .presetBtn{padding:14px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:rgba(255,255,255,.75); font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; text-align:left; pointer-events:auto; line-height:1.3; touch-action:manipulation}
+  .presetBtn b{display:block; font-size:14px; margin-bottom:4px; color:#fff}
   .presetBtn:hover{background:rgba(255,255,255,.10); transform:translateY(-1px)}
-  .presetBtn.active{background:linear-gradient(135deg, rgba(255,220,120,.24), rgba(120,200,255,.18)); border-color:rgba(255,220,120,.45); color:#fff8d0; box-shadow:0 4px 16px rgba(255,200,80,.2)}
+  .presetBtn.active{background:linear-gradient(135deg, rgba(255,220,120,.26), rgba(120,200,255,.20)); border-color:rgba(255,220,120,.50); color:#fff8d0; box-shadow:0 4px 16px rgba(255,200,80,.22)}
   .presetBtn.active b{color:#ffe08a}
-  #presetDesc{margin-top:12px; font-size:12px; color:rgba(255,255,255,.55); line-height:1.5; min-height:32px; background:rgba(0,0,0,.22); padding:10px 12px; border-radius:10px; border:1px solid rgba(255,255,255,.06)}
+  #presetDesc{margin-top:12px; font-size:12px; color:rgba(255,255,255,.60); line-height:1.5; min-height:42px; background:rgba(0,0,0,.28); padding:12px 14px; border-radius:10px; border:1px solid rgba(255,255,255,.07)}
   .toggleList{display:flex; flex-direction:column; gap:10px}
-  .toggleItem{display:flex; align-items:center; justify-content:space-between; background:rgba(0,0,0,.22); border:1px solid rgba(255,255,255,.07); border-radius:10px; padding:12px 14px; font-size:13px; color:rgba(255,255,255,.8)}
-  .toggleItem span{flex:1; text-align:left}
-  .toggleItem input[type=checkbox]{width:46px; height:26px; appearance:none; background:rgba(255,255,255,.15); border-radius:13px; position:relative; cursor:pointer; transition:background .2s; flex-shrink:0}
+  .toggleItem{display:flex; align-items:center; justify-content:space-between; background:rgba(0,0,0,.28); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:12px 14px; font-size:13px; color:rgba(255,255,255,.85)}
+  .toggleItem span{flex:1; text-align:left; padding-right:10px}
+  .toggleItem input[type=checkbox]{width:48px; height:28px; appearance:none; background:rgba(255,255,255,.18); border-radius:14px; position:relative; cursor:pointer; transition:background .2s; flex-shrink:0; pointer-events:auto}
   .toggleItem input[type=checkbox]:checked{background:linear-gradient(90deg, #8fe6b0, #ffd76a)}
-  .toggleItem input[type=checkbox]::after{content:''; position:absolute; width:20px; height:20px; border-radius:50%; background:#fff; top:3px; left:3px; transition:transform .2s; box-shadow:0 2px 6px rgba(0,0,0,.3)}
+  .toggleItem input[type=checkbox]::after{content:''; position:absolute; width:22px; height:22px; border-radius:50%; background:#fff; top:3px; left:3px; transition:transform .2s; box-shadow:0 2px 6px rgba(0,0,0,.3)}
   .toggleItem input[type=checkbox]:checked::after{transform:translateX(20px)}
-  .perfNote{margin-top:14px; font-size:11px; color:rgba(255,255,255,.42); line-height:1.4; text-align:center}
+  .perfNote{margin-top:14px; font-size:11px; color:rgba(255,255,255,.45); line-height:1.5; text-align:center}
   #winTime{font-size:26px;margin-top:14px;color:#8ff0c0;font-weight:600}
+  #debugBox{position:fixed; bottom:4px; left:4px; background:rgba(0,0,0,.75); color:#0f0; font-size:10px; padding:6px 8px; border-radius:6px; z-index:200; max-width:90%; pointer-events:none; font-family:monospace; display:none}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <div id="attackFlash"></div>
+<div id="debugBox"></div>
 <div id="hud">
   <div id="vignette"></div>
   <div id="crosshair"></div>
@@ -89,41 +90,37 @@
 </div>
 <div id="touchUI">
   <div id="stickBase"><div id="stickKnob"></div></div>
-  <button class="tBtn" id="dashBtn">⚡</button>
-  <button class="tBtn" id="atkBtn">⚔️</button>
-  <button class="tBtn" id="jumpBtn">⤴</button>
-  <button id="pauseBtn">⏸</button>
+  <button class="tBtn" id="dashBtn" type="button">⚡</button>
+  <button class="tBtn" id="atkBtn" type="button">⚔️</button>
+  <button class="tBtn" id="jumpBtn" type="button">⤴</button>
+  <button id="pauseBtn" type="button">⏸</button>
 </div>
 
-<!-- START SCREEN - CLEAN, ONLY START + SETTING -->
 <div class="overlay" id="startOverlay">
   <h1>ORB HUNT</h1>
   <p class="subtitle">AETHER • GENSHIN STYLE</p>
-  <p class="sub" id="gfxInfo">Memuat...</p>
+  <p class="sub" id="gfxInfo">Memuat pengaturan...</p>
   <div class="menuBtns">
-    <button id="startBtn" class="mainBtn big">▶ START GAME</button>
-    <button id="openSettingBtn" class="mainBtn secondary">⚙ SETTING GRAFIK</button>
+    <button id="startBtn" class="mainBtn big" type="button" onclick="window.__startGame && window.__startGame()">▶ START GAME</button>
+    <button id="openSettingBtn" class="mainBtn secondary" type="button" onclick="window.__openSettings && window.__openSettings()">⚙ SETTING GRAFIK</button>
   </div>
-  <div class="credit">Three.js • Aether Locomotion • Sword Trail • Afterimage<br><span id="deviceInfo"></span></div>
+  <div class="credit">Tap START untuk main • Tap kanan layar = Attack • Joystick kiri = Gerak<br><span id="deviceInfo"></span><br><span id="loadStatus" style="color:#8ff0c0">Loading Three.js...</span></div>
 </div>
 
-<!-- SETTING SCREEN -->
 <div class="overlay hidden" id="settingOverlay">
   <div class="settingWrap">
     <h2>⚙ SETTING GRAFIK</h2>
-    <p class="sub" style="margin-top:0">Atur dari yang paling ringan sampai ultra realistis kayak Genshin</p>
-    
+    <p class="sub" style="margin-top:0">Ringan sampai Ultra Realistis kayak Genshin</p>
     <div class="settingGroup">
       <label class="title">Preset Grafik</label>
       <div class="presetGrid">
-        <button class="presetBtn" data-preset="low"><b>🥔 Ringan</b>HP Kentang<br>60fps</button>
-        <button class="presetBtn" data-preset="medium"><b>⚡ Sedang</b>Balance<br>Seimbang</button>
-        <button class="presetBtn" data-preset="high"><b>✨ Tinggi</b>Default<br>Rekomendasi</button>
-        <button class="presetBtn" data-preset="ultra"><b>🌟 Ultra</b>Genshin<br>Realistis</button>
+        <button class="presetBtn" data-preset="low" type="button"><b>🥔 Ringan</b>HP Kentang 60fps</button>
+        <button class="presetBtn" data-preset="medium" type="button"><b>⚡ Sedang</b>Balance Seimbang</button>
+        <button class="presetBtn" data-preset="high" type="button"><b>✨ Tinggi</b>Default Rekomendasi</button>
+        <button class="presetBtn" data-preset="ultra" type="button"><b>🌟 Ultra</b>Genshin Realistis</button>
       </div>
       <div id="presetDesc">Pilih preset...</div>
     </div>
-
     <div class="settingGroup">
       <label class="title">Detail Kustom</label>
       <div class="toggleList">
@@ -131,28 +128,27 @@
         <div class="toggleItem"><span>🌿 Rumput Lebat & Angin</span><input type="checkbox" id="setGrass"></div>
         <div class="toggleItem"><span>✨ Partikel Debu & Cahaya</span><input type="checkbox" id="setParticles"></div>
         <div class="toggleItem"><span>🦋 Kupu-kupu & Burung</span><input type="checkbox" id="setFauna"></div>
-        <div class="toggleItem"><span>👻 Afterimage Dash (Bayangan)</span><input type="checkbox" id="setGhost"></div>
-        <div class="toggleItem"><span>🎨 Outline Kartun (Toon)</span><input type="checkbox" id="setOutline"></div>
-        <div class="toggleItem"><span>💎 Anti-Aliasing Halus</span><input type="checkbox" id="setAA"></div>
-        <div class="toggleItem"><span>🌟 Bloom & Cahaya Extra (Ultra)</span><input type="checkbox" id="setBloom"></div>
+        <div class="toggleItem"><span>👻 Afterimage Dash</span><input type="checkbox" id="setGhost"></div>
+        <div class="toggleItem"><span>🎨 Outline Kartun</span><input type="checkbox" id="setOutline"></div>
+        <div class="toggleItem"><span>💎 Anti-Aliasing</span><input type="checkbox" id="setAA"></div>
+        <div class="toggleItem"><span>🌟 Bloom Extra (Ultra)</span><input type="checkbox" id="setBloom"></div>
       </div>
-      <p class="perfNote">💡 Tip: HP kentang pakai Ringan, HP gaming pakai Ultra. Default = Tinggi (sekarang).<br>Perubahan butuh reload.</p>
+      <p class="perfNote">💡 HP kentang pakai Ringan, gaming pakai Ultra. Default = Tinggi.<br>Simpan akan reload game.</p>
     </div>
-
     <div class="menuBtns" style="margin-top:22px">
-      <button id="saveSettingBtn" class="mainBtn big">💾 SIMPAN & RELOAD</button>
-      <button id="closeSettingBtn" class="mainBtn secondary">← KEMBALI</button>
+      <button id="saveSettingBtn" class="mainBtn big" type="button">💾 SIMPAN & RELOAD</button>
+      <button id="closeSettingBtn" class="mainBtn secondary" type="button">← KEMBALI</button>
     </div>
   </div>
 </div>
 
 <div class="overlay hidden" id="winOverlay">
   <h1>SEMPURNA!</h1>
-  <p class="sub">Semua orb terkumpul dengan gaya Aether.</p>
+  <p class="sub">Semua orb terkumpul!</p>
   <div id="winTime"></div>
-  <div class="menuBtns" style="max-width:320px">
-    <button id="winRestartBtn" class="mainBtn big">🔄 MAIN LAGI</button>
-    <button id="winMenuBtn" class="mainBtn secondary">🏠 MENU UTAMA</button>
+  <div class="menuBtns" style="max-width:340px">
+    <button id="winRestartBtn" class="mainBtn big" type="button">🔄 MAIN LAGI</button>
+    <button id="winMenuBtn" class="mainBtn secondary" type="button">🏠 MENU UTAMA</button>
   </div>
 </div>
 
@@ -160,59 +156,69 @@
 { "imports": { "three": "./three.module.js", "three/addons/": "./jsm/" } }
 </script>
 
+<script>
+// GLOBAL ERROR HANDLER + DEBUG - MUST BE FIRST, NON-MODULE
+window.__errors = [];
+window.onerror = function(msg, url, line, col, err){
+  window.__errors.push(msg + ' @' + line + ':' + col);
+  var box = document.getElementById('debugBox');
+  if(box){ box.style.display='block'; box.textContent = 'ERR: ' + msg + ' @' + line; }
+  console.error('GLOBAL ERR', msg, url, line, col, err);
+};
+window.addEventListener('unhandledrejection', function(e){
+  window.__errors.push('Promise: ' + e.reason);
+  var box = document.getElementById('debugBox');
+  if(box){ box.style.display='block'; box.textContent = 'Promise ERR: ' + e.reason; }
+});
+console.log('[BOOT] HTML loaded, isTouch:', ('ontouchstart' in window));
+</script>
+
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
-/* ========== GRAPHICS SETTINGS — PRESET SYSTEM ========== */
-const PRESETS = {
-  low: { name:'🥔 Ringan', desc:'Ringan banget buat HP kentang. Rumput tipis (6k), tanpa bayangan, tanpa fauna, tanpa afterimage. Dijamin 60fps di HP low.', grass:6000, trees:25, rocks:12, shadows:false, shadowSize:512, particles:25, butterflies:6, birds:4, pixelRatio:1, antialias:false, ghost:false, outline:false, bloom:false, fauna:false, grassEnabled:true },
-  medium: { name:'⚡ Sedang', desc:'Balance performa & kualitas. Rumput 28k, bayangan 1024, fauna aktif, afterimage aktif. Cocok buat HP mid.', grass:28000, trees:60, rocks:30, shadows:true, shadowSize:1024, particles:80, butterflies:22, birds:16, pixelRatio:1.3, antialias:false, ghost:true, outline:true, bloom:false, fauna:true, grassEnabled:true },
-  high: { name:'✨ Tinggi (Default)', desc:'Default sekarang — kualitas tinggi kayak yang kamu mainin sekarang. Rumput 110k, bayangan 2048, semua efek toon + slash + afterimage.', grass:110000, trees:95, rocks:44, shadows:true, shadowSize:2048, particles:160, butterflies:48, birds:30, pixelRatio:1.6, antialias:true, ghost:true, outline:true, bloom:false, fauna:true, grassEnabled:true },
-  ultra: { name:'🌟 Ultra Realistis Genshin', desc:'MAKSIMAL! Rumput 160k lebat bergoyang, pohon 130, bayangan 4K super tajam, partikel 320, bloom cahaya, afterimage extra, outline tebal. Kayak Genshin Impact rata kanan! Butuh HP gaming / PC.', grass:160000, trees:130, rocks:70, shadows:true, shadowSize:4096, particles:320, butterflies:85, birds:55, pixelRatio:2, antialias:true, ghost:true, outline:true, bloom:true, fauna:true, grassEnabled:true }
-};
+function logDebug(msg){
+  console.log(msg);
+  const box=document.getElementById('debugBox');
+  const status=document.getElementById('loadStatus');
+  if(box){ box.style.display='block'; box.textContent = msg; setTimeout(()=>{ if(box.textContent===msg) box.style.display='none'; }, 3000); }
+  if(status) status.textContent = msg;
+}
+logDebug('Loading module... Three r' + THREE.REVISION);
 
+/* ========== GFX PRESETS ========== */
+const PRESETS = {
+  low: { name:'🥔 Ringan', desc:'Ringan buat HP kentang. Rumput 6k, tanpa bayangan, tanpa fauna, tanpa afterimage. 60fps.', grass:6000, trees:25, rocks:12, shadows:false, shadowSize:512, particles:25, butterflies:6, birds:4, pixelRatio:1, antialias:false, ghost:false, outline:false, bloom:false, fauna:false, grassEnabled:true },
+  medium: { name:'⚡ Sedang', desc:'Balance. Rumput 28k, bayangan 1024, fauna aktif, afterimage aktif. HP mid.', grass:28000, trees:60, rocks:30, shadows:true, shadowSize:1024, particles:80, butterflies:22, birds:16, pixelRatio:1.3, antialias:false, ghost:true, outline:true, bloom:false, fauna:true, grassEnabled:true },
+  high: { name:'✨ Tinggi (Default)', desc:'Default sekarang. Rumput 110k, bayangan 2048, semua efek toon + slash + afterimage.', grass:110000, trees:95, rocks:44, shadows:true, shadowSize:2048, particles:160, butterflies:48, birds:30, pixelRatio:1.6, antialias:true, ghost:true, outline:true, bloom:false, fauna:true, grassEnabled:true },
+  ultra: { name:'🌟 Ultra Genshin', desc:'MAKSIMAL! Rumput 160k lebat, pohon 130, bayangan 4K, partikel 320, bloom cahaya, kayak Genshin rata kanan! Butuh HP gaming.', grass:160000, trees:130, rocks:70, shadows:true, shadowSize:4096, particles:320, butterflies:85, birds:55, pixelRatio:2, antialias:true, ghost:true, outline:true, bloom:true, fauna:true, grassEnabled:true }
+};
 function loadGfx(){
   try{
     const saved = JSON.parse(localStorage.getItem('aether_gfx_v2')||'null');
     if(saved && saved.preset && PRESETS[saved.preset]){
       const base = {...PRESETS[saved.preset]};
-      // merge custom overrides
-      if(saved.custom){
-        Object.assign(base, saved.custom);
-        base.preset = saved.preset;
-        base.custom = saved.custom;
-      } else {
-        base.preset = saved.preset;
-      }
+      if(saved.custom){ Object.assign(base, saved.custom); base.preset=saved.preset; base.custom=saved.custom; } else { base.preset=saved.preset; }
       return base;
     }
-  }catch(e){}
+  }catch(e){ console.warn('load gfx fail', e); }
   const isTouchAuto = ('ontouchstart' in window) || (navigator.maxTouchPoints>0);
   const def = isTouchAuto ? 'medium' : 'high';
-  return {...PRESETS[def], preset: def};
+  return {...PRESETS[def], preset:def};
 }
 const GFX = loadGfx();
-console.log('[GFX] Loaded preset:', GFX.preset, GFX);
+logDebug('GFX: ' + GFX.preset + ' grass:' + GFX.grass);
 
-// Update UI info
-const gfxInfoEl = document.getElementById('gfxInfo');
-if(gfxInfoEl){
-  gfxInfoEl.innerHTML = `Grafik: <b style="color:#ffe08a">${PRESETS[GFX.preset]?.name||GFX.preset}</b> • ${GFX.grass.toLocaleString()} rumput • ${GFX.shadows?'bayangan ON':'tanpa bayangan'}<br>Tap START untuk main`;
-}
-const deviceInfoEl = document.getElementById('deviceInfo');
-if(deviceInfoEl){
-  deviceInfoEl.textContent = `${GFX.preset.toUpperCase()} • ${navigator.userAgent.includes('Android')?'Android':'Desktop'} • ${GFX.pixelRatio} pixelRatio`;
-}
+const gfxInfoEl=document.getElementById('gfxInfo');
+if(gfxInfoEl) gfxInfoEl.innerHTML = `Grafik: <b style="color:#ffe08a">${PRESETS[GFX.preset]?.name||GFX.preset}</b> • ${GFX.grass.toLocaleString()} rumput • ${GFX.shadows?'bayangan ON':'tanpa bayangan'}<br>Tap START untuk main • Setting untuk ubah kualitas`;
+const deviceInfoEl=document.getElementById('deviceInfo');
+if(deviceInfoEl) deviceInfoEl.textContent = `${GFX.preset.toUpperCase()} • ${navigator.userAgent.includes('Android')?'Android':'Desktop'} • ${GFX.pixelRatio}x • ${GFX.bloom?'BLOOM':''}`;
 
-/* ========== DETEKSI ========== */
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints>0 && matchMedia('(pointer: coarse)').matches);
-if(isTouch){
-  document.getElementById('touchUI').classList.add('on');
-}
+if(isTouch){ document.getElementById('touchUI').classList.add('on'); }
 
-/* ========== RENDERER - PAKAI GFX ========== */
+/* ========== RENDERER ========== */
 const renderer = new THREE.WebGLRenderer({ antialias: GFX.antialias, alpha:false, powerPreference:'high-performance' });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, GFX.pixelRatio));
@@ -223,21 +229,20 @@ renderer.toneMappingExposure = GFX.bloom ? 1.18 : 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.domElement.style.touchAction='none';
 document.getElementById('app').appendChild(renderer.domElement);
-const scene = new THREE.Scene();
-const FOG_COLOR = GFX.bloom ? 0xf0c8a0 : 0xe8bf8d;
-scene.fog = new THREE.Fog(FOG_COLOR, 80, GFX.bloom ? 420 : 380);
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1200);
-const uTime = { value:0 };
+logDebug('Renderer ready, shadows:' + GFX.shadows);
 
-/* ========== TOON RAMP FIX ANDROID ========== */
+const scene=new THREE.Scene(); const FOG_COLOR= GFX.bloom?0xf0c8a0:0xe8bf8d;
+scene.fog=new THREE.Fog(FOG_COLOR, 80, GFX.bloom?420:380);
+const camera=new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1200);
+const uTime={value:0};
+
 function createToonRamp(steps){
-  const c = document.createElement('canvas'); c.width=steps; c.height=1; const ctx=c.getContext('2d');
+  const c=document.createElement('canvas'); c.width=steps; c.height=1; const ctx=c.getContext('2d');
   for(let i=0;i<steps;i++){ const t=Math.pow((i+1)/steps,0.62); const v=Math.round(t*255); ctx.fillStyle=`rgb(${v},${v},${v})`; ctx.fillRect(i,0,1,1); }
   const tex=new THREE.CanvasTexture(c); tex.minFilter=THREE.NearestFilter; tex.magFilter=THREE.NearestFilter; tex.colorSpace=THREE.NoColorSpace; tex.needsUpdate=true; return tex;
 }
 const RAMP2=createToonRamp(2), RAMP3=createToonRamp(3), RAMP4=createToonRamp(4);
 
-/* ========== SKY ========== */
 const SUN_DIR=new THREE.Vector3(-0.60,0.165,-0.62).normalize();
 const skyGeo=new THREE.SphereGeometry(1000,40,24);
 const skyMat=new THREE.ShaderMaterial({
@@ -263,36 +268,24 @@ const skyMat=new THREE.ShaderMaterial({
 });
 scene.add(new THREE.Mesh(skyGeo, skyMat));
 
-/* ========== LIGHTS ========== */
 const sun=new THREE.DirectionalLight(0xffc184, GFX.bloom?4.0:3.3);
 sun.castShadow=GFX.shadows;
-if(GFX.shadows){
-  sun.shadow.mapSize.set(GFX.shadowSize, GFX.shadowSize);
-  sun.shadow.camera.left=-62; sun.shadow.camera.right=62; sun.shadow.camera.top=62; sun.shadow.camera.bottom=-62;
-  sun.shadow.camera.near=1; sun.shadow.camera.far=420;
-  sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04;
-}
+if(GFX.shadows){ sun.shadow.mapSize.set(GFX.shadowSize, GFX.shadowSize); sun.shadow.camera.left=-62; sun.shadow.camera.right=62; sun.shadow.camera.top=62; sun.shadow.camera.bottom=-62; sun.shadow.camera.near=1; sun.shadow.camera.far=420; sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.04; }
 scene.add(sun); scene.add(sun.target);
 scene.add(new THREE.HemisphereLight(0xaed2f0,0x7d6238, GFX.bloom?0.75:0.60));
 scene.add(new THREE.AmbientLight(0xffd9ae, GFX.bloom?0.28:0.22));
-if(GFX.bloom){
-  const extraSun = new THREE.PointLight(0xffd080, 1.2, 80);
-  extraSun.position.set(-40, 25, -30);
-  scene.add(extraSun);
-}
+if(GFX.bloom){ const extraSun=new THREE.PointLight(0xffd080,1.2,80); extraSun.position.set(-40,25,-30); scene.add(extraSun); }
 
-/* ========== TERRAIN ========== */
 const WATER_Y=-0.9;
 function terrainH(x,z){return Math.sin(x*0.045)*Math.cos(z*0.05)*2.6 + Math.sin(x*0.11+1.7)*Math.sin(z*0.09+0.6)*1.1 + Math.sin((x+z)*0.023)*1.6 + Math.cos(x*0.31)*Math.sin(z*0.27)*0.28;}
-const T_SIZE=440, T_SEG= GFX.preset==='low' ? 80 : (GFX.preset==='ultra' ? 200 : (isTouch?120:160));
+const T_SIZE=440, T_SEG= GFX.preset==='low'?80:(GFX.preset==='ultra'?200:(isTouch?120:160));
 const tGeo=new THREE.PlaneGeometry(T_SIZE,T_SIZE,T_SEG,T_SEG); tGeo.rotateX(-Math.PI/2);
-const pos=tGeo.attributes.position; const colors=new Float32Array(pos.count*3);
+const posAttr=tGeo.attributes.position; const colors=new Float32Array(posAttr.count*3);
 const cSand=new THREE.Color(0xd8c093), cGrass=new THREE.Color(0x789b42), cGrass2=new THREE.Color(0x537430), cRock=new THREE.Color(0x8e8574);
-for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i); const y=terrainH(x,z); pos.setY(i,y); let c; const n=Math.sin(x*0.7)*Math.cos(z*0.6)*0.5+0.5; if(y<WATER_Y+0.55) c=cSand.clone().lerp(cGrass2,Math.min(1,(y-(WATER_Y-0.4))/1.0)*0.35); else if(y>3.4) c=cGrass.clone().lerp(cRock,Math.min(1,(y-3.4)/1.6)); else c=cGrass.clone().lerp(cGrass2,n*0.7); colors[i*3]=c.r; colors[i*3+1]=c.g; colors[i*3+2]=c.b;}
+for(let i=0;i<posAttr.count;i++){const x=posAttr.getX(i),z=posAttr.getZ(i); const y=terrainH(x,z); posAttr.setY(i,y); let c; const n=Math.sin(x*0.7)*Math.cos(z*0.6)*0.5+0.5; if(y<WATER_Y+0.55) c=cSand.clone().lerp(cGrass2,Math.min(1,(y-(WATER_Y-0.4))/1.0)*0.35); else if(y>3.4) c=cGrass.clone().lerp(cRock,Math.min(1,(y-3.4)/1.6)); else c=cGrass.clone().lerp(cGrass2,n*0.7); colors[i*3]=c.r; colors[i*3+1]=c.g; colors[i*3+2]=c.b;}
 tGeo.setAttribute('color',new THREE.BufferAttribute(colors,3)); tGeo.computeVertexNormals();
 const terrain=new THREE.Mesh(tGeo,new THREE.MeshToonMaterial({vertexColors:true,gradientMap:RAMP4})); terrain.receiveShadow=GFX.shadows; scene.add(terrain);
 
-/* ========== GRASS ========== */
 let grass=null, grassMat=null;
 if(GFX.grassEnabled && GFX.grass>0){
   const FIELD=95; const GRASS_N=GFX.grass; const BLADE_SEG= GFX.preset==='low'?3:6;
@@ -311,7 +304,7 @@ if(GFX.grassEnabled && GFX.grass>0){
   grassGeo.setAttribute('offset',new THREE.InstancedBufferAttribute(offs,2)); grassGeo.setAttribute('rand',new THREE.InstancedBufferAttribute(rnds,1)); grassGeo.instanceCount=GRASS_N;
   grassMat=new THREE.ShaderMaterial({
     side:THREE.DoubleSide,
-    uniforms:{time:uTime,fieldCenter:{value:new THREE.Vector2(0,0)},sunDir:{value:SUN_DIR},fogColor:{value:new THREE.Color(FOG_COLOR)},fogNear:{value:80},fogFar:{value: GFX.bloom?420:380}},
+    uniforms:{time:uTime,fieldCenter:{value:new THREE.Vector2(0,0)},sunDir:{value:SUN_DIR},fogColor:{value:new THREE.Color(FOG_COLOR)},fogNear:{value:80},fogFar:{value:GFX.bloom?420:380}},
     vertexShader:`uniform float time; uniform vec2 fieldCenter; attribute vec2 offset; attribute float rand; varying float vY; varying float vRand; varying float vDist; varying float vGust;
       float terrainH(vec2 p){return sin(p.x*0.045)*cos(p.y*0.05)*2.6 + sin(p.x*0.11+1.7)*sin(p.y*0.09+0.6)*1.1 + sin((p.x+p.y)*0.023)*1.6 + cos(p.x*0.31)*sin(p.y*0.27)*0.28;}
       void main(){vec2 wxz=fieldCenter+mod(offset-fieldCenter+47.5,vec2(95.0))-47.5; float h=terrainH(wxz); float ok=step(-0.2,h)*(1.0-step(3.6,h)); float ang=rand*6.2831; float ca=cos(ang),sa=sin(ang); vec3 p=position; vec3 rp=vec3(p.x*ca-p.z*sa,p.y,p.x*sa+p.z*ca); float wave=sin(dot(wxz,vec2(0.055,0.041))-time*1.25); float wave2=sin(dot(wxz,vec2(-0.031,0.068))-time*0.75); float gust=(wave*0.62+wave2*0.38); float flutter=sin(time*4.4+rand*25.0)*0.06; float amt=(gust*0.34+flutter); float bend=rp.y*rp.y; float sc=mix(0.22,0.52,rand); vec2 windDir=normalize(vec2(0.80,0.60)); vec3 wp; wp.x=wxz.x+rp.x+windDir.x*amt*bend*1.15*sc; wp.z=wxz.y+rp.z+windDir.y*amt*bend*1.15*sc; wp.y=h+rp.y*sc-bend*abs(amt)*0.30*sc; float d=distance(cameraPosition.xz,wxz); float sink=smoothstep(34.0,46.0,d); wp.y-=sink*rp.y*sc*1.2; vY=rp.y; vRand=rand; vGust=gust; vec4 mv=viewMatrix*vec4(wp,1.0); vDist=-mv.z; gl_Position=projectionMatrix*mv; if(ok<0.5) gl_Position=vec4(0.0,0.0,2.0,1.0);}`,
@@ -320,7 +313,6 @@ if(GFX.grassEnabled && GFX.grass>0){
   grass=new THREE.Mesh(grassGeo,grassMat); grass.frustumCulled=false; scene.add(grass);
 }
 
-/* ========== WATER ========== */
 const waterMat=new THREE.ShaderMaterial({
   transparent:true,
   uniforms:{time:uTime,sunDir:{value:SUN_DIR},deep:{value:new THREE.Color(0x1a4a63)},shallow:{value:new THREE.Color(0x3f93a0)},sky:{value:new THREE.Color(0xf0c088)},fogColor:{value:new THREE.Color(FOG_COLOR)},fogNear:{value:80},fogFar:{value:GFX.bloom?420:380}},
@@ -329,12 +321,10 @@ const waterMat=new THREE.ShaderMaterial({
 });
 const water=new THREE.Mesh(new THREE.PlaneGeometry(T_SIZE,T_SIZE, isTouch?64:96, isTouch?64:96),waterMat); water.rotation.x=-Math.PI/2; water.position.y=WATER_Y; scene.add(water);
 
-/* ========== WIND & OUTLINE ========== */
 const WIND_GLSL=`vec3 applyWind(vec3 tp,vec3 iw,float t,float stiff){float ph=iw.x*0.055+iw.z*0.045; float g=sin(t*1.05+ph)*0.62+sin(t*1.9+ph*1.7)*0.3; float infl=smoothstep(0.0,stiff,tp.y); tp.x+=g*infl*0.42; tp.z+=g*infl*0.26; return tp;}`;
 function addWind(mat,stiffness){mat.onBeforeCompile=(sh)=>{sh.uniforms.uTime=uTime; sh.vertexShader=`uniform float uTime;\n${WIND_GLSL}\n`+sh.vertexShader; sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>',`\n#include <begin_vertex>\nvec3 iwPos=(instanceMatrix*vec4(0.0,0.0,0.0,1.0)).xyz;\ntransformed=applyWind(transformed,iwPos,uTime,${stiffness.toFixed(1)});\n`);}; return mat;}
 function outlineMaterial(color,thickness,stiffness){const m=new THREE.MeshBasicMaterial({color,side:THREE.BackSide,fog:false}); m.onBeforeCompile=(sh)=>{sh.uniforms.uTime=uTime; sh.vertexShader=`uniform float uTime;\n${WIND_GLSL}\n`+sh.vertexShader; sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>',`\n#include <begin_vertex>\nvec3 iwPos=(instanceMatrix*vec4(0.0,0.0,0.0,1.0)).xyz;\nvec3 wPosApprox=(modelMatrix*instanceMatrix*vec4(position,1.0)).xyz;\nfloat dCam=distance(cameraPosition,wPosApprox);\nfloat grow=${thickness.toFixed(3)}*clamp(1.0+dCam*0.016,1.0,2.4);\ntransformed+=normalize(normal)*grow;\ntransformed=applyWind(transformed,iwPos,uTime,${stiffness.toFixed(1)});\n`);}; return m;}
 
-/* ========== VEGETATION ========== */
 const COLLIDERS=[];
 function groundClear(x,z){const y=terrainH(x,z); return y>WATER_Y+0.7 && Math.hypot(x,z)>9;}
 const TREE_N=GFX.trees, ROCK_N=GFX.rocks;
@@ -352,11 +342,8 @@ const foliMat=addWind(new THREE.MeshToonMaterial({color:0xffffff,gradientMap:RAM
 const rockMat=new THREE.MeshToonMaterial({color:0x9a9789,gradientMap:RAMP3});
 const trunks=buildInstanced(trunkGeo,trunkMat,treeData); const foliage=buildInstanced(foliageGeo,foliMat,blobData,blobColors); const rocks=buildInstanced(rockGeo,rockMat,rockData);
 scene.add(trunks,foliage,rocks);
-if(GFX.outline){
-  const oTrunk=buildInstanced(trunkGeo,outlineMaterial(0x0d1408,0.085,4.0),treeData); const oFoli=buildInstanced(foliageGeo,outlineMaterial(0x0d1408,0.095,5.0),blobData); const oRock=buildInstanced(rockGeo,outlineMaterial(0x14140f,0.080,0.1),rockData); [oTrunk,oFoli,oRock].forEach(o=>{o.castShadow=false;o.receiveShadow=false;}); scene.add(oTrunk,oFoli,oRock);
-}
+if(GFX.outline){ const oTrunk=buildInstanced(trunkGeo,outlineMaterial(0x0d1408,0.085,4.0),treeData); const oFoli=buildInstanced(foliageGeo,outlineMaterial(0x0d1408,0.095,5.0),blobData); const oRock=buildInstanced(rockGeo,outlineMaterial(0x14140f,0.080,0.1),rockData); [oTrunk,oFoli,oRock].forEach(o=>{o.castShadow=false;o.receiveShadow=false;}); scene.add(oTrunk,oFoli,oRock); }
 
-/* ========== ORBS ========== */
 function glowTexture(){const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d'); const grd=g.createRadialGradient(64,64,4,64,64,64); grd.addColorStop(0,'rgba(255,248,210,1)'); grd.addColorStop(0.35,'rgba(255,215,120,0.55)'); grd.addColorStop(1,'rgba(255,195,70,0)'); g.fillStyle=grd; g.fillRect(0,0,128,128); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t;}
 const orbGeo=new THREE.IcosahedronGeometry(0.34,2); const orbMat=new THREE.MeshBasicMaterial({color:0xfff0b8});
 const glowMat=new THREE.SpriteMaterial({map:glowTexture(),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
@@ -365,7 +352,6 @@ const beaconMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side
 const orbs=[]; const ORB_COUNT=12; let oPlaced=0,oTries=0;
 while(oPlaced<ORB_COUNT && oTries<8000){oTries++; const x=(Math.random()-0.5)*T_SIZE*0.72,z=(Math.random()-0.5)*T_SIZE*0.72; const y=terrainH(x,z); if(y<WATER_Y+0.35 || Math.hypot(x,z)<7) continue; if(orbs.some(o=>o.position.distanceTo(new THREE.Vector3(x,y+1.1,z))<26)) continue; const grp=new THREE.Group(); grp.add(new THREE.Mesh(orbGeo,orbMat)); const orbLine=new THREE.Mesh(orbGeo,new THREE.MeshBasicMaterial({color:0x3a2708,side:THREE.BackSide,fog:false})); orbLine.scale.setScalar(1.16); grp.add(orbLine); const glow=new THREE.Sprite(glowMat); glow.scale.set(3.0,3.0,1); grp.add(glow); const beacon=new THREE.Mesh(beaconGeo,beaconMat); beacon.frustumCulled=false; grp.add(beacon); const light=new THREE.PointLight(0xffd88a,3.2,12,2); grp.add(light); if(GFX.bloom){ const extra=new THREE.PointLight(0xffc060,1.5,8); grp.add(extra); } grp.position.set(x,y+1.1,z); grp.userData.baseY=y+1.1; scene.add(grp); orbs.push(grp); oPlaced++;}
 
-/* ========== FAUNA (conditional) ========== */
 let butterflies=null, bflyMat=null, birds=null;
 if(GFX.fauna && GFX.butterflies>0){
   const BFLY_N=GFX.butterflies, BFLY_SPAN=70;
@@ -385,7 +371,6 @@ if(GFX.fauna && GFX.birds>0){
   birds=new THREE.Mesh(birdGeo,birdMat); birds.frustumCulled=false; scene.add(birds);
 }
 
-/* ========== PARTICLES ========== */
 let dust=null, pGeo=null;
 if(GFX.particles>0){
   const P_COUNT=GFX.particles, P_SPAN=90;
@@ -394,7 +379,6 @@ if(GFX.particles>0){
   dust=new THREE.Points(pGeo,new THREE.PointsMaterial({size: GFX.bloom?0.20:0.16,map:dustTex,transparent:true,opacity: GFX.bloom?0.45:0.30,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true})); dust.frustumCulled=false; scene.add(dust);
 }
 
-/* ========== SLASH TEXTURES ========== */
 function createSlashTexture(kind){
   const C=document.createElement('canvas'); C.width=C.height=512; const ctx=C.getContext('2d'); ctx.clearRect(0,0,512,512);
   if(kind===0){ const grad=ctx.createRadialGradient(256,256,20,256,256,220); grad.addColorStop(0,'rgba(255,255,255,0)'); grad.addColorStop(0.55,'rgba(140,210,255,0)'); grad.addColorStop(0.72,'rgba(180,230,255,0.85)'); grad.addColorStop(0.82,'rgba(255,255,255,0.95)'); grad.addColorStop(0.90,'rgba(120,180,255,0.25)'); grad.addColorStop(1,'rgba(0,0,0,0)'); ctx.fillStyle=grad; ctx.fillRect(0,0,512,512); ctx.strokeStyle='rgba(200,240,255,0.9)'; ctx.lineWidth=18; ctx.shadowColor='rgba(100,180,255,1)'; ctx.shadowBlur=22; ctx.beginPath(); ctx.arc(256,300,180, Math.PI*1.05, Math.PI*1.95); ctx.stroke(); ctx.shadowBlur=0; ctx.strokeStyle='rgba(255,255,255,1)'; ctx.lineWidth=5; ctx.beginPath(); ctx.arc(256,300,180, Math.PI*1.08, Math.PI*1.92); ctx.stroke(); }
@@ -405,7 +389,6 @@ function createSlashTexture(kind){
 const slashTexs=[createSlashTexture(0), createSlashTexture(1), createSlashTexture(2)];
 const slashPool=[];
 
-/* ========== GHOST TRAIL ========== */
 const ghosts=[]; let ghostSpawnTimer=0;
 function spawnGhost(){
   if(!GFX.ghost || !CHAR.ready || !CHAR.model) return;
@@ -418,7 +401,6 @@ function spawnGhost(){
   }catch(e){ console.warn('ghost fail', e); }
 }
 
-/* ========== CHARACTER ========== */
 const CHAR={ root:null, model:null, bones:{}, restPos:{}, restQuat:{}, restScale:{}, ready:false, height:1.75, phase:0, lean:0, turnSmooth:0, turnVel:0, cloakBones:[], swordBone:null };
 const charRoot=new THREE.Group(); scene.add(charRoot); CHAR.root=charRoot;
 function cleanBoneName(n){ return n.replace(/_\d+$/,'').replace(/\./g,'').replace(/\s+/g,'_').toUpperCase(); }
@@ -452,13 +434,12 @@ new GLTFLoader().load('./character.glb', (gltf)=>{
     const skinned=[]; model.traverse(o=>{ if(o.isSkinnedMesh) skinned.push(o); });
     for(const sm of skinned){ const clone=new THREE.SkinnedMesh(sm.geometry, outlineMat); clone.bind(sm.skeleton, sm.bindMatrix); clone.scale.setScalar(1.04); clone.castShadow=false; clone.receiveShadow=false; clone.frustumCulled=false; sm.add(clone); }
   }
-}, undefined, e=>{ console.warn('char load fail', e); });
+  logDebug('Character ready: ' + Object.keys(CHAR.bones).length + ' bones');
+}, undefined, e=>{ console.warn('char load fail', e); logDebug('Char load fail: ' + e.message); });
 
-/* ========== ANIMATION HELPERS ========== */
 const _q=new THREE.Quaternion(), _e=new THREE.Euler();
 function boneRot(name, rx,ry,rz, blend=1){ const b=CHAR.bones[name]; if(!b) return; const rest=CHAR.restQuat[name]; if(!rest) return; _e.set(rx,ry,rz); _q.setFromEuler(_e); _q.premultiply(rest); if(blend>=0.999) b.quaternion.copy(_q); else b.quaternion.slerp(_q, blend); }
 
-/* ========== AETHER LOCOMOTION (same detailed) ========== */
 function animateAether(dt, speed01, moving, isRunning, isDashing, isJumping, isFalling, attackInfo){
   if(!CHAR.ready) return; const blendBase=1-Math.pow(0.001, dt);
   const stepRate=isDashing?11:(isRunning?9.2:5.6);
@@ -511,7 +492,6 @@ function animateAether(dt, speed01, moving, isRunning, isDashing, isJumping, isF
   if(CHAR.model){ CHAR.model.position.y=bounce; CHAR.model.rotation.x=CHAR.lean+(isJumping?-0.15:0); }
 }
 
-/* ========== PLAYER & CAMERA ========== */
 const player={ pos:new THREE.Vector3(0,0,6), yaw:Math.PI, pitch:0, vel:new THREE.Vector3(), bob:0, vy:0, grounded:true, jumpCooldown:0 };
 const cam3={dist:5.0, distNow:5.0, height:1.92, minPitch:-0.55, maxPitch:1.05, fp:false};
 const DASH={ stamina:100, max:100, cost:26, runDrain:20, regen:32, regenDelay:0.55, sinceUse:9, timer:0, dur:0.30, cooldown:0, power:40, dir:new THREE.Vector3(), trail:0, exhausted:false };
@@ -524,109 +504,66 @@ let locked=false; const hud=document.getElementById('hud'); const startOverlay=d
 const elTime=document.getElementById('timeVal'), elOrb=document.querySelector('#orbStat .value'), elStamWrap=document.getElementById('staminaWrap'), elStamBar=document.getElementById('staminaBar'), elSpeed=document.getElementById('speedLines'), elFlash=document.getElementById('attackFlash');
 let lastShownTime=-1;
 
-/* ========== SETTING UI LOGIC ========== */
+/* ========== SETTING UI LOGIC - ROBUST ========== */
 function openSettings(){
+  console.log('[UI] openSettings');
   settingOverlay.classList.remove('hidden');
   startOverlay.classList.add('hidden');
-  // set active preset
-  document.querySelectorAll('.presetBtn').forEach(b=>{
-    b.classList.toggle('active', b.dataset.preset===GFX.preset);
-  });
+  document.querySelectorAll('.presetBtn').forEach(b=>{ b.classList.toggle('active', b.dataset.preset===GFX.preset); });
   updatePresetDesc(GFX.preset);
-  // set toggles
-  document.getElementById('setShadows').checked = GFX.shadows;
-  document.getElementById('setGrass').checked = GFX.grassEnabled && GFX.grass>10000;
-  document.getElementById('setParticles').checked = GFX.particles>50;
-  document.getElementById('setFauna').checked = GFX.fauna;
-  document.getElementById('setGhost').checked = GFX.ghost;
-  document.getElementById('setOutline').checked = GFX.outline;
-  document.getElementById('setAA').checked = GFX.antialias;
-  document.getElementById('setBloom').checked = GFX.bloom;
+  const s=document.getElementById('setShadows'), g=document.getElementById('setGrass'), p=document.getElementById('setParticles'), f=document.getElementById('setFauna'), gh=document.getElementById('setGhost'), o=document.getElementById('setOutline'), aa=document.getElementById('setAA'), bl=document.getElementById('setBloom');
+  if(s) s.checked=GFX.shadows; if(g) g.checked=GFX.grassEnabled&&GFX.grass>10000; if(p) p.checked=GFX.particles>50; if(f) f.checked=GFX.fauna; if(gh) gh.checked=GFX.ghost; if(o) o.checked=GFX.outline; if(aa) aa.checked=GFX.antialias; if(bl) bl.checked=GFX.bloom;
 }
 function closeSettings(){
+  console.log('[UI] closeSettings');
   settingOverlay.classList.add('hidden');
-  if(state==='ready' || state==='paused') startOverlay.classList.remove('hidden');
+  if(state==='ready'||state==='paused') startOverlay.classList.remove('hidden');
 }
 function updatePresetDesc(preset){
   const p=PRESETS[preset]; if(!p) return;
-  document.getElementById('presetDesc').innerHTML = `<b style="color:#ffe08a">${p.name}</b><br>${p.desc}<br><span style="color:rgba(255,255,255,.45)">Rumput: ${p.grass.toLocaleString()} • Bayangan: ${p.shadowSize} • Fauna: ${p.butterflies+birds} • Pixel: ${p.pixelRatio}x</span>`;
+  const el=document.getElementById('presetDesc'); if(el) el.innerHTML=`<b style="color:#ffe08a">${p.name}</b><br>${p.desc}<br><span style="color:rgba(255,255,255,.45)">Rumput: ${p.grass.toLocaleString()} • Bayangan: ${p.shadowSize} • Fauna: ${p.butterflies+p.birds} • Pixel: ${p.pixelRatio}x</span>`;
 }
-let selectedPreset = GFX.preset;
+let selectedPreset=GFX.preset;
 document.querySelectorAll('.presetBtn').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    selectedPreset = btn.dataset.preset;
-    document.querySelectorAll('.presetBtn').forEach(b=>b.classList.remove('active'));
-    btn.classList.add('active');
-    updatePresetDesc(selectedPreset);
-    const p=PRESETS[selectedPreset];
-    // auto set toggles
-    document.getElementById('setShadows').checked = p.shadows;
-    document.getElementById('setGrass').checked = p.grassEnabled && p.grass>10000;
-    document.getElementById('setParticles').checked = p.particles>50;
-    document.getElementById('setFauna').checked = p.fauna;
-    document.getElementById('setGhost').checked = p.ghost;
-    document.getElementById('setOutline').checked = p.outline;
-    document.getElementById('setAA').checked = p.antialias;
-    document.getElementById('setBloom').checked = p.bloom;
-  });
+  const handler=(e)=>{ e.preventDefault(); e.stopPropagation(); selectedPreset=btn.dataset.preset; document.querySelectorAll('.presetBtn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); updatePresetDesc(selectedPreset); const p=PRESETS[selectedPreset]; document.getElementById('setShadows').checked=p.shadows; document.getElementById('setGrass').checked=p.grassEnabled&&p.grass>10000; document.getElementById('setParticles').checked=p.particles>50; document.getElementById('setFauna').checked=p.fauna; document.getElementById('setGhost').checked=p.ghost; document.getElementById('setOutline').checked=p.outline; document.getElementById('setAA').checked=p.antialias; document.getElementById('setBloom').checked=p.bloom; if(navigator.vibrate) navigator.vibrate(10); };
+  btn.addEventListener('click', handler); btn.addEventListener('touchstart', handler, {passive:false});
 });
 function saveGfxAndReload(){
-  const custom = {
-    shadows: document.getElementById('setShadows').checked,
-    grassEnabled: document.getElementById('setGrass').checked,
-    particles: document.getElementById('setParticles').checked ? PRESETS[selectedPreset].particles : 0,
-    fauna: document.getElementById('setFauna').checked,
-    ghost: document.getElementById('setGhost').checked,
-    outline: document.getElementById('setOutline').checked,
-    antialias: document.getElementById('setAA').checked,
-    bloom: document.getElementById('setBloom').checked
-  };
-  const toSave = { preset: selectedPreset, custom };
-  localStorage.setItem('aether_gfx_v2', JSON.stringify(toSave));
-  localStorage.setItem('aether_gfx', JSON.stringify(toSave));
-  console.log('[GFX] Saving', toSave);
-  location.reload();
+  const custom={ shadows:document.getElementById('setShadows').checked, grassEnabled:document.getElementById('setGrass').checked, particles:document.getElementById('setParticles').checked?PRESETS[selectedPreset].particles:0, fauna:document.getElementById('setFauna').checked, ghost:document.getElementById('setGhost').checked, outline:document.getElementById('setOutline').checked, antialias:document.getElementById('setAA').checked, bloom:document.getElementById('setBloom').checked };
+  const toSave={ preset:selectedPreset, custom }; localStorage.setItem('aether_gfx_v2', JSON.stringify(toSave)); localStorage.setItem('aether_gfx', JSON.stringify(toSave)); logDebug('Saving GFX '+selectedPreset+' -> reload'); location.reload();
 }
-document.getElementById('saveSettingBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); saveGfxAndReload(); });
-document.getElementById('saveSettingBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); saveGfxAndReload(); }, {passive:false});
-document.getElementById('closeSettingBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); closeSettings(); });
-document.getElementById('closeSettingBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); closeSettings(); }, {passive:false});
-document.getElementById('openSettingBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openSettings(); });
-document.getElementById('openSettingBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); openSettings(); }, {passive:false});
-document.getElementById('startBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); console.log('[UI] Start clicked, isTouch:', isTouch); if(!isTouch){ requestLock(); } else { startGame(); } });
-document.getElementById('startBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); console.log('[UI] Start touchstart'); startGame(); }, {passive:false});
+window.__openSettings=openSettings;
+window.__closeSettings=closeSettings;
 
-// Fallback: click anywhere on start overlay (outside buttons) = start
-startOverlay.addEventListener('click', (e)=>{
-  if(e.target.closest && e.target.closest('.mainBtn')) return;
-  console.log('[UI] Overlay click -> start');
-  if(state==='ready' || state==='paused'){
-    if(!isTouch) requestLock(); else startGame();
+// Wire setting buttons - robust
+function wireSettingButtons(){
+  const saveBtn=document.getElementById('saveSettingBtn'), closeBtn=document.getElementById('closeSettingBtn'), openBtn=document.getElementById('openSettingBtn'), startBtn=document.getElementById('startBtn');
+  if(saveBtn){ saveBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); saveGfxAndReload(); }); saveBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); saveGfxAndReload(); }, {passive:false}); }
+  if(closeBtn){ closeBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); closeSettings(); }); closeBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); closeSettings(); }, {passive:false}); }
+  if(openBtn){ openBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openSettings(); }); openBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); openSettings(); }, {passive:false}); }
+  if(startBtn){ 
+    startBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); console.log('[UI] Start clicked'); if(!isTouch) requestLock(); else startGame(); }); 
+    startBtn.addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); console.log('[UI] Start touch'); startGame(); }, {passive:false}); 
   }
-});
-startOverlay.addEventListener('touchstart', (e)=>{
-  if(e.target.closest && e.target.closest('.mainBtn')) return;
-  e.preventDefault();
-  console.log('[UI] Overlay touchstart -> start');
-  if(state==='ready' || state==='paused') startGame();
-}, {passive:false});
+  console.log('[UI] Setting buttons wired');
+}
+wireSettingButtons();
 
+// Fallback overlay click
+startOverlay.addEventListener('click', (e)=>{ if(e.target.closest && e.target.closest('.mainBtn')) return; console.log('[UI] Overlay click -> start'); if(state==='ready'||state==='paused'){ if(!isTouch) requestLock(); else startGame(); } });
+startOverlay.addEventListener('touchstart', (e)=>{ if(e.target.closest && e.target.closest('.mainBtn')) return; e.preventDefault(); console.log('[UI] Overlay touch -> start'); if(state==='ready'||state==='paused') startGame(); }, {passive:false});
 settingOverlay.addEventListener('click', (e)=>{ if(e.target===settingOverlay) closeSettings(); });
 
-// Debug UI ready
-console.log('[UI] Buttons wired: startBtn, openSettingBtn, save, close');
-
-/* ========== GAME STATE & POINTER LOCK ========== */
-function requestLock(){ try{ const p=renderer.domElement.requestPointerLock(); if(p&&typeof p.catch==='function') p.catch(()=>setTimeout(requestLock,450)); }catch(e){ setTimeout(requestLock,450); } }
-function startGame(){ state='playing'; hud.classList.add('on'); startOverlay.classList.add('hidden'); settingOverlay.classList.add('hidden'); }
+/* ========== GAME STATE ========== */
+function requestLock(){ try{ const p=renderer.domElement.requestPointerLock(); if(p&&typeof p.catch==='function') p.catch(()=>{ console.log('pointer lock fail, start anyway'); startGame(); setTimeout(requestLock,450); }); }catch(e){ console.log('pointer lock exception, start anyway', e); startGame(); setTimeout(requestLock,450); } }
+function startGame(){ console.log('[GAME] startGame'); state='playing'; hud.classList.add('on'); startOverlay.classList.add('hidden'); settingOverlay.classList.add('hidden'); if(isTouch) document.getElementById('touchUI').classList.add('on'); logDebug('Game started!'); }
 window.__startGame=startGame;
 function pauseGame(){ state='paused'; player.vel.set(0,0,0); clearKeys(); hud.classList.remove('on'); startOverlay.classList.remove('hidden'); }
 function resetGame(){ score=0; elapsed=0; lastShownTime=-1; orbs.forEach(o=>{ o.visible=true; }); player.pos.set(0,0,6); player.yaw=Math.PI; player.pitch=0.12; player.vel.set(0,0,0); player.vy=0; player.grounded=true; player.jumpCooldown=0; CHAR.turnSmooth=0; CHAR.phase=0; CHAR.lean=0; DASH.stamina=DASH.max; DASH.timer=0; DASH.cooldown=0; DASH.trail=0; DASH.exhausted=false; ATTACK.active=false; ATTACK.combo=0; ATTACK.timer=0; ATTACK.cooldown=0; cam3.distNow=cam3.dist; slashPool.forEach(s=>{ scene.remove(s.mesh); }); slashPool.length=0; ghosts.forEach(g=>{ scene.remove(g.group); }); ghosts.length=0; updateHUD(); winOverlay.classList.add('hidden'); startGame(); }
 function updateHUD(){ elOrb.textContent=score+' / '+ORB_COUNT; }
 function winGame(){ state='won'; if(document.pointerLockElement) document.exitPointerLock(); hud.classList.remove('on'); document.getElementById('winTime').textContent='Waktu: '+elapsed.toFixed(1)+' detik'; winOverlay.classList.remove('hidden'); }
-
-document.getElementById('winRestartBtn').addEventListener('click', ()=>{ resetGame(); if(!isTouch) requestLock(); });
-document.getElementById('winMenuBtn').addEventListener('click', ()=>{ state='ready'; winOverlay.classList.add('hidden'); startOverlay.classList.remove('hidden'); hud.classList.remove('on'); });
+document.getElementById('winRestartBtn').addEventListener('click', (e)=>{ e.preventDefault(); resetGame(); if(!isTouch) requestLock(); });
+document.getElementById('winMenuBtn').addEventListener('click', (e)=>{ e.preventDefault(); state='ready'; winOverlay.classList.add('hidden'); startOverlay.classList.remove('hidden'); hud.classList.remove('on'); });
 document.getElementById('winRestartBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); resetGame(); }, {passive:false});
 document.getElementById('winMenuBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); state='ready'; winOverlay.classList.add('hidden'); startOverlay.classList.remove('hidden'); hud.classList.remove('on'); }, {passive:false});
 
@@ -652,7 +589,7 @@ addEventListener('keydown', e=>{
 renderer.domElement.addEventListener('click', ()=>{ if(!isTouch && !locked && state==='playing') requestLock(); });
 renderer.domElement.addEventListener('mousedown', e=>{ if(e.button===0 && state==='playing' && !isTouch){ tryAttack(); } });
 
-/* ========== TOUCH FIXED ========== */
+/* ========== TOUCH ========== */
 const stickBase=document.getElementById('stickBase'), stickKnob=document.getElementById('stickKnob');
 const stick={id:null,bx:0,by:0,dx:0,dy:0}; let lookId=null,lastLX=0,lastLY=0; const MAX_R=60; const touchMeta=new Map();
 function onTS(e){
@@ -700,14 +637,11 @@ function jumpBtnPress(e){ e.preventDefault(); e.stopPropagation(); if(navigator.
 document.getElementById('pauseBtn').addEventListener('touchstart', e=>{ e.preventDefault(); e.stopPropagation(); if(state==='playing') pauseGame(); }, {passive:false});
 document.getElementById('pauseBtn').addEventListener('click', e=>{ e.stopPropagation(); if(state==='playing') pauseGame(); });
 
-/* ========== AUDIO ========== */
 let audioCtx=null;
 function chime(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); const notes=[660,880,1320]; notes.forEach((f,i)=>{ const o=audioCtx.createOscillator(), g=audioCtx.createGain(); o.type='sine'; o.frequency.value=f; g.gain.setValueAtTime(0.0001,audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.12,audioCtx.currentTime+0.02+i*0.06); g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+0.5+i*0.06); o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+0.6+i*0.06); }); }catch(e){} }
 
-/* ========== GAME STATE ========== */
 let state='ready', score=0, elapsed=0;
 
-/* ========== SLASH SPAWN ========== */
 function spawnSlashEffect(combo, charPos, charYaw){
   const forward=new THREE.Vector3(Math.sin(charYaw),0,Math.cos(charYaw)); const right=new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).negate();
   const basePos=charPos.clone().add(new THREE.Vector3(0,1.1,0)).addScaledVector(forward, 1.2);
@@ -725,7 +659,6 @@ function spawnSlashEffect(combo, charPos, charYaw){
   elFlash.classList.add('on'); setTimeout(()=>elFlash.classList.remove('on'), 90);
 }
 
-/* ========== LOOP ========== */
 const clock=new THREE.Clock(); const tmpV=new THREE.Vector3(); const UP=new THREE.Vector3(0,1,0); const PLAYER_R=0.45; let cameraShake=0;
 function animate(){
   requestAnimationFrame(animate);
@@ -770,6 +703,7 @@ function animate(){
 }
 animate();
 addEventListener('resize', ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+logDebug('Game loop started — tap START!');
 </script>
 </body>
 </html>
