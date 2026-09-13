@@ -56,6 +56,7 @@
 <div id="attackFlash"></div>
 
 <div id="hud">
+  <div id="cameraHint" style="display:none;position:absolute;bottom:20px;left:20px;color:white;font-size:13px">Kamera: tahan klik kanan dan geser · Esc: pause</div>
   <div id="vignette"></div>
   <div id="crosshair"></div>
   <div id="topbar">
@@ -81,7 +82,7 @@
     <div class="key"><b>W A S D</b>Bergerak</div>
     <div class="key"><b>Mouse</b>Lihat sekeliling</div>
     <div class="key"><b>Shift</b>Lari / Dash</div>
-    <div class="key"><b>Klik Kanan / J</b>Attack</div>
+    <div class="key"><b>Klik Kiri / J / F</b>Attack</div>
     <div class="key"><b>Space</b>Lompat</div>
   </div>
   <div class="keys" id="keysTouch" style="display:none">
@@ -144,10 +145,17 @@ const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1200
 const uTime = { value: 0 };
 
 function toonRamp(steps){
-  const d = new Uint8Array(steps);
-  for (let i=0;i<steps;i++) d[i] = Math.round(255 * Math.pow((i+1)/steps, 0.62));
-  const t = new THREE.DataTexture(d, steps, 1, THREE.RedFormat);
+  const canvas = document.createElement('canvas');
+  canvas.width = steps; canvas.height = 1;
+  const ctx = canvas.getContext('2d');
+  for (let i=0;i<steps;i++){
+    const v = Math.round(255 * Math.pow((i+1)/steps, 0.62));
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(i, 0, 1, 1);
+  }
+  const t = new THREE.CanvasTexture(canvas);
   t.minFilter = t.magFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
   t.needsUpdate = true;
   return t;
 }
@@ -325,7 +333,7 @@ new GLTFLoader().load('./character.glb', (gltf)=>{
     if(o.isBone){ const clean=cleanBoneName(o.name); CHAR.bones[clean]=o; CHAR.restQuat[clean]=o.quaternion.clone(); }
   });
   for(const o of toRemove){ if(o.parent) o.parent.remove(o); }
-  charRoot.add(model); CHAR.model=model; CHAR.ready=true;
+  charRoot.add(model); CHAR.baseY=model.position.y; CHAR.model=model; CHAR.ready=true;
   Object.keys(CHAR.bones).forEach(k=>{ if(k.includes('DRESS')) CHAR.cloakBones.push({bone:CHAR.bones[k], restQ:CHAR.bones[k].quaternion.clone(), curX:0, velX:0}); });
   document.getElementById('loadStatus').textContent = `Aether Ready • ${Object.keys(CHAR.bones).length} bones • Tap to play`;
   console.log('[CHAR] Ready', Object.keys(CHAR.bones).length, 'bones');
@@ -369,7 +377,28 @@ function animateAether(dt, speed01, moving, isRunning, isDashing, isJumping, isF
     const br=Math.sin(p*0.85)*0.035; boneRot('BELLY',br,0,0,blendBase); boneRot('CHEST',br*0.7,Math.sin(p*0.3)*0.04,0,blendBase); boneRot('HEAD',br*0.4,Math.sin(p*0.42)*0.11,0,blendBase);
     CHAR.cloakBones.forEach((c,i)=>{ const target=Math.sin(p*0.4+i*0.7)*0.08; c.curX+=(target-c.curX)*dt*2.2; _e.set(c.curX,0,0); _q.setFromEuler(_e); _q.premultiply(c.restQ); c.bone.quaternion.slerp(_q, blendBase*0.6); });
   }
-  if(CHAR.model) CHAR.model.position.y=moving&&!attackInfo.active?Math.abs(Math.cos(p))*0.055*(isRunning?1:0.6):0;
+  if(CHAR.model) CHAR.model.position.y=CHAR.baseY+(moving&&!attackInfo.active?Math.abs(Math.cos(p))*0.055*(isRunning?1:0.6):0);
+}
+// Geometry and textures on ghosts are shared with the live character.
+function disposeGhost(group){
+  scene.remove(group);
+  const materials=new Set(), skeletons=new Set();
+  group.traverse(o=>{
+    if(o.isMesh){
+      (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>materials.add(m));
+      if(o.skeleton) skeletons.add(o.skeleton);
+    }
+  });
+  materials.forEach(m=>m.dispose());
+  skeletons.forEach(s=>s.dispose());
+}
+function disposeSlash(mesh){
+  scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose();
+}
+function clearEffects(){
+  ghosts.forEach(g=>disposeGhost(g.group)); ghosts.length=0;
+  slashPool.forEach(s=>disposeSlash(s.mesh)); slashPool.length=0;
+  document.getElementById('attackFlash').classList.remove('on');
 }
 function spawnGhost(){
   if(!CHAR.ready||!CHAR.model) return;
@@ -379,7 +408,7 @@ function spawnGhost(){
     const gRoot=new THREE.Group(); gRoot.position.copy(charRoot.position); gRoot.quaternion.copy(charRoot.quaternion);
     clone.position.copy(CHAR.model.position); clone.rotation.copy(CHAR.model.rotation); clone.scale.copy(CHAR.model.scale);
     gRoot.add(clone); scene.add(gRoot); ghosts.push({group:gRoot, life:0.45, max:0.45});
-  }catch(e){}
+  }catch(e){ console.warn('Ghost effect failed', e); }
 }
 function spawnSlash(charPos, charYaw){
   const forward=new THREE.Vector3(Math.sin(charYaw),0,Math.cos(charYaw));
@@ -395,6 +424,7 @@ function spawnSlash(charPos, charYaw){
 const player = { pos:new THREE.Vector3(0,0,6), yaw:Math.PI, pitch:0.12, vel:new THREE.Vector3(), vy:0, grounded:true, jumpCooldown:0, bob:0 };
 const cam3={dist:5.0, distNow:5.0, height:1.92, minPitch:-0.55, maxPitch:1.05};
 const DASH={ stamina:100, max:100, cost:26, runDrain:20, regen:32, regenDelay:0.55, sinceUse:9, timer:0, dur:0.30, cooldown:0, power:40, dir:new THREE.Vector3(), trail:0, exhausted:false };
+const COMBO_DURATIONS=[0.52,0.58,0.68,0.82];
 const ATTACK={ active:false, timer:0, t:0, duration:0.52, cooldown:0, queue:false, slashSpawned:false, combo:0 };
 
 const keys = {};
@@ -405,6 +435,8 @@ addEventListener('blur', clearKeys);
 document.addEventListener('visibilitychange', () => { if (document.hidden) clearKeys(); });
 
 let locked = false;
+let lockPending = false;
+let mouseLookFallback = false;
 const hud = document.getElementById('hud');
 const startOverlay = document.getElementById('startOverlay');
 const winOverlay = document.getElementById('winOverlay');
@@ -413,12 +445,23 @@ const elOrb  = document.querySelector('#orbStat .value');
 const elStamWrap=document.getElementById('staminaWrap'), elStamBar=document.getElementById('staminaBar'), elSpeed=document.getElementById('speedLines');
 let lastShownTime = -1;
 
+function pointerLockFailed(){
+  lockPending = false;
+  mouseLookFallback = true;
+  document.getElementById('cameraHint').style.display='block';
+  document.getElementById('loadStatus').textContent = 'Pointer lock tidak tersedia. Tahan klik kanan dan geser untuk kamera; Esc untuk pause.';
+  if (state === 'ready' || state === 'paused') startGame();
+}
 function requestLock(){
+  if (lockPending || locked) return;
+  lockPending = true;
   try {
     const p = renderer.domElement.requestPointerLock();
-    if (p && typeof p.catch === 'function') p.catch(() => setTimeout(requestLock, 450));
-  } catch(e){ setTimeout(requestLock, 450); }
+    if (p && typeof p.catch === 'function') p.catch(pointerLockFailed);
+  } catch(e){ pointerLockFailed(); }
 }
+document.addEventListener('pointerlockerror', pointerLockFailed);
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 // INI KUNCI VERSI LAWAS YANG WORK - JANGAN UBAH!
 startOverlay.addEventListener('click', () => {
   if (isTouch){ if (state === 'ready' || state === 'paused') startGame(); }
@@ -426,7 +469,9 @@ startOverlay.addEventListener('click', () => {
 });
 winOverlay.addEventListener('click', () => { resetGame(); if (!isTouch) requestLock(); });
 document.addEventListener('pointerlockchange', () => {
+  lockPending = false;
   locked = document.pointerLockElement === renderer.domElement;
+  if (locked){ mouseLookFallback = false; document.getElementById('cameraHint').style.display='none'; }
   if (locked){
     if (state === 'ready' || state === 'paused') startGame();
     hud.classList.add('on');
@@ -436,19 +481,20 @@ document.addEventListener('pointerlockchange', () => {
   }
 });
 document.addEventListener('mousemove', e => {
-  if (!locked) return;
+  if (state !== 'playing' || (!locked && !(mouseLookFallback && (e.buttons & 2)))) return;
   player.yaw   -= e.movementX * 0.0022;
   player.pitch -= e.movementY * 0.0022;
   player.pitch = Math.max(cam3.minPitch, Math.min(cam3.maxPitch, player.pitch));
 });
 renderer.domElement.addEventListener('click', () => {
-  if (!isTouch && !locked && state === 'playing') requestLock();
+  if (!isTouch && !locked && !mouseLookFallback && state === 'playing') requestLock();
 });
 
 const stickBase = document.getElementById('stickBase');
 const stickKnob = document.getElementById('stickKnob');
 const stick = { id:null, bx:0, by:0, dx:0, dy:0 };
 let lookId = null, lastLX = 0, lastLY = 0;
+let lookGesture = null;
 const MAX_R = 55;
 function onTS(e){
   if (state !== 'playing') return;
@@ -463,6 +509,7 @@ function onTS(e){
       stickKnob.style.left = '32px'; stickKnob.style.top = '32px';
     } else if (lookId === null){
       lookId = t.identifier; lastLX = t.clientX; lastLY = t.clientY;
+      lookGesture = {x:t.clientX, y:t.clientY, started:performance.now(), moved:false};
     }
   }
 }
@@ -478,6 +525,7 @@ function onTM(e){
       stickKnob.style.left = (32+dx)+'px';
       stickKnob.style.top  = (32+dy)+'px';
     } else if (t.identifier === lookId){
+      if (lookGesture && Math.hypot(t.clientX-lookGesture.x, t.clientY-lookGesture.y)>12) lookGesture.moved=true;
       player.yaw   -= (t.clientX - lastLX) * 0.005;
       player.pitch -= (t.clientY - lastLY) * 0.005;
       player.pitch = Math.max(cam3.minPitch, Math.min(cam3.maxPitch, player.pitch));
@@ -491,7 +539,11 @@ function onTE(e){
       stick.id = null; stick.dx = 0; stick.dy = 0;
       stickBase.style.display = 'none';
     } else if (t.identifier === lookId){
-      lookId = null;
+      const tap = lookGesture && !lookGesture.moved &&
+        Math.hypot(t.clientX-lookGesture.x, t.clientY-lookGesture.y)<=12 &&
+        performance.now()-lookGesture.started<280;
+      lookId = null; lookGesture = null;
+      if (e.type === 'touchend' && tap && t.clientX>innerWidth*0.55) tryAttack();
     }
   }
 }
@@ -505,17 +557,20 @@ document.getElementById('pauseBtn').addEventListener('click', e => {
 });
 
 function tryDash(){
+  if(state!=='playing') return;
   if(DASH.timer>0||DASH.cooldown>0||ATTACK.active) return;
   if(DASH.stamina<DASH.cost){ DASH.exhausted=true; return; }
   const moving2=player.vel.lengthSq()>1.5;
   if(moving2) DASH.dir.copy(player.vel).setY(0).normalize(); else DASH.dir.set(Math.sin(CHAR.turnSmooth),0,Math.cos(CHAR.turnSmooth));
   DASH.stamina-=DASH.cost; DASH.timer=DASH.dur; DASH.cooldown=0.34; DASH.sinceUse=0; DASH.trail=1; ghostSpawnTimer=0;
 }
-function tryJump(){ if(!player.grounded||player.jumpCooldown>0||ATTACK.active) return; player.vy=9.8; player.grounded=false; player.jumpCooldown=0.25; }
+function tryJump(){ if(state!=='playing') return; if(!player.grounded||player.jumpCooldown>0||ATTACK.active) return; player.vy=9.8; player.grounded=false; player.jumpCooldown=0.25; }
 function tryAttack(){
+  if(state!=='playing') return;
   if(DASH.timer>0) return;
   if(ATTACK.active){ if(ATTACK.t>0.28&&ATTACK.t<0.85) ATTACK.queue=true; return; }
   if(ATTACK.cooldown>0) return;
+  ATTACK.combo=0; ATTACK.duration=COMBO_DURATIONS[0];
   ATTACK.active=true; ATTACK.timer=0; ATTACK.t=0; ATTACK.slashSpawned=false; ATTACK.queue=false;
 }
 document.getElementById('dashBtn').addEventListener('click', tryDash);
@@ -524,11 +579,9 @@ document.getElementById('jumpBtn').addEventListener('click', tryJump);
 document.getElementById('dashBtn').addEventListener('touchstart', e=>{ e.preventDefault(); tryDash(); }, {passive:false});
 document.getElementById('atkBtn').addEventListener('touchstart', e=>{ e.preventDefault(); tryAttack(); }, {passive:false});
 document.getElementById('jumpBtn').addEventListener('touchstart', e=>{ e.preventDefault(); tryJump(); }, {passive:false});
-renderer.domElement.addEventListener('touchend', e=>{
-  if(state!=='playing') return;
-  for(const t of e.changedTouches){ if(t.clientX>innerWidth*0.55) tryAttack(); }
-});
 addEventListener('keydown', e=>{
+  if (state==='playing' && ['Space','ShiftLeft','ShiftRight','KeyJ','KeyF','Escape'].includes(e.code)) e.preventDefault();
+  if (e.repeat) return;
   if((e.code==='ShiftLeft'||e.code==='ShiftRight') && state==='playing') tryDash();
   if((e.code==='Space') && state==='playing'){ if(keys.ShiftLeft||keys.ShiftRight) tryDash(); else tryJump(); }
   if((e.code==='KeyJ'||e.code==='KeyF') && state==='playing') tryAttack();
@@ -561,8 +614,17 @@ function startGame(){
   startOverlay.classList.add('hidden');
   console.log('[GAME] playing - character ready?', CHAR.ready);
 }
+function clearTouchInput(){
+  stick.id=null; stick.dx=0; stick.dy=0;
+  lookId=null; lookGesture=null;
+  stickBase.style.display='none';
+}
+addEventListener('blur', () => { if(state==='playing') pauseGame(); });
+document.addEventListener('visibilitychange', () => { if(document.hidden && state==='playing') pauseGame(); });
 function pauseGame(){
   state = 'paused';
+  clearTouchInput();
+  if(document.pointerLockElement) document.exitPointerLock();
   player.vel.set(0,0,0);
   clearKeys();
   hud.classList.remove('on');
@@ -570,13 +632,15 @@ function pauseGame(){
   startOverlay.classList.remove('hidden');
 }
 function resetGame(){
+  clearTouchInput(); clearKeys(); clearEffects();
   score = 0; elapsed = 0; lastShownTime = -1;
   orbs.forEach(o => { o.visible = true; });
   player.pos.set(0, 0, 6); player.yaw = Math.PI; player.pitch = 0.12;
   player.vel.set(0,0,0); player.vy=0; player.grounded=true;
   CHAR.turnSmooth=Math.PI; CHAR.phase=0;
   DASH.stamina=DASH.max; DASH.timer=0; DASH.cooldown=0; DASH.trail=0;
-  ATTACK.active=false; ATTACK.timer=0;
+  ATTACK.active=false; ATTACK.timer=0; ATTACK.t=0; ATTACK.combo=0; ATTACK.cooldown=0; ATTACK.queue=false; ATTACK.slashSpawned=false; ATTACK.duration=COMBO_DURATIONS[0];
+  DASH.exhausted=false; DASH.sinceUse=9; player.jumpCooldown=0;
   elOrb.textContent = score+' / '+ORB_COUNT;
   winOverlay.classList.add('hidden');
   startGame();
@@ -584,6 +648,7 @@ function resetGame(){
 function updateHUD(){ elOrb.textContent = score + ' / ' + ORB_COUNT; }
 function winGame(){
   state = 'won';
+  clearTouchInput(); clearKeys();
   if (document.pointerLockElement) document.exitPointerLock();
   hud.classList.remove('on');
   document.getElementById('winTime').textContent = 'Waktu: ' + elapsed.toFixed(1) + ' detik';
@@ -681,7 +746,7 @@ function animate(){
         spawnSlash(charPos, CHAR.turnSmooth);
       }
       if(ATTACK.t>=1){
-        if(ATTACK.queue){ ATTACK.combo=(ATTACK.combo+1)%4; ATTACK.timer=0; ATTACK.t=0; ATTACK.slashSpawned=false; ATTACK.queue=false; }
+        if(ATTACK.queue){ ATTACK.combo=(ATTACK.combo+1)%4; ATTACK.duration=COMBO_DURATIONS[ATTACK.combo]; ATTACK.timer=0; ATTACK.t=0; ATTACK.slashSpawned=false; ATTACK.queue=false; }
         else { ATTACK.active=false; ATTACK.cooldown=0.15; }
       }
     } else if(ATTACK.cooldown>0) ATTACK.cooldown-=dt;
@@ -696,7 +761,7 @@ function animate(){
   // CHARACTER POSITION & CAMERA - THIRD PERSON
   if(CHAR.ready){
     charRoot.position.set(player.pos.x, groundY, player.pos.z);
-    if(moving||ATTACK.active){
+    if(state === 'playing' && player.vel.lengthSq()>1){
       const targetYaw=Math.atan2(player.vel.x, player.vel.z);
       let d=targetYaw-CHAR.turnSmooth; while(d>Math.PI) d-=Math.PI*2; while(d<-Math.PI) d+=Math.PI*2;
       const turnSpeed=ATTACK.active?18:(DASH.timer>0?14:11);
@@ -704,7 +769,7 @@ function animate(){
     }
     charRoot.rotation.y=CHAR.turnSmooth;
     const isDashing=DASH.timer>0, isJumping=!player.grounded&&player.vy>0, isFalling=!player.grounded&&player.vy<=0;
-    animateAether(dt, speed01, moving, sprinting, isDashing, isJumping, isFalling, ATTACK);
+    if(state === 'playing') animateAether(dt, speed01, moving, sprinting, isDashing, isJumping, isFalling, ATTACK);
   }
 
   // CAMERA THIRD PERSON (bukan first person lagi)
@@ -752,8 +817,8 @@ function animate(){
 
   { const pct=DASH.stamina/DASH.max; elStamBar.style.width=(pct*100).toFixed(1)+'%'; const showBar=state==='playing'&&(pct<0.995||DASH.timer>0); elStamWrap.classList.toggle('show',showBar); elStamWrap.classList.toggle('low',DASH.exhausted||pct<0.3); document.getElementById('dashBtn').classList.toggle('off',DASH.stamina<DASH.cost); elSpeed.style.opacity=(DASH.trail*0.85).toFixed(3); }
 
-  for(let i=ghosts.length-1;i>=0;i--){ const g=ghosts[i]; g.life-=dt; const k=g.life/g.max; if(g.life<=0){ scene.remove(g.group); ghosts.splice(i,1); continue; } g.group.traverse(o=>{ if(o.isMesh&&o.material){ if(Array.isArray(o.material)) o.material.forEach(m=>{ m.opacity=k*0.55; }); else o.material.opacity=k*0.55; } }); g.group.scale.setScalar(1+(1-k)*0.08); }
-  for(let i=slashPool.length-1;i>=0;i--){ const s=slashPool[i]; s.life-=dt; const k=s.life/s.max; if(s.life<=0){ scene.remove(s.mesh); slashPool.splice(i,1); continue; } s.mesh.material.opacity=k; s.mesh.scale.setScalar(0.9+k*0.25); }
+  for(let i=ghosts.length-1;i>=0;i--){ const g=ghosts[i]; g.life-=dt; const k=g.life/g.max; if(g.life<=0){ disposeGhost(g.group); ghosts.splice(i,1); continue; } g.group.traverse(o=>{ if(o.isMesh&&o.material){ if(Array.isArray(o.material)) o.material.forEach(m=>{ m.opacity=k*0.55; }); else o.material.opacity=k*0.55; } }); g.group.scale.setScalar(1+(1-k)*0.08); }
+  for(let i=slashPool.length-1;i>=0;i--){ const s=slashPool[i]; s.life-=dt; const k=s.life/s.max; if(s.life<=0){ disposeSlash(s.mesh); slashPool.splice(i,1); continue; } s.mesh.material.opacity=k; s.mesh.scale.setScalar(0.9+k*0.25); }
 
   renderer.render(scene, camera);
 }

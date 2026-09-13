@@ -1,124 +1,81 @@
-# Orb Hunt — Aether Style Rework (Genshin-like)
+# Orb Hunt — Aether
 
-Project besar RPG Three.js dengan fokus **animasi karakter super detail & smooth** ala Genshin Impact Aether.
+Prototipe game eksplorasi Three.js: jelajahi terrain prosedural, kumpulkan 12 orb, dan gunakan karakter beranimasi dengan dash, lompat, serta efek tebasan. Project ini masih prototipe, bukan RPG lengkap.
 
-## 🔥 Apa yang di-FIX dari versi lama?
+## Menjalankan
 
-### 1. **Fix Warna Putih di Android**
-**Masalah:** Karakter putih polos di Android karena `DataTexture` dengan `RedFormat` tidak support di beberapa GPU Adreno/Mali + `flipY=false` manual merusak texture GLB.
+Dari direktori repo:
 
-**Solusi:**
-- Ganti `toonRamp` dari `DataTexture RedFormat` → `CanvasTexture` (compatible WebGL1/2 semua Android)
-- Jangan set `texture.flipY = false` manual, biarkan `GLTFLoader` handle. Hanya set `colorSpace = SRGBColorSpace`, `minFilter = LinearMipmapLinearFilter`
-- `MeshToonMaterial` dengan `gradientMap = RAMP4` canvas, `transparent` + `alphaTest` 0.1
-- `renderer.outputColorSpace = SRGBColorSpace`, `powerPreference: high-performance`, `antialias: !isTouch`
-
-Hasil: warna karakter normal di Chrome Android, Samsung, Xiaomi, dll.
-
-### 2. **Pergerakan Karakter Lebih Hidup — Aether Locomotion**
-Sebelumnya cuma `sin(phase)` sederhana. Sekarang:
-
-- **Idle:** breathing (belly/chest 0.035 rad), subtle weight shift, kepala slight nod, cloak idle wave pakai spring physics (sinus + wind)
-- **Walk (6.2 m/s):** 
-  - Thigh amplitude 0.58 rad, knee lift 0.72, foot toe push, ankle adjustment biar kaki napak tanah
-  - Pelvis bounce `abs(cos)*0.042`, sway side 0.045, torso twist opposite legs
-  - Arms swing elegant opposite legs, elbow bend 0.15-0.4
-  - Cloak: 6 bones dress handler (`DRESS_HANDLERR`, `FRONT`, `BACK`, dll) dengan spring `k=9, damping 0.78`, flow sesuai velocity
-- **Run (13.2 m/s):**
-  - Thigh 0.92, knee 1.15, lean forward 0.18 rad, arms bent 90° pumping
-  - Cloak blown back `-0.35 - speed*0.45`
-- **Dash:** pose condong 0.55 rad, arms swept back `-0.85`, legs sprint fast `phaseRate 11`, plus afterimage
-- **Jump:** crouch anticipasi (knee 0.95), takeoff extend, in-air tuck, landing. Physics `vy`, `gravity 22`, `jumpPower 9.8`
-- **Turn:** `CHAR.turnSmooth` dengan lerp `dt*11` + shortest angle, jadi belok smooth kayak Genshin
-
-Semua pakai `quaternion.slerp` dengan `blend = 1 - pow(0.001, dt)` biar framerate independent & smooth.
-
-### 3. **Animasi Pedang — Attack Combo 4x + Tebasan Depan**
-**Input:** 
-- Desktop: Klik kiri / J / F / tap kanan layar
-- Mobile: Tombol ⚔️ atau tap cepat di area kanan layar (deteksi tap <280ms tanpa drag)
-
-**System:**
-- State machine `ATTACK {active, combo 0-3, timer, t 0..1, queue}`
-- Combo window 0.28-0.85, bisa queue next attack
-- Durasi: [0.52s, 0.58s, 0.68s, 0.82s]
-- Tiap combo punya pose detail (windup → slash → recover) untuk PELVIS, BELLY, CHEST, SHOULDERS, ARMS, FOREARMS, THIGHS, KNEES
-- Contoh Combo1 horizontal: twist pelvis 0.55 → -0.9, chest 0.85 → -1.15, shoulder swing -2.2 rad
-- Spawn slash effect di `t>0.28`
-
-### 4. **Efek Tebasan (Slash)**
-- `createSlashTexture()` bikin 3 jenis via Canvas: horizontal crescent (blue-white glow), vertical (gold), spin circle
-- Additive blending, `depthWrite:false`, `DoubleSide`
-- Spawn di depan karakter `forward*1.2 + up 1.1`
-- Animasi: fade `opacity = life/max`, scale `0.9 + k*0.25`, rotasi `rotSpeed`
-- Flash vignette `radial-gradient` 90ms
-- Camera shake untuk finisher `cameraShake=0.6`
-
-### 5. **Dash Afterimage — Bayangan Ketinggalan**
-- `SkeletonUtils.clone(CHAR.model)` untuk clone pose saat dash
-- Material clone jadi transparent `opacity 0.55`, `emissive 0x6ec8ff`, `depthWrite false`
-- Spawn tiap `0.045s` saat `DASH.timer>0`
-- Ghost pool `life 0.45s`, fade out + scale up `1 + (1-k)*0.08`
-- Trail FOV `70 + trail*13`, speedLines opacity `trail*0.85`
-
-### 6. **Android Playable**
-- Joystick kiri 120px, deadzone 0.14 + smoothstep curve
-- Kamera geser kanan (lookId)
-- Tap kanan = attack (tanpa drag)
-- 3 tombol: ⚡ Dash (kanan bawah), ⚔️ Attack (kanan atas), ⤴ Jump (tengah bawah)
-- Stamina HUD, speedLines, vignette
-- PixelRatio max 1.6 di mobile, grass 28k vs 110k, tree 60 vs 95
-- Touch-action none, preventDefault, passive:false
-
-## 🎮 Kontrol
-
-**Desktop:**
-- WASD gerak, Mouse kamera, Roda zoom
-- Shift / Spasi = Dash (bayangan)
-- C / Space (tanpa Shift) = Lompat
-- Klik Kiri / J / F = Attack
-- V = ganti first/third person
-
-**Mobile:**
-- Joystick kiri = gerak (dorong penuh = lari)
-- Geser kanan = kamera
-- ⚡ = Dash, ⚔️ = Attack (atau tap cepat kanan), ⤴ = Jump
-
-## 📁 Struktur Repo
-
-```
-rpg/
-├── index.html          # Game utama (Aether rework)
-├── character.glb       # Model Aether-like (1.4MB)
-├── three.module.js     # Three r160
-├── jsm/
-│   ├── loaders/GLTFLoader.js
-│   └── utils/SkeletonUtils.js
-└── README.md
+```sh
+python -m http.server 8000 --bind 0.0.0.0
 ```
 
-## 🚀 Cara Jalanin
+Buka `http://localhost:8000`. Jangan membuka `index.html` langsung dengan `file://`, karena game memakai ES modules dan memuat model GLB. Untuk hosting statis seperti GitHub Pages, unggah seluruh struktur repo; tidak diperlukan build atau backend.
 
-```bash
-python -m http.server 8000
-# buka http://localhost:8000
+## Kontrol yang tersedia
+
+### Desktop
+- WASD: gerak.
+- Mouse: kamera setelah pointer lock aktif.
+- Shift: dash saat ditekan; tahan untuk lari (memakai stamina).
+- Space: lompat; Shift + Space: dash.
+- Klik kiri / J / F: serangan; tekan lagi pada jendela combo untuk melanjutkan.
+- Escape: pause; klik overlay untuk melanjutkan.
+- Jika browser/iframe menolak pointer lock, game menggunakan **tahan klik kanan + geser** untuk kamera. Petunjuk muncul di layar.
+
+### Mobile
+- Sentuh/geser area kiri: joystick; dorong penuh untuk lari.
+- Geser area kanan: kamera.
+- Tap kanan kurang dari 280 ms dengan perpindahan maksimum 12 CSS pixel: serangan.
+- Tombol ⚡ / ⚔️ / ⤴: dash / serangan / lompat.
+- Tombol ⏸: pause.
+
+Zoom roda mouse, kamera first-person/V, dan tombol C belum tersedia.
+
+## Implementasi saat ini
+
+- Terrain, pencahayaan senja, toon shading, vegetasi instanced, serta fauna dengan animasi shader.
+- Penyesuaian mobile: pixel ratio maksimal 1.5, grass 30.000 (desktop 130.000), shadow map 1024 (desktop 2048). Ini bukan jaminan FPS.
+- Karakter GLB dikonversi ke `MeshToonMaterial`; ramp grayscale memakai `CanvasTexture` dengan nearest filtering. Orientasi texture tetap ditangani `GLTFLoader`.
+- Animasi tulang prosedural untuk idle, gerak, dash, lompat, dan serangan. Cloak memakai interpolasi sederhana, bukan simulasi spring lengkap.
+- Combo memiliki empat tahap dengan durasi 0.52 / 0.58 / 0.68 / 0.82 detik dan jendela queue 0.28–0.85. Saat ini tahap-tahap tersebut masih memakai pose dan texture slash yang sama, bukan empat koreografi berbeda.
+- Dash menghasilkan clone skeleton yang memudar. Resource material/skeleton milik ghost dibersihkan saat habis; geometry dan texture bersama tidak dibuang. Geometry/material slash dibersihkan terpisah.
+- Belum ada musuh, damage/hitbox combat, inventory, quest, atau save game.
+
+## Struktur
+
+```text
+index.html                     UI, scene, kontrol, gameplay, efek
+character.glb                  Model karakter
+three.module.js                Three.js r160
+jsm/loaders/GLTFLoader.js       Loader model
+jsm/utils/SkeletonUtils.js     Clone skeleton
+jsm/utils/BufferGeometryUtils.js Dependency loader, Three.js r160
+licenses/three-LICENSE.txt      Lisensi Three.js
+tests/regression.test.cjs      Tes regresi tanpa dependency npm
+.github/workflows/test.yml     CI Node.js
 ```
 
-Untuk Android: deploy ke GitHub Pages / Netlify, lalu buka di Chrome. Warna sudah fix.
+## Pengujian
 
-## 🔧 Tech Detail Penting
+Dengan Node.js 22:
 
-- **Material Fix:** CanvasTexture ramp bukan DataTexture RedFormat → fix Adreno white bug
-- **Bone Cleaning:** `cleanBoneName = name.replace(/_\d+$/,'').replace(/\./g,'').replace(/\s+/g,'_').toUpperCase()` → `THIGH.R_22` → `THIGHR`
-- **Cloak Physics:** spring `vel += (target-cur)*k*dt; vel*=pow(d, dt*60); cur+=vel*dt`
-- **Ghost:** clone skeleton, bukan cuma mesh, jadi pose akurat
-- **Slash:** Canvas radial gradient + shadowBlur glow, additive
+```sh
+node --test tests/*.test.cjs
+```
 
-## 📱 Tested
+Tes mencakup sintaks script, keberadaan dependency modul, guard aksi di luar permainan, tap versus drag/cancel, arah hadap saat serangan diam, kegagalan pointer lock, disposal efek, reset awal combo, dan pembuatan toon ramp. Tes logika menggunakan fungsi dari `index.html` dalam sandbox Node; ini **bukan pengganti tes WebGL/browser**.
 
-- Android Chrome 120+ (Samsung A52, Xiaomi) → warna normal, 45-60fps
-- Desktop Chrome → 60fps, dash trail & slash smooth
+Checklist pengujian manual sebelum rilis:
 
----
+1. Pastikan status berubah ke `Aether Ready` tanpa 404 atau error shader di console.
+2. Mulai, gerak, dash, lompat, serang, pause, dan lanjutkan pada desktop dan mobile.
+3. Geser kamera mobile lalu lepaskan: tidak boleh menyerang. Tap cepat harus menyerang.
+4. Coba keempat tahap combo, kumpulkan semua orb, dan mulai permainan ulang.
+5. Ulangi dash/serangan dan pantau memori GPU; resource tidak boleh terus bertambah setelah efek habis.
+6. Uji pointer lock yang diizinkan dan ditolak; coba fallback klik kanan.
+7. Cek warna karakter dan FPS pada Android sungguhan, termasuk perangkat kelas menengah. Kompatibilitas semua GPU dan angka 45–60 FPS belum diverifikasi dalam perbaikan ini.
 
-Made with ❤️ — fokus animasi detail kayak Genshin Aether: jalan elegan, dash berbayang, lompat ringan, tebasan 4-kombo.
+## Dependency
+
+Dependency runtime disimpan lokal. `BufferGeometryUtils.js` diambil dari paket npm resmi `three@0.160.0` agar cocok dengan Three.js r160. Saat upgrade, perbarui core dan addon bersamaan. Lisensi Three.js tidak otomatis mencakup model karakter; pastikan hak penggunaan/distribusi aset sebelum rilis publik.
