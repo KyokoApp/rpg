@@ -935,69 +935,163 @@ addEventListener('keydown', e=>{
 renderer.domElement.addEventListener('click', ()=>{ if(!isTouch && !locked && state==='playing') requestLock(); });
 renderer.domElement.addEventListener('mousedown', e=>{ if(e.button===0 && state==='playing' && !isTouch){ tryAttack(); } });
 
-/* ========== TOUCH ========== */
+/* ========== TOUCH FIXED — RESPON 100% ========== */
 const stickBase=document.getElementById('stickBase'), stickKnob=document.getElementById('stickKnob');
 const stick={id:null,bx:0,by:0,dx:0,dy:0}; let lookId=null,lastLX=0,lastLY=0; const MAX_R=60;
+const touchMeta=new Map(); // id -> {sx,sy,st,moved, isRight}
+
 function onTS(e){
-  if(state!=='playing') return; e.preventDefault();
+  if(state!=='playing'){
+    // allow start overlay tap to still work via separate handler, but prevent scroll
+    if(state==='ready' || state==='paused') return;
+  }
+  // jangan preventDefault kalau target adalah button
+  const isBtn = e.target && e.target.closest && e.target.closest('.tBtn, #pauseBtn');
+  if(!isBtn) e.preventDefault();
+
   for(const t of e.changedTouches){
-    if(t.clientX<innerWidth*0.45 && stick.id===null){
-      stick.id=t.identifier; stick.bx=t.clientX; stick.by=t.clientY; stick.dx=0; stick.dy=0;
-      stickBase.style.display='block'; stickBase.style.left=(t.clientX-60)+'px'; stickBase.style.top=(t.clientY-60)+'px';
+    const id=t.identifier;
+    const x=t.clientX, y=t.clientY;
+    const now=performance.now();
+    // left side = joystick
+    if(x < innerWidth*0.48 && stick.id===null){
+      stick.id=id; stick.bx=x; stick.by=y; stick.dx=0; stick.dy=0;
+      stickBase.style.display='block'; stickBase.style.left=(x-60)+'px'; stickBase.style.top=(y-60)+'px';
       stickKnob.style.left='35px'; stickKnob.style.top='35px';
-    } else {
-      // right side = camera or attack
-      if(t.clientX>innerWidth*0.55){
-        // if quick tap, attack
-        const now=performance.now();
-        t._startTime=now; t._startX=t.clientX; t._startY=t.clientY;
-        if(lookId===null){ lookId=t.identifier; lastLX=t.clientX; lastLY=t.clientY; }
+      touchMeta.set(id, {sx:x, sy:y, st:now, moved:false, isRight:false});
+    } else if(x > innerWidth*0.42){ // right side = camera + tap attack
+      if(lookId===null){
+        lookId=id; lastLX=x; lastLY=y;
+        touchMeta.set(id, {sx:x, sy:y, st:now, moved:false, isRight:true});
+      } else {
+        // extra finger on right side = instant attack (multitouch)
+        if(x > innerWidth*0.55){
+          touchMeta.set(id, {sx:x, sy:y, st:now, moved:false, isRight:true, extra:true});
+        }
       }
     }
   }
 }
 function onTM(e){
-  if(state!=='playing') return; e.preventDefault();
+  if(state!=='playing') return;
+  const isBtn = e.target && e.target.closest && e.target.closest('.tBtn, #pauseBtn');
+  if(!isBtn) e.preventDefault();
   for(const t of e.changedTouches){
-    if(t.identifier===stick.id){
-      let dx=t.clientX-stick.bx, dy=t.clientY-stick.by; const m=Math.hypot(dx,dy); if(m>MAX_R){ dx*=MAX_R/m; dy*=MAX_R/m; } stick.dx=dx; stick.dy=dy;
+    const id=t.identifier;
+    const meta=touchMeta.get(id);
+    if(!meta) continue;
+    const x=t.clientX, y=t.clientY;
+    const dxm = x - meta.sx, dym = y - meta.sy;
+    if(Math.hypot(dxm,dym) > 12) meta.moved = true;
+
+    if(id===stick.id){
+      let dx=x-stick.bx, dy=y-stick.by; const m=Math.hypot(dx,dy); if(m>MAX_R){ dx*=MAX_R/m; dy*=MAX_R/m; } stick.dx=dx; stick.dy=dy;
       stickKnob.style.left=(35+dx)+'px'; stickKnob.style.top=(35+dy)+'px';
-    } else if(t.identifier===lookId){
-      const dx=t.clientX-lastLX, dy=t.clientY-lastLY;
-      if(Math.hypot(dx,dy)>2){ t._moved=true; }
-      player.yaw-=(t.clientX-lastLX)*0.005; player.pitch-=(t.clientY-lastLY)*0.005;
-      player.pitch=Math.max(cam3.minPitch, Math.min(cam3.maxPitch, player.pitch));
-      lastLX=t.clientX; lastLY=t.clientY;
+    } else if(id===lookId){
+      const ddx=x-lastLX, ddy=y-lastLY;
+      if(Math.hypot(ddx,ddy) > 1){
+        player.yaw -= ddx*0.0055;
+        player.pitch -= ddy*0.0055;
+        player.pitch=Math.max(cam3.minPitch, Math.min(cam3.maxPitch, player.pitch));
+        lastLX=x; lastLY=y;
+      }
     }
   }
 }
 function onTE(e){
+  // don't preventDefault on end
   for(const t of e.changedTouches){
-    if(t.identifier===stick.id){ stick.id=null; stick.dx=0; stick.dy=0; stickBase.style.display='none'; }
-    else if(t.identifier===lookId){
-      // check if it was a tap (attack)
-      const dt = performance.now() - (t._startTime||0);
-      const moved = t._moved;
-      if(!moved && dt<280){
-        // tap on right side -> attack
-        tryAttack();
+    const id=t.identifier;
+    const meta=touchMeta.get(id);
+    if(id===stick.id){
+      stick.id=null; stick.dx=0; stick.dy=0; stickBase.style.display='none';
+      touchMeta.delete(id);
+    } else if(id===lookId){
+      if(meta){
+        const dt=performance.now()-meta.st;
+        const dist=Math.hypot(t.clientX-meta.sx, t.clientY-meta.sy);
+        // TAP DETECTION: cepat + gak gerak banyak = attack
+        if(!meta.moved && dt<320 && dist<22 && meta.isRight){
+          tryAttack();
+        }
       }
       lookId=null;
+      touchMeta.delete(id);
+      // if there is another right finger waiting, promote it to look
+      for(const [otherId, otherMeta] of touchMeta){
+        if(otherMeta.isRight && !otherMeta.extra){
+          lookId=otherId; lastLX=otherMeta.sx; lastLY=otherMeta.sy;
+          break;
+        }
+      }
+    } else {
+      // extra finger tap on right = attack
+      if(meta && meta.isRight){
+        const dt=performance.now()-meta.st;
+        const dist=Math.hypot(t.clientX-meta.sx, t.clientY-meta.sy);
+        if(dt<400 && dist<30){
+          tryAttack();
+        }
+      }
+      touchMeta.delete(id);
     }
   }
 }
+// attach to window for full coverage, not just renderer
+window.addEventListener('touchstart', onTS, {passive:false});
+window.addEventListener('touchmove', onTM, {passive:false});
+window.addEventListener('touchend', onTE, {passive:true});
+window.addEventListener('touchcancel', onTE, {passive:true});
+// also keep renderer listeners as fallback
 renderer.domElement.addEventListener('touchstart', onTS, {passive:false});
 renderer.domElement.addEventListener('touchmove', onTM, {passive:false});
-renderer.domElement.addEventListener('touchend', onTE);
-renderer.domElement.addEventListener('touchcancel', onTE);
+renderer.domElement.addEventListener('touchend', onTE, {passive:true});
+
 const dashBtn=document.getElementById('dashBtn'), atkBtn=document.getElementById('atkBtn'), jumpBtn=document.getElementById('jumpBtn');
-function dashBtnPress(e){ e.preventDefault(); e.stopPropagation(); if(state==='playing') tryDash(); }
-function atkBtnPress(e){ e.preventDefault(); e.stopPropagation(); if(state==='playing') tryAttack(); }
-function jumpBtnPress(e){ e.preventDefault(); e.stopPropagation(); if(state==='playing') tryJump(); }
-dashBtn.addEventListener('touchstart', dashBtnPress, {passive:false}); dashBtn.addEventListener('mousedown', dashBtnPress);
-atkBtn.addEventListener('touchstart', atkBtnPress, {passive:false}); atkBtn.addEventListener('mousedown', atkBtnPress);
-jumpBtn.addEventListener('touchstart', jumpBtnPress, {passive:false}); jumpBtn.addEventListener('mousedown', jumpBtnPress);
+function dashBtnPress(e){ 
+  e.preventDefault(); e.stopPropagation(); 
+  // haptic feedback if available
+  if(navigator.vibrate) navigator.vibrate(20);
+  if(state==='playing') tryDash(); 
+}
+function atkBtnPress(e){ 
+  e.preventDefault(); e.stopPropagation(); 
+  if(navigator.vibrate) navigator.vibrate(15);
+  if(state==='playing') tryAttack(); 
+}
+function jumpBtnPress(e){ 
+  e.preventDefault(); e.stopPropagation(); 
+  if(navigator.vibrate) navigator.vibrate(15);
+  if(state==='playing') tryJump(); 
+}
+// fix: use both touchstart and click, with capture
+[dashBtn, atkBtn, jumpBtn].forEach(btn=>{
+  if(!btn) return;
+  btn.addEventListener('touchstart', (e)=>{ 
+    if(btn===dashBtn) dashBtnPress(e); 
+    else if(btn===atkBtn) atkBtnPress(e); 
+    else jumpBtnPress(e); 
+  }, {passive:false});
+  btn.addEventListener('touchend', (e)=>{ e.preventDefault(); e.stopPropagation(); }, {passive:false});
+  btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); 
+    if(btn===dashBtn) tryDash(); else if(btn===atkBtn) tryAttack(); else tryJump();
+  });
+});
+document.getElementById('pauseBtn').addEventListener('touchstart', e=>{ e.preventDefault(); e.stopPropagation(); if(state==='playing') pauseGame(); }, {passive:false});
 document.getElementById('pauseBtn').addEventListener('click', e=>{ e.stopPropagation(); if(state==='playing') pauseGame(); });
+
+// FIX START OVERLAY TAP - make it respond to touchstart too
+startOverlay.addEventListener('touchstart', (e)=>{
+  e.preventDefault();
+  if(isTouch && (state==='ready' || state==='paused')) startGame();
+}, {passive:false});
+winOverlay.addEventListener('touchstart', (e)=>{
+  e.preventDefault();
+  resetGame();
+}, {passive:false});
+
+// DEBUG: log touch ready
+console.log('[Touch] Fixed handlers ready, isTouch:', isTouch);
 
 /* ========== AUDIO ========== */
 let audioCtx=null;
