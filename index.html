@@ -570,7 +570,7 @@ document.querySelectorAll('.presetBtn').forEach(btn=>{
     document.getElementById('setBloom').checked = p.bloom;
   });
 });
-document.getElementById('saveSettingBtn').addEventListener('click', ()=>{
+function saveGfxAndReload(){
   const custom = {
     shadows: document.getElementById('setShadows').checked,
     grassEnabled: document.getElementById('setGrass').checked,
@@ -583,18 +583,38 @@ document.getElementById('saveSettingBtn').addEventListener('click', ()=>{
   };
   const toSave = { preset: selectedPreset, custom };
   localStorage.setItem('aether_gfx_v2', JSON.stringify(toSave));
-  // also save old key for compatibility
   localStorage.setItem('aether_gfx', JSON.stringify(toSave));
+  console.log('[GFX] Saving', toSave);
   location.reload();
+}
+document.getElementById('saveSettingBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); saveGfxAndReload(); });
+document.getElementById('saveSettingBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); saveGfxAndReload(); }, {passive:false});
+document.getElementById('closeSettingBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); closeSettings(); });
+document.getElementById('closeSettingBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); closeSettings(); }, {passive:false});
+document.getElementById('openSettingBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openSettings(); });
+document.getElementById('openSettingBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); openSettings(); }, {passive:false});
+document.getElementById('startBtn').addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); console.log('[UI] Start clicked, isTouch:', isTouch); if(!isTouch){ requestLock(); } else { startGame(); } });
+document.getElementById('startBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); e.stopPropagation(); console.log('[UI] Start touchstart'); startGame(); }, {passive:false});
+
+// Fallback: click anywhere on start overlay (outside buttons) = start
+startOverlay.addEventListener('click', (e)=>{
+  if(e.target.closest && e.target.closest('.mainBtn')) return;
+  console.log('[UI] Overlay click -> start');
+  if(state==='ready' || state==='paused'){
+    if(!isTouch) requestLock(); else startGame();
+  }
 });
-document.getElementById('closeSettingBtn').addEventListener('click', closeSettings);
-document.getElementById('openSettingBtn').addEventListener('click', openSettings);
-document.getElementById('startBtn').addEventListener('click', ()=>{
-  if(!isTouch) requestLock(); else startGame();
-});
-document.getElementById('startBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); startGame(); }, {passive:false});
-document.getElementById('openSettingBtn').addEventListener('touchstart', (e)=>{ e.preventDefault(); openSettings(); }, {passive:false});
+startOverlay.addEventListener('touchstart', (e)=>{
+  if(e.target.closest && e.target.closest('.mainBtn')) return;
+  e.preventDefault();
+  console.log('[UI] Overlay touchstart -> start');
+  if(state==='ready' || state==='paused') startGame();
+}, {passive:false});
+
 settingOverlay.addEventListener('click', (e)=>{ if(e.target===settingOverlay) closeSettings(); });
+
+// Debug UI ready
+console.log('[UI] Buttons wired: startBtn, openSettingBtn, save, close');
 
 /* ========== GAME STATE & POINTER LOCK ========== */
 function requestLock(){ try{ const p=renderer.domElement.requestPointerLock(); if(p&&typeof p.catch==='function') p.catch(()=>setTimeout(requestLock,450)); }catch(e){ setTimeout(requestLock,450); } }
