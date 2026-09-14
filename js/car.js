@@ -44,7 +44,12 @@ export const CAR_CFG = {
   maxSteer: 0.60, steerRate: 6.5, steerReturn: 9.5,
   gripRecover: 3.6, handbrakeGrip: 1.15, slipGenHandbrake: 0.95, slipGenPower: 0.30,
   /* --- nitro --- */
-  nitroMax: 100, nitroDrain: 34, nitroRegen: 9, nitroBoost: 1.55,
+  /* nitroThrottle: throttle minimum yang disuplai NOS sendiri. Tanpa ini
+     pemain WAJIB menahan gas + NOS bersamaan, yang mustahil dilakukan
+     satu jempol di ponsel (tombol NOS ada di atas tombol gas).
+     nitroRegen dinaikkan 9 -> 15 supaya NOS tidak terasa "sekali pakai". */
+  nitroMax: 100, nitroDrain: 34, nitroRegen: 15, nitroBoost: 1.55,
+  nitroThrottle: 0.55,
   modelNoseFlip: false,   // set true kalau GLB eksternal malah menghadap belakang
   /* --- rem --- */
   brakeForce: 15000, handbrakeForce: 9000,
@@ -66,6 +71,7 @@ function outlineMat(color, thickness){
 
 /* scratch vectors — dipakai ulang supaya tidak ada alokasi per frame */
 const _fwd=new THREE.Vector3(), _des=new THREE.Vector3(), _look=new THREE.Vector3();
+const _right=new THREE.Vector3();   // tegak lurus arah jalan (untuk sway kamera sinematik)
 const _AXX=new THREE.Vector3(1,0,0), _AXY=new THREE.Vector3(0,1,0);
 const _qSpin=new THREE.Quaternion(), _qSteer=new THREE.Quaternion();
 
@@ -443,6 +449,10 @@ export class Car {
     this.rpm=CAR_CFG.idleRpm; this.gear=1; this.shiftTimer=0; this.limiter=false;
     this.throttle=0; this.brake=0; this.handbrake=false; this.steerInput=0;
     this.nitro=CAR_CFG.nitroMax; this.nitroActive=false;
+    this.nitroDenied=false;   // true saat NOS ditekan tapi tangki kosong
+    this._nitroPrev=false;
+    this.cameraMode='near';   // 'near' | 'far' | 'cine' — diubah tombol kamera
+    this._camT=0;
     this.engineOn=false; this.occupied=false; this.spawned=false;
     this.wheelAngle=0; this.tractionSlip=0; this.suspension=0; this.cameraShake=0;
     this.kmh=0; this.slope=0;
@@ -813,14 +823,39 @@ export class Car {
     const thr = clamp(input.throttle||0,0,1);
     const brk = clamp(input.brake||0,0,1);
     const hbr = !!input.handbrake;
-    const nit = !!input.nitro && this.nitro>1 && thr>0.05;
     const steerIn = clamp(input.steer||0,-1,1);
-    const throttle = occupied?thr:0;
-    const brake    = occupied?brk:0;
+
+    /* ---------- NITRO ----------
+       BUG LAMA: `nit = input.nitro && nitro>1 && thr>0.05`.
+       Di ponsel tombol NOS (#nosBtn) ada DI ATAS tombol gas, jadi satu
+       jempol tidak mungkin menekan keduanya -> NOS tidak pernah aktif
+       dan terasa "mati total". Syarat throttle dihapus: NOS sekarang
+       menyuplai throttle minimum sendiri (seperti boost di game balap
+       mobile), dan tetap jalan walau tombol gas tidak ditekan.
+
+       Selain itu ada UMPAN BALIK saat tangki kosong (`nitroDenied`),
+       supaya pemain tahu NOS-nya kehabisan, bukan menduga tombolnya
+       rusak. */
+    const wantNitro = !!input.nitro && occupied;
+    const hasNitro  = this.nitro > 1;
+    const nit = wantNitro && hasNitro;
+    if(wantNitro && !hasNitro && !this.nitroDenied) this.nitroDenied = true;
+    if(!wantNitro) this.nitroDenied = false;
+
+    const throttle = occupied ? (nit ? Math.max(thr, C.nitroThrottle) : thr) : 0;
+    const brake    = occupied ? brk : 0;
     this.throttle=throttle; this.brake=brake; this.handbrake=hbr&&occupied; this.steerInput=steerIn;
 
-    /* ---------- nitro ---------- */
+    /* state nitro + audio hanya dikabari saat BERUBAH (bukan tiap frame) */
     this.nitroActive=nit;
+    if(nit !== this._nitroPrev){
+      this._nitroPrev = nit;
+      if(this.audio && this.audio.ok){
+        this.audio.setNitro(nit, nit ? 1 : 0);
+        /* letupan saat NOS habis di tengah boost: efek "meletup" */
+        if(!nit && wantNitro && !hasNitro) this.audio.exhaustPop(1.1);
+      }
+    }
     if(nit) this.nitro=Math.max(0,this.nitro-C.nitroDrain*dt);
     else    this.nitro=Math.min(C.nitroMax,this.nitro+C.nitroRegen*dt);
 
@@ -1064,10 +1099,26 @@ export class Car {
         this.dust.spawn(exX,this.pos.y+0.30,exZ,(Math.random()-0.5)*1.5,0.6+Math.random(),(Math.random()-0.5)*1.5,0.55);
       }
     }
-    /* backfire pas limiter / lepas throttle di RPM tinggi */
-    if(this.audio && (this.limiter || (rpm>6200 && throttle<0.05 && Math.random()<0.06))){
-      if(Math.random()<0.14) this.audio.backfire();
+    /* ---------- LETUPAN KNALPOT (decel pops) ala Forza Horizon ----------
+       Pemicunya ada dua, keduanya butuh "habis ngebut":
+       1. Lepas gas saat RPM masih tinggi -> sisa bahan bakar meledak di
+          knalpot. Peluang naik seiring RPM supaya terasa makin ramai.
+       2. Pas limiter.
+       `exhaustPop()` punya throttle internal 55ms, jadi meski peluangnya
+       besar suaranya tetap beruntun rapi, bukan "kresek". */
+    if(this.audio && this.audio.ok){
+      const spd01 = clamp(Math.abs(this.speed)/C.maxSpeed, 0, 1);
+      const lift  = this._thrPrev !== undefined && this._thrPrev > 0.45 && throttle < 0.06;
+      if(this.limiter){
+        if(Math.random() < 0.20) this.audio.backfire();
+      } else if(rpm > 5400 && throttle < 0.06){
+        /* baru lepas gas = letupan pertama lebih keras & pasti terdengar */
+        if(lift && spd01 > 0.30) this.audio.exhaustPop(1.2);
+        else if(Math.random() < 0.10 + spd01*0.16) this.audio.exhaustPop(0.7 + spd01*0.5);
+      }
+      /* letupan penutup tepat saat NOS habis (ditangani di blok nitro) */
     }
+    this._thrPrev = throttle;
 
     this.kmh=Math.abs(this.speed)*3.6;
     this.cameraShake=Math.max(0,this.cameraShake-dt*2.2);
@@ -1081,14 +1132,34 @@ export class Car {
     this.audio.setEngine(this.rpm,this.throttle,on?load:0,on);
   }
 
-  /* ---------- chase camera ---------- */
-  updateCamera(camera, dt, blend){
+  /* ---------- chase camera ----------
+     Tiga mode (tombol kamera di HUD mobil):
+       near  — chase rendah & dekat, paling responsif, paling "di dalam mobil"
+       far   — mundur & tinggi, lihat tikungan lebih awal, paling aman
+       cine  — kamera sinematik: melayang pelan, geser samping, FOV sempit
+     Angka jarak/tinggi/FOV dibuat tabel supaya mudah di-tweak dan bisa
+     diuji headless (lihat tests/carcam.test.mjs). */
+  static get CAMERA_MODES(){
+    return {
+      /* dist, height, lookAhead, fov, damp, sway (geser samping), breathe */
+      near: { dist: 5.9,  distSpd: 1.1, height: 2.00, look: 3.2, lookSpd: 2.2, fov: 76, fovSpd: 11, damp: 7.0, sway: 0.00, breathe: 0.00 },
+      far:  { dist: 10.6, distSpd: 3.2, height: 3.95, look: 5.6, lookSpd: 5.0, fov: 68, fovSpd: 13, damp: 4.2, sway: 0.00, breathe: 0.00 },
+      cine: { dist: 9.2,  distSpd: 2.0, height: 1.65, look: 6.0, lookSpd: 3.4, fov: 56, fovSpd:  8, damp: 2.3, sway: 3.10, breathe: 1.50 },
+    };
+  }
+  updateCamera(camera, dt, blend, mode){
     const C=this.cfg;
+    const M = Car.CAMERA_MODES[mode || this.cameraMode] || Car.CAMERA_MODES.near;
     const fwd=_fwd.set(Math.sin(this.yaw),0,Math.cos(this.yaw));
     const spd01=clamp(Math.abs(this.speed)/C.maxSpeed,0,1);
-    const dist = 7.4 + spd01*2.2;
-    const height = 2.55 + spd01*0.35;
+    this._camT += dt;
+
+    const dist = M.dist + spd01*M.distSpd
+               + (M.breathe ? Math.sin(this._camT*0.31)*M.breathe : 0);
+    const height = M.height + spd01*0.35;
     const desired=_des.copy(this.pos).addScaledVector(fwd,-dist);
+    /* geser samping ala kamera film: tegak lurus arah jalan */
+    if(M.sway) desired.addScaledVector(_right.set(fwd.z,0,-fwd.x), Math.sin(this._camT*0.23)*M.sway);
     desired.y += height;
     /* jangan sampai kamera masuk tanah / pohon */
     const minY=this.terrainH(desired.x,desired.z)+0.85;
@@ -1097,9 +1168,10 @@ export class Car {
       const dx=desired.x-c.x, dz=desired.z-c.z;
       if(dx*dx+dz*dz < (c.r+1.0)*(c.r+1.0)) desired.y=Math.max(desired.y, this.terrainH(desired.x,desired.z)+c.r*1.5);
     }
-    const k=1-Math.pow(0.001,dt*(blend<1?7:5.5));
+    /* damping: mode cine sengaja lambat & melayang, mode near gesit */
+    const k=1-Math.pow(0.001,dt*(blend<1?M.damp*1.25:M.damp));
     camera.position.lerp(desired,k);
-    const look=_look.copy(this.pos).addScaledVector(fwd,4.2+spd01*4.0);
+    const look=_look.copy(this.pos).addScaledVector(fwd,M.look+spd01*M.lookSpd);
     look.y += 0.95;
     /* shake */
     if(this.cameraShake>0.001){
@@ -1107,7 +1179,9 @@ export class Car {
       look.x+=(Math.random()-0.5)*s; look.y+=(Math.random()-0.5)*s; look.z+=(Math.random()-0.5)*s;
     }
     camera.lookAt(look);
-    const wantFov = 70 + spd01*16 + (this.nitroActive?6:0);
+    /* FOV: NOS menambah sedikit di semua mode, tapi plafon dijaga per mode
+       supaya mode cine tidak tiba-tiba terasa seperti kamera aksi. */
+    const wantFov = M.fov + spd01*M.fovSpd + (this.nitroActive ? (M.fov>70?6:3) : 0);
     if(Math.abs(camera.fov-wantFov)>0.05){ camera.fov=damp(camera.fov,wantFov,6,dt); camera.updateProjectionMatrix(); }
   }
 

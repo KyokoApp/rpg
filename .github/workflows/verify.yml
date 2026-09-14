@@ -25,6 +25,13 @@ jobs:
       - name: Module graph (import & importmap & getElementById)
         run: node tools/check-imports.mjs
 
+      # check-imports hanya memastikan FILE-nya ada. Kalau sebuah modul ada
+      # tapi tidak mengekspor nama yang diminta, browser gagal saat linking
+      # dan halaman blank total — persis kelas bug yang sama, tapi lewat
+      # pintu yang berbeda. Jadi keduanya dijalankan.
+      - name: Binding impor (nama impor benar-benar diekspor)
+        run: node tools/check-exports.mjs
+
       - name: Syntax semua file JS + script module index.html
         run: |
           set -e
@@ -48,6 +55,15 @@ jobs:
 
       - name: Tes fisika mobil (11 skenario headless)
         run: node tests/car.physics.mjs
+
+      # Regresi NOS (harus aktif tanpa tombol gas) + 3 mode kamera mobil.
+      - name: Tes fitur mobil (NOS & kamera)
+        run: node tests/car.features.mjs
+
+      # Lapisan tombol dari bug NOS yang sama: pointer capture, tanpa
+      # pointerleave, tata letak yang bisa digeser, mode susun, tema.
+      - name: Tes HUD mobil (tombol sentuh, DOM headless)
+        run: node --test tests/carhud.test.mjs
 
       - name: Tes graph audio (aturan parameter WebAudio)
         run: node tests/audio.graph.mjs

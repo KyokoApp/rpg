@@ -17,7 +17,7 @@
    ============================================================ */
 'use strict';
 
-const VERSION = 'v1';                    // <- TINGKATKAN SAAT ASET BERUBAH
+const VERSION = 'v2';                    // <- TINGKATKAN SAAT ASET BERUBAH
 const CACHE = 'orb-hunt-' + VERSION;
 const NAV_TIMEOUT_MS = 8000;
 
@@ -38,6 +38,14 @@ const PRECACHE = [
   './game/car-hud.mjs',
   './game/locomotion.mjs',
   './game/world-data.mjs',
+  /* modul v2: kualitas grafis, post-processing, tekstur, loading,
+     dan panel pengaturan. Wajib terdaftar — tanpa ini versi offline
+     akan memuat index.html baru dengan modul yang tidak ter-cache. */
+  './game/quality.mjs',
+  './game/settings-ui.mjs',
+  './game/postfx.mjs',
+  './game/loader.mjs',
+  './game/textures.mjs',
   './game/world-stream.mjs',
   './js/audio.js',
   './js/car.js',

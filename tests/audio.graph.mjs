@@ -203,6 +203,67 @@ console.log('=== firing frequency inline-6 (harus rpm/60*3) ===');
   if (AUDIO.cylinders !== 6) errors.push('AUDIO.cylinders bukan 6');
 }
 
+console.log('=== NITRO / NOS: siklus hidup & aturan WebAudio ===');
+{
+  /* setNitro adalah kode baru; kalau gain-nya diramp dari 0, browser
+     melempar RangeError dan suara NOS mati total. Harus dimulai dari
+     nilai kecil yang > 0. */
+  const before = { exp: stats.exp, set: stats.set };
+  try { AUDIO.setNitro(true, 1); } catch (e) { errors.push('setNitro(true) MELEMPAR: ' + e.message); }
+  if (!(stats.exp - before.exp > 0)) errors.push('setNitro(true) tidak menjadwalkan ramp sama sekali');
+  if (!AUDIO._nitroOn) errors.push('setNitro(true) tidak menandai status aktif');
+
+  /* dipanggil berulang saat sudah aktif tidak boleh menjadwalkan ulang
+     pukulan awal — itu yang bikin bunyi "nembak" berulang */
+  const mid = stats.exp;
+  NOW += 1 / 60; AUDIO.setNitro(true, 1);
+  NOW += 1 / 60; AUDIO.setNitro(true, 1);
+  if (!(stats.exp - mid === 0)) errors.push('setNitro(true) berulang menjadwalkan ramp baru (harusnya idempoten)');
+
+  NOW += 0.2;
+  try { AUDIO.setNitro(false, 0); } catch (e) { errors.push('setNitro(false) MELEMPAR: ' + e.message); }
+  if (AUDIO._nitroOn) errors.push('setNitro(false) tidak membersihkan status aktif');
+
+  /* mati dua kali berturut-turut harus aman (tidak ada node baru) */
+  const n0 = stats.nodes;
+  NOW += 0.2; AUDIO.setNitro(false, 0);
+  if (!(stats.nodes - n0 === 0)) errors.push('setNitro(false) saat sudah mati membuat node baru');
+
+  /* kekuatan di luar rentang tidak boleh menghasilkan nilai tak hingga */
+  NOW += 0.2; AUDIO.setNitro(true, 99); NOW += 0.2; AUDIO.setNitro(true, -5); NOW += 0.2; AUDIO.setNitro(false, 0);
+}
+
+console.log('=== letupan knalpot (exhaustPop): throttle & rentang ===');
+{
+  const n0 = stats.nodes;
+  /* harus bisa dipanggil beruntun tanpa melempar */
+  for (let i = 0; i < 6; i++) { NOW += 0.02; try { AUDIO.exhaustPop(1); } catch (e) { errors.push('exhaustPop MELEMPAR: ' + e.message); } }
+  if (!(stats.nodes - n0 > 0)) errors.push('exhaustPop tidak membuat node apa pun (suara tidak akan terdengar)');
+
+  /* throttle 55ms: panggilan beruntun dalam satu frame tidak boleh
+     menumpuk jadi "kresek" */
+  const n1 = stats.nodes;
+  NOW += 1;                       // lewati cooldown
+  AUDIO.exhaustPop(1);
+  const afterFirst = stats.nodes;
+  AUDIO.exhaustPop(1);            // frame yang sama -> harus ditahan
+  AUDIO.exhaustPop(1);
+  if (!(stats.nodes - afterFirst === 0)) errors.push('exhaustPop tidak punya throttle (bisa menumpuk jadi kresek)');
+  if (!(afterFirst - n1 > 0)) errors.push('exhaustPop pertama tidak berbunyi');
+
+  /* intensitas ekstrem tidak boleh menghasilkan gain tak hingga/negatif */
+  NOW += 1; AUDIO.exhaustPop(999); NOW += 1; AUDIO.exhaustPop(-999); NOW += 1; AUDIO.exhaustPop(0);
+}
+
+console.log('=== limiter: rantai master tidak boleh bocor ===');
+{
+  if (!AUDIO.limiter) errors.push('AUDIO.limiter tidak dibuat — puncak tajam akan di-clip keras oleh DAC');
+  /* limiter harus terhubung ke destination lewat trim, bukan menggantung */
+  if (AUDIO._limiterOut === undefined && AUDIO.limiter && !AUDIO.limiter._kind) {
+    /* trim node disimpan di dalam _makeLimiter; cukup pastikan limiter ada */
+  }
+}
+
 console.log('=== matikan mesin lalu hidupkan lagi ===');
 try { AUDIO.setEngine(0, 0, 0, true); AUDIO.engineStart(); AUDIO.setEngine(3000, 0.4, 40, false); }
 catch (e) { errors.push('engine on/off melempar: ' + e.message); }

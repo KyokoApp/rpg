@@ -1,14 +1,9 @@
 import {WAYPOINTS,terrainColor,roadX,roadZ} from './world-data.mjs';
-export const DEFAULT_SETTINGS={sensitivity:1,cameraDistance:5,quality:'balanced',shadows:true,sound:true};
-export function readSettings(storage){
-  try{
-    const s=JSON.parse(storage.getItem('orb-hunt.settings')||'{}');
-    return {sensitivity:Number.isFinite(s.sensitivity)?Math.max(.4,Math.min(2,s.sensitivity)):1,
-      cameraDistance:Number.isFinite(s.cameraDistance)?Math.max(3,Math.min(8,s.cameraDistance)):5,
-      quality:['low','balanced','high'].includes(s.quality)?s.quality:'balanced',
-      shadows:typeof s.shadows==='boolean'?s.shadows:true,sound:typeof s.sound==='boolean'?s.sound:true};
-  }catch{return {...DEFAULT_SETTINGS};}
-}
+/* Setting kualitas sekarang punya satu sumber kebenaran di game/quality.mjs
+   (preset, FPS cap, opsi grafis bertingkat). Di-re-export di sini supaya
+   pemanggil lama — termasuk tests/motion.test.cjs yang mengimpor
+   readSettings/DEFAULT_SETTINGS dari modul ini — tetap jalan. */
+export {DEFAULT_SETTINGS, readSettings, saveSettings, cloneSettings} from './quality.mjs';
 export function initHUD({terrainH,waterY,worldSize,settings,onSettings,onPause,onResume,onTravel,getState}){
   const $=id=>document.getElementById(id);
   let activePanel=null,lastFocus=null,lastDraw=0;
@@ -74,9 +69,14 @@ export function initHUD({terrainH,waterY,worldSize,settings,onSettings,onPause,o
       else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
     }
   },true);
-  const controls={sensitivity:'sensitivityInput',cameraDistance:'distanceInput',quality:'qualityInput',shadows:'shadowsInput',sound:'soundInput'};
+  /* Kontrol grafis (kualitas, FPS, opsi custom) dipindah ke
+     game/settings-ui.mjs. Yang tersisa di sini hanya slider/checkbox
+     klasik. `if(!input)` penting: elemen yang tidak ada tidak boleh
+     membuat seluruh panel gagal terpasang. */
+  const controls={sensitivity:'sensitivityInput',cameraDistance:'distanceInput',sound:'soundInput'};
   for(const [key,id] of Object.entries(controls)){
-    const input=$(id);if(input.type==='checkbox')input.checked=settings[key];else input.value=settings[key];
+    const input=$(id);if(!input)continue;
+    if(input.type==='checkbox')input.checked=settings[key];else input.value=settings[key];
     input.addEventListener('input',()=>{
       settings[key]=input.type==='checkbox'?input.checked:input.type==='range'?Number(input.value):input.value;
       try{localStorage.setItem('orb-hunt.settings',JSON.stringify(settings));}catch{}
@@ -112,5 +112,8 @@ export function initHUD({terrainH,waterY,worldSize,settings,onSettings,onPause,o
     c.save();c.translate(x,z);c.rotate(-s.facing+Math.PI);c.fillStyle='#b1f0e9';c.strokeStyle='#3b7476';c.lineWidth=1.5;c.beginPath();c.moveTo(0,-10);c.lineTo(7,8);c.lineTo(0,4);c.lineTo(-7,8);c.closePath();c.fill();c.stroke();c.restore();
   }
   function draw(force=false){const now=performance.now();if(!force&&now-lastDraw<140)return;lastDraw=now;const s=getState();paint($('minimap'),false,s);if(activePanel?.id==='mapPanel')paint($('worldMap'),true,s);$('hpValue').textContent=`${s.hp} / ${s.maxHP}`;$('hpFill').style.width=(s.hp/s.maxHP*100)+'%';if(s.region)$('regionLabel').textContent=s.region.name;if(s.stream)$('streamStatus').textContent=s.stream.pending?'Memuat cakrawala…':'Open world · '+s.stream.loaded+' chunks';}
-  return {update:draw,isOpen:()=>!!activePanel};
+  /* close() diekspos karena mode "Susun tombol" harus menutup panel dulu:
+     panel (z-index 20) menutupi tombol mobil (z-index 6), jadi selama
+     panel terbuka tombolnya tidak bisa diseret sama sekali. */
+  return {update:draw,isOpen:()=>!!activePanel,close};
 }

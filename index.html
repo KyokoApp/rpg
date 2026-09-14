@@ -17,6 +17,25 @@
 <link rel="stylesheet" href="./game/car.css">
 </head>
 <body>
+<!-- ============================================================
+     LAYAR LOADING — markup statis (bukan dibuat JS) supaya sudah
+     terlukis SEBELUM module deferred dijalankan. Kalau dibuat oleh
+     script, pemain malah melihat layar hitam dulu.
+============================================================ -->
+<div id="loadScreen" role="status" aria-live="polite">
+  <div id="loadBg"></div>
+  <div id="loadInner">
+    <div id="loadTitle">ORB HUNT</div>
+    <div id="loadSub">Aurelia &middot; The Seven Realms</div>
+    <div id="loadBarWrap"><div id="loadBar"></div></div>
+    <div id="loadMeta"><span id="loadStep">Menyiapkan&hellip;</span><span id="loadPct">0%</span></div>
+    <div id="loadTip"></div>
+    <div id="loadErr"></div>
+  </div>
+  <div id="loadSpin"></div>
+</div>
+<div id="fpsMeter" aria-hidden="true">&ndash; fps</div>
+
 <div id="app"></div>
 <div id="attackFlash"></div>
 
@@ -58,10 +77,12 @@
   <header class="panel-header"><h2 id="settingsTitle">Pengaturan</h2><button class="close-panel" data-close-panel aria-label="Tutup pengaturan"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m8 8 16 16M24 8 8 24"/></svg></button></header>
   <label class="setting">Sensitivitas kamera <output id="sensitivityValue">1.0×</output><input id="sensitivityInput" type="range" min="0.4" max="2" step="0.1"></label>
   <label class="setting">Jarak kamera <output id="distanceValue">5.0 m</output><input id="distanceInput" type="range" min="3" max="8" step="0.1"></label>
-  <label class="setting">Resolusi render<select id="qualityInput"><option value="low">Ringan</option><option value="balanced">Seimbang</option><option value="high">Tinggi</option></select></label>
-  <label class="setting">Bayangan<input id="shadowsInput" type="checkbox"></label>
   <label class="setting">Suara orb<input id="soundInput" type="checkbox"></label>
-  <p class="panel-note">Perubahan langsung diterapkan dan disimpan di perangkat ini. Tap singkat area kanan untuk menyerang; geser untuk kamera.</p>
+  <!-- Kontrol grafis (preset / FPS / opsi custom) dibangun runtime oleh
+       game/settings-ui.mjs dari data di game/quality.mjs. Sengaja tidak
+       ditulis manual supaya tidak ada dua sumber kebenaran. -->
+  <div id="settingsHost"></div>
+  <p class="panel-note">Perubahan langsung diterapkan dan disimpan di perangkat ini. Kalau frame rate terasa berat, pilih preset <b>Rendah</b> atau turunkan <b>Skala render</b>.</p>
   <button class="panel-button" data-close-panel>Kembali ke permainan</button>
 </section></div>
 <div id="mapPanel" class="panel-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="mapTitle"><section class="panel map-panel">
@@ -118,13 +139,69 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {samplePose, damp, joystickAxis} from './game/locomotion.mjs';
 import {readSettings, initHUD} from './game/hud.mjs';
+import {resolveGfx, frameInterval, cloneSettings, createAdaptiveResolution} from './game/quality.mjs';
+import {initSettingsUI} from './game/settings-ui.mjs';
+import {createLoader, nextFrame} from './game/loader.mjs';
+import {PostFX} from './game/postfx.mjs';
+import {makeTextureSet} from './game/textures.mjs';
 import {WORLD_SIZE,WORLD_LIMIT,WATER_LEVEL,WAYPOINTS,regionAt,terrainH,roadInfo,roadX,roadZ,TERRAIN_GLSL} from './game/world-data.mjs';
 import {WorldStream} from './game/world-stream.mjs';
 import {AUDIO} from './js/audio.js';
 import {Car,CAR_CFG} from './js/car.js';
 import {initCarHUD} from './game/car-hud.mjs';
-let settings;
-try { settings=readSettings(localStorage); } catch { settings=readSettings(null); }
+/* `settings` SENGAJA const. game/hud.mjs menangkap referensi objek ini
+   di closure-nya (slider sensitivitas/jarak/suara menulis settings[key]).
+   Kalau variabel ini di-rebind ke objek baru, hud.mjs tetap memegang
+   objek lama dan perubahan dari slider hilang diam-diam. Karena const,
+   upaya rebind jadi error langsung, bukan bug senyap. */
+const settings = (() => {
+  try { return readSettings(localStorage); } catch { return readSettings(null); }
+})();
+/* Naik-turun resolusi otomatis (hanya kalau preset mengizinkannya). */
+const adaptive = createAdaptiveResolution({ min:0.6, max:1, start:1 });
+
+/* ============================================================
+   LAYAR LOADING — tahap dengan BOBOT.
+   Bobotnya mengikuti biaya nyata: model GLB (car.glb 7.2 MB +
+   character.glb 1.4 MB) paling berat, jadi dapat porsi terbesar.
+   Angka dikunci 99% sampai SEMUA tahap selesai, jadi pemain tidak
+   pernah melihat 100% palsu lalu game belum siap.
+============================================================ */
+const LOADER = createLoader({
+  stages: [
+    { k:'engine',   w:12, label:'Menyiapkan mesin grafis' },
+    { k:'world',    w:20, label:'Membangun dunia & medan' },
+    { k:'textures', w:10, label:'Membuat tekstur' },
+    { k:'models',   w:44, label:'Memuat model 3D' },
+    { k:'compile',  w:14, label:'Mengompilasi shader' },
+  ],
+  onDone: () => { console.log('[BOOT] loading 100% — game ditampilkan'); },
+}).start();
+LOADER.stage('engine','Menyiapkan mesin grafis');
+
+/* Gerbang kesiapan: game baru ditampilkan setelah karakter, mobil,
+   dan kompilasi shader semuanya selesai. */
+let _charReady=false, _carReady=false, _bootDone=false;
+async function bootReady(){
+  if(_bootDone) return;
+  _bootDone=true;
+  LOADER.stage('compile','Mengompilasi shader');
+  await nextFrame();
+  /* renderer.compile() memaksa semua program shader dibangun SEKARANG.
+     Tanpa ini, frame pertama tersendat keras (stutter) saat shader
+     dikompilasi satu-satu di tengah permainan. */
+  try { renderer.compile(scene, camera); } catch (err) { console.warn('[BOOT] compile:', err && err.message); }
+  await nextFrame();
+  LOADER.progress(1);
+  LOADER.done();
+}
+function _checkReady(){ if(_charReady && _carReady) bootReady(); }
+/* Jaring pengaman: kalau sebuah aset gagal total, game tetap harus
+   bisa dimainkan — jangan biarkan pemain menunggu selamanya. */
+setTimeout(()=>{ _charReady=true; _carReady=true; _checkReady(); }, 25000);
+let frameBudget = frameInterval(settings.fps);
+let settingsUI = null;
+const fpsMeter = (typeof document!=='undefined') ? document.getElementById('fpsMeter') : null;
 
 console.log('[BOOT] Orb Hunt — Aurelia — The Seven Realms');
 
@@ -141,8 +218,19 @@ if (isTouch){
 // ===== RENDERER - VERSI LAWAS =====
 const renderer = new THREE.WebGLRenderer({ antialias:!isTouch, powerPreference:'high-performance' });
 renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.5 : 2));
-renderer.shadowMap.enabled = true;
+/* Kualitas awal dihitung SEBELUM renderer dipakai supaya frame pertama
+   langsung benar (tidak ada kedipan resolusi tinggi lalu turun). */
+let GFX = resolveGfx(settings, isTouch);
+const DPR_BASE = isTouch ? 1.5 : 2;
+function currentPixelRatio(){
+  const dpr = (typeof devicePixelRatio === 'number' && devicePixelRatio) || 1;
+  /* renderScale mengalikan plafon perangkat; adaptiveResolution bisa
+     menurunkannya lagi saat frame rate jeblok */
+  const auto = GFX.adaptive ? adaptive.scale : 1;
+  return Math.max(0.5, Math.min(DPR_BASE, dpr) * (GFX.renderScale || 1) * auto);
+}
+renderer.setPixelRatio(currentPixelRatio());
+renderer.shadowMap.enabled = GFX.shadowsEnabled;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.95;
@@ -210,7 +298,25 @@ scene.add(new THREE.AmbientLight(0xffd9ae, 0.20));
 
 const WATER_Y=WATER_LEVEL;
 const T_SIZE=WORLD_SIZE;
-const world=new WorldStream(scene,{mobile:isTouch});
+LOADER.stage('textures','Membuat tekstur');
+/* Tekstur prosedural dibuat DULU, lalu diserahkan ke WorldStream.
+   Ukurannya ikut setting kualitas (128/256/512) — jadi preset Rendah
+   benar-benar memakai lebih sedikit VRAM, bukan cuma lebih sedikit objek.
+   Total biaya ~15 ms, jauh lebih murah daripada mengunduh PNG. */
+const TEX=makeTextureSet({size:GFX.textureSize,anisotropy:GFX.anisotropy});
+await nextFrame();
+
+LOADER.stage('world','Membangun dunia & medan');
+const world=new WorldStream(scene,{
+  mobile:isTouch,
+  textures:TEX,
+  detail:GFX.detail,
+  roadProps:GFX.roadProps,
+  roadPropSpacing:GFX.roadPropSpacing,
+  propsNear:GFX.propsNear,
+  propsFar:GFX.propsFar,
+  segmentsNear:GFX.terrainSegmentsNear,
+});
 world.update(0,6,true);
 const COLLIDERS=world.colliders;
 
@@ -220,11 +326,21 @@ const COLLIDERS=world.colliders;
    (terrain, collider, batas dunia, air, audio) disuntikkan.
 ============================================================ */
 const car=new Car(scene,{terrainH,colliders:COLLIDERS,limit:WORLD_LIMIT,waterY:WATER_Y,audio:AUDIO});
-car.loadModel('./car.glb');          // kalau car.glb ada -> otomatis ganti model procedural
+/* car.glb (7.2 MB) adalah bagian terbesar dari 100%. Janjinya dipakai
+   untuk menandai tahap model selesai — kalau tidak, bar bisa mencapai
+   100% sebelum mobil benar-benar siap. */
+car.loadModel('./car.glb').then((ok)=>{
+  if(!ok) LOADER.note('car.glb tidak dipakai — model prosedural');
+  LOADER.progress(1);
+  _carReady=true; _checkReady();
+});
 /* pegangan devtools: tuning aset mobil tanpa edit kode (mis. CAR_CFG.modelNoseFlip=true) */
 window.car=car; window.CAR_CFG=CAR_CFG; window.AUDIO=AUDIO;
 let mode='foot';                     // 'foot' | 'car'
 const carHUD=initCarHUD({cfg:CAR_CFG,isTouch,
+  onCameraMode:(m)=>{ settings.carCamera=m;
+    try{ localStorage.setItem('orb-hunt.settings',JSON.stringify(settings)); }catch{}
+    if(settingsUI) settingsUI.refresh(); },
   onExit:()=>{AUDIO.uiClick();exitCar();},
   onCarButton:()=>{AUDIO.uiClick(); if(mode==='foot'){ if(car.spawned&&car.canEnter(player.pos)) enterCar(); else summonCar(); }}});
 const ctl=carHUD.ctl;                // state tombol layar mobil
@@ -258,11 +374,17 @@ const grass=new THREE.Mesh(grassGeo,grassMat); grass.frustumCulled=false; scene.
 
 const waterMat=new THREE.ShaderMaterial({
   transparent:true,
-  uniforms:{ time:uTime, sunDir:{value:SUN_DIR}, deep:{value:new THREE.Color(0x1a4a63)}, shallow:{value:new THREE.Color(0x3f93a0)}, sky:{value:new THREE.Color(0xf0c088)}, fogColor:{value:new THREE.Color(FOG_COLOR)}, fogNear:{value:80}, fogFar:{value:380} },
-  vertexShader:`uniform float time; varying vec3 vWorld; varying vec3 vNormal; varying float vDist; void main(){ vec3 p=position; float w1=sin(p.x*0.35+time*1.4)*0.05; float w2=sin(p.y*0.28-time*1.1)*0.05; float w3=sin((p.x+p.y)*0.5+time*2.1)*0.02; p.z+=w1+w2+w3; vNormal=normalize(vec3(-(cos(p.x*0.35+time*1.4)*0.35*0.05+w3*0.5),-(cos(p.y*0.28-time*1.1)*0.28*0.05),1.0)); vec4 wp=modelMatrix*vec4(p,1.0); vWorld=wp.xyz; vec4 mv=viewMatrix*wp; vDist=-mv.z; gl_Position=projectionMatrix*mv; }`,
-  fragmentShader:`uniform vec3 sunDir,deep,shallow,sky,fogColor; uniform float fogNear,fogFar; varying vec3 vWorld; varying vec3 vNormal; varying float vDist; void main(){ vec3 V=normalize(cameraPosition-vWorld); vec3 N=normalize(vNormal); float fres=pow(1.0-max(dot(V,N),0.0),2.2); vec3 col=mix(deep,shallow,fres*0.6); col=mix(col,sky,fres*0.6); vec3 R=reflect(-V,N); float spec=pow(max(dot(R,sunDir),0.0),200.0); col+=vec3(1.0,0.78,0.42)*spec*3.0; float f=smoothstep(fogNear,fogFar,vDist); col=mix(col,fogColor,f); gl_FragColor=vec4(col,(0.86-fres*0.22)*(1.0-f*0.85)); }`
+  uniforms:{ time:uTime, uWaves:{value:1}, uOpacity:{value:0.86}, sunDir:{value:SUN_DIR}, deep:{value:new THREE.Color(0x1a4a63)}, shallow:{value:new THREE.Color(0x3f93a0)}, sky:{value:new THREE.Color(0xf0c088)}, fogColor:{value:new THREE.Color(FOG_COLOR)}, fogNear:{value:80}, fogFar:{value:380} },
+  vertexShader:`uniform float time; uniform float uWaves; varying vec3 vWorld; varying vec3 vNormal; varying float vDist; void main(){ vec3 p=position; /* uWaves=0 -> permukaan datar: hemat vertex shader di preset rendah */ float w1=sin(p.x*0.35+time*1.4)*0.05*uWaves; float w2=sin(p.y*0.28-time*1.1)*0.05*uWaves; float w3=sin((p.x+p.y)*0.5+time*2.1)*0.02*uWaves; p.z+=w1+w2+w3; vNormal=normalize(vec3(-(cos(p.x*0.35+time*1.4)*0.35*0.05*uWaves+w3*0.5),-(cos(p.y*0.28-time*1.1)*0.28*0.05*uWaves),1.0)); vec4 wp=modelMatrix*vec4(p,1.0); vWorld=wp.xyz; vec4 mv=viewMatrix*wp; vDist=-mv.z; gl_Position=projectionMatrix*mv; }`,
+  fragmentShader:`uniform vec3 sunDir,deep,shallow,sky,fogColor; uniform float fogNear,fogFar,uOpacity; varying vec3 vWorld; varying vec3 vNormal; varying float vDist; void main(){ vec3 V=normalize(cameraPosition-vWorld); vec3 N=normalize(vNormal); float fres=pow(1.0-max(dot(V,N),0.0),2.2); vec3 col=mix(deep,shallow,fres*0.6); col=mix(col,sky,fres*0.6); vec3 R=reflect(-V,N); float spec=pow(max(dot(R,sunDir),0.0),200.0); col+=vec3(1.0,0.78,0.42)*spec*3.0; float f=smoothstep(fogNear,fogFar,vDist); col=mix(col,fogColor,f); gl_FragColor=vec4(col,(uOpacity-fres*0.22)*(1.0-f*0.85)); }`
 });
-const water=new THREE.Mesh(new THREE.PlaneGeometry(T_SIZE,T_SIZE,isTouch?64:96,isTouch?64:96),waterMat); water.rotation.x=-Math.PI/2; water.position.y=WATER_Y; scene.add(water);
+/* Segmen air ikut setting kualitas. Tingkat "Mati" = permukaan datar
+   tanpa animasi gelombang: jauh lebih murah, dan dari kejauhan
+   bedanya nyaris tidak terlihat. */
+const waterGeo=new THREE.PlaneGeometry(T_SIZE,T_SIZE,GFX.waterSegments,GFX.waterSegments);
+waterMat.uniforms.uWaves.value=GFX.waterWaves?1:0;
+waterMat.uniforms.uOpacity.value=GFX.waterOpacity;
+const water=new THREE.Mesh(waterGeo,waterMat); water.rotation.x=-Math.PI/2; water.position.y=WATER_Y; scene.add(water);
 
 function glowTexture(){ const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d'); const grd=g.createRadialGradient(64,64,4,64,64,64); grd.addColorStop(0,'rgba(255,248,210,1)'); grd.addColorStop(0.35,'rgba(255,215,120,0.55)'); grd.addColorStop(1,'rgba(255,195,70,0)'); g.fillStyle=grd; g.fillRect(0,0,128,128); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; }
 const orbGeo=new THREE.IcosahedronGeometry(0.34,2); const orbMat=new THREE.MeshBasicMaterial({color:0xfff0b8});
@@ -318,6 +440,7 @@ const CHAR={ model:null, bones:{}, restQuat:{}, ready:false, height:1.75, phase:
 const charRoot=new THREE.Group(); scene.add(charRoot);
 function cleanBoneName(n){ return n.replace(/_\d+$/,'').replace(/\./g,'').replace(/\s+/g,'_').toUpperCase(); }
 
+LOADER.stage('models','Memuat model 3D');
 new GLTFLoader().load('./character.glb', (gltf)=>{
   const model=gltf.scene;
   const DROP_MAT=/shadow|silk/i; const toRemove=[]; let weaponMesh=null;
@@ -362,7 +485,18 @@ new GLTFLoader().load('./character.glb', (gltf)=>{
   Object.keys(CHAR.bones).forEach(k=>{ if(k.includes('DRESS')) CHAR.cloakBones.push({bone:CHAR.bones[k], restQ:CHAR.bones[k].quaternion.clone(), curX:0, velX:0}); });
   document.getElementById('loadStatus').textContent = `Character Ready • ${Object.keys(CHAR.bones).length} bones • Tap to play`;
   console.log('[CHAR] Ready', Object.keys(CHAR.bones).length, 'bones');
-}, undefined, e=>{ console.warn('char fail', e); document.getElementById('loadStatus').textContent='Char fail: '+e.message; });
+  LOADER.progress(0.55);
+  _charReady=true; _checkReady();
+}, (ev)=>{
+  /* progres byte asli dari XHR — ini yang membuat bar benar-benar
+     bergerak, bukan lompatan */
+  if(ev && ev.total) LOADER.progress(Math.min(0.55, 0.55*(ev.loaded/ev.total)));
+}, e=>{
+  console.warn('char fail', e);
+  document.getElementById('loadStatus').textContent='Char fail: '+e.message;
+  LOADER.note('Model karakter gagal dimuat — pakai model cadangan');
+  _charReady=true; _checkReady();
+});
 
 const _q=new THREE.Quaternion(), _e=new THREE.Euler();
 function boneRot(name, rx,ry,rz, blend=1){
@@ -813,7 +947,7 @@ document.getElementById('dashBtn').addEventListener('touchstart', e=>{ e.prevent
 document.getElementById('jumpBtn').addEventListener('touchstart', e=>{ e.preventDefault(); tryJump(); }, {passive:false});
 document.getElementById('muteBtn').addEventListener('click', e=>{ e.stopPropagation(); toggleMute(); });
 addEventListener('keydown', e=>{
-  if (state==='playing' && ['Space','ShiftLeft','ShiftRight','KeyJ','KeyF','Escape','KeyE','KeyB','KeyR'].includes(e.code)) e.preventDefault();
+  if (state==='playing' && ['Space','ShiftLeft','ShiftRight','KeyJ','KeyF','Escape','KeyE','KeyB','KeyR','KeyC'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
   if(e.code==='KeyN'){ toggleMute(); return; }   // M dipakai peta, jadi bisu pindah ke N
   if((e.code==='ShiftLeft'||e.code==='ShiftRight') && state==='playing') tryDash();
@@ -824,6 +958,7 @@ addEventListener('keydown', e=>{
   if(e.code==='KeyE') toggleCar();               // masuk / keluar mobil
   else if(e.code==='KeyB' && mode==='foot') summonCar();
   else if(e.code==='KeyR' && mode==='car') flipCar();
+  else if(e.code==='KeyC' && mode==='car'){ AUDIO.uiClick(); carHUD.cycleCameraMode(); }
 });
 renderer.domElement.addEventListener('mousedown', e=>{ if(e.button===0 && state==='playing' && !isTouch) tryAttack(); });
 
@@ -835,18 +970,135 @@ function chime(){
 
 let state = 'ready';
 let score = 0, elapsed = 0;
+/* Post-processing (bloom / motion blur / volumetrik). Dibuat sekali;
+   kalau semua efek Mati, PostFX.render() langsung merender ke kanvas
+   tanpa render target sama sekali. */
+const postfx = new PostFX(renderer);
+const postOpts = { blur01:0, blurDir:new THREE.Vector2(), sunScreen:{x:0.5,y:0.35}, sunVisible:true };
+const _sunProj = new THREE.Vector3();
+
+/* ============================================================
+   applySettings — menerjemahkan setting jadi perubahan nyata di engine.
+   Dipanggil setiap kali pemain mengubah apa pun di panel.
+   Semua cabang dijaga "hanya kerjakan kalau benar-benar berubah",
+   karena beberapa di antaranya mahal (traverse scene, resize RT).
+============================================================ */
+let _prevShadows=null, _prevGrass=-1, _prevWater=-1, _prevFog=null;
 function applySettings(_settings=settings,key=null){
-  if(key && !['quality','shadows','sound'].includes(key)) return;
-  const cap=settings.quality==='low'?1:settings.quality==='high'?(isTouch?1.75:2):1.25;
-  renderer.setPixelRatio(Math.min(devicePixelRatio,cap));
-  renderer.shadowMap.enabled=settings.shadows;
-  if(!key || key==='shadows') scene.traverse(o=>{if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate=true);});
+  GFX=resolveGfx(settings,isTouch);
+
+  /* --- resolusi & FPS cap --- */
+  renderer.setPixelRatio(currentPixelRatio());
+  frameBudget=frameInterval(settings.fps);
+  adaptive.reset(settings.quality==='ultra'?1:Math.min(1,GFX.renderScale));
+
+  /* --- bayangan --- */
+  if(_prevShadows!==GFX.shadowsEnabled){
+    _prevShadows=GFX.shadowsEnabled;
+    renderer.shadowMap.enabled=GFX.shadowsEnabled;
+    /* material harus dikompilasi ulang saat shadowMap hidup/mati,
+       kalau tidak objek tetap menampilkan bayangan lama */
+    scene.traverse(o=>{if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate=true);});
+  }
+  /* Peta bayangan adalah salah satu biaya terbesar per frame (seluruh
+     scene digambar dua kali). Di preset Sedang ke bawah kita perbarui
+     tiap 2 frame: bayangan matahari bergerak sangat lambat, jadi
+     bedanya nyaris tak terlihat tapi hematnya nyata. */
+  if(sun&&sun.shadow){
+    if(GFX.shadowRefreshFrames>1){ sun.shadow.autoUpdate=false; }
+    else { sun.shadow.autoUpdate=true; sun.shadow.needsUpdate=true; }
+  }
+  if(sun&&sun.shadow){
+    const want=GFX.shadowMapSize;
+    if(sun.shadow.mapSize.x!==want){
+      sun.shadow.mapSize.set(want,want);
+      /* peta lama wajib dibuang, kalau tidak ukuran baru diabaikan */
+      if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}
+    }
+  }
+
+  /* --- rumput: instanceCount 0 = benar-benar tidak digambar --- */
+  if(_prevGrass!==GFX.grassCount&&typeof grassGeo!=='undefined'&&grassGeo){
+    _prevGrass=GFX.grassCount;
+    grassGeo.instanceCount=GFX.grassCount;
+    grass.visible=GFX.grassCount>0;
+  }
+
+  /* --- partikel & satwa: drawRange/instanceCount 0 = tidak digambar --- */
+  if(typeof pGeo!=='undefined'&&pGeo) pGeo.setDrawRange(0,GFX.dustCount);
+  if(typeof bflyGeo!=='undefined'&&bflyGeo) bflyGeo.instanceCount=GFX.butterflyCount;
+  if(typeof birdGeo!=='undefined'&&birdGeo) birdGeo.instanceCount=GFX.birdCount;
+
+  /* --- radius streaming dunia: berapa chunk yang dimuat ---
+     Mengubah radius otomatis memicu bongkar-pasang chunk di update()
+     berikutnya, jadi tidak perlu invalidasi manual. */
+  if(world&&world.radius!==GFX.streamRadius) world.radius=GFX.streamRadius;
+
+  /* --- kabut / jarak pandang --- */
+  const fogKey=GFX.fogNear+'/'+GFX.fogFar;
+  if(_prevFog!==fogKey){
+    _prevFog=fogKey;
+    if(scene.fog){scene.fog.near=GFX.fogNear;scene.fog.far=GFX.fogFar;}
+    if(skyMat&&skyMat.uniforms&&skyMat.uniforms.uFogFar) skyMat.uniforms.uFogFar.value=GFX.fogFar;
+  }
+
+  /* --- post-processing --- */
+  postfx.configure(GFX);
+
+  /* --- tema UI, bentuk analog, tata letak tombol --- */
+  document.body.classList.toggle('ui-color',settings.buttonTheme==='color');
+  document.body.classList.toggle('stick-square',settings.stickShape==='square');
+  if(fpsMeter) fpsMeter.classList.toggle('on',!!settings.showFps);
+  carHUD.applyLayout(settings.layout,settings.buttonScale);
+  carHUD.setCameraMode(settings.carCamera);
+
   if(!key || key==='sound'){ AUDIO.setMuted(!settings.sound); syncMuteBtn(); }
+  if(settingsUI) settingsUI.refresh();
+  try{ localStorage.setItem('orb-hunt.settings',JSON.stringify(settings)); }catch{}
 }
-applySettings();
+/* ---------- panel pengaturan grafis ----------
+   Dibangun dari data game/quality.mjs. `onSettings` menerima OBJEK
+   setting baru (bukan mutasi), jadi tidak ada state setengah jadi. */
+settingsUI=initSettingsUI({
+  host:document.getElementById('settingsHost'),
+  getSettings:()=>settings,
+  /* PENTING: Object.assign, bukan `settings = ...`.
+     Semua pemegang referensi (hud.mjs, carHUD) harus melihat objek yang
+     sama. cloneSettings() tetap dipakai supaya gfx/layout jadi salinan
+     baru dan tidak ada aliasing antar generasi setting. */
+  onSettings:(next)=>{ Object.assign(settings, cloneSettings(next)); applySettings(settings); },
+});
+settingsUI.onEditLayout(()=>setLayoutEdit(!layoutEdit));
+settingsUI.onResetLayout(()=>{
+  settings.layout={}; carHUD.clearLayout();
+  try{ localStorage.setItem('orb-hunt.settings',JSON.stringify(settings)); }catch{}
+  if(settingsUI) settingsUI.refresh();
+});
+settingsUI.onDone(()=>setLayoutEdit(false));
+carHUD.setLayoutCallback((id,x,y)=>{
+  settings.layout={...settings.layout,[id]:{x,y}};
+  try{ localStorage.setItem('orb-hunt.settings',JSON.stringify(settings)); }catch{}
+});
+
+/* ---------- mode susun tombol ----------
+   Panel pengaturan HARUS ditutup dulu: panel itu z-index 20 dan
+   menutupi tombol mobil (z-index 6), jadi selama panel terbuka
+   tombolnya tidak bisa disentuh sama sekali. */
+let layoutEdit=false;
+function setLayoutEdit(on){
+  layoutEdit=carHUD.setEditMode(on);
+  if(layoutEdit){
+    if(gameHUD && gameHUD.isOpen && gameHUD.isOpen()) gameHUD.close();
+    if(state==='playing') pauseGame();
+  }
+}
+
 const gameHUD=initHUD({terrainH,waterY:WATER_Y,worldSize:T_SIZE,settings,onSettings:applySettings,onTravel:travelTo,
   onPause:pauseGame,onResume:()=>{if(isTouch||mode==='car')startGame();else requestLock();},
   getState:()=>({state,x:player.pos.x,z:player.pos.z,yaw:player.yaw,facing:CHAR.turnSmooth,region:regionAt(player.pos.x,player.pos.z),stream:world.stats,orbs:orbs.map(o=>({position:o.position,visible:!o.userData.collected})),hp:player.hp,maxHP:player.maxHP})});
+/* Terapkan setting tersimpan SEKARANG, sebelum frame pertama.
+   (Panggilan ini sempat hilang waktu applySettings ditulis ulang.) */
+applySettings();
 function travelTo(id){
   const waypoint=WAYPOINTS.find(w=>w.id===id);
   if(!waypoint||!CHAR.ready) return false;
@@ -932,10 +1184,38 @@ const PLAYER_R = 0.45;
 const _camTarget=new THREE.Vector3(), _camDesired=new THREE.Vector3(), _camDir=new THREE.Vector3();
 let cameraShake=0;
 
-function animate(){
+/* ---------- FPS cap ----------
+   rAF TETAP dipanggil setiap frame; yang dilewati adalah isi frame-nya.
+   Kalau rAF-nya yang dihentikan, browser menurunkan prioritas tab dan
+   dt jadi tidak stabil. Toleransi 1ms supaya 60fps di layar 60Hz tidak
+   terlewat karena jitter sub-milidetik. */
+let _lastFrame = 0, _fpsAcc = 0, _fpsFrames = 0, _fpsShown = 0, _frameMsAvg = 16.7, _shadowTick = 0;
+function animate(now){
   requestAnimationFrame(animate);
+  if (frameBudget > 0){
+    const since = now - _lastFrame;
+    if (since < frameBudget - 1) return;
+    _lastFrame = now - (since % frameBudget);
+  } else {
+    _lastFrame = now;
+  }
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
+  /* meter FPS + adaptive resolution */
+  _fpsFrames++; _fpsAcc += dt;
+  if (_fpsAcc >= 0.5){
+    const fps = _fpsFrames / _fpsAcc;
+    _frameMsAvg = 1000 / Math.max(1, fps);
+    if (fpsMeter && settings.showFps) fpsMeter.textContent = Math.round(fps) + ' fps';
+    if (settingsUI) settingsUI.setFpsValue(fps);
+    /* turunkan skala render kalau terus-menerus lewat budget */
+    if (GFX.adaptive && state === 'playing'){
+      const before = adaptive.scale;
+      adaptive.update(_frameMsAvg, frameBudget > 0 ? frameBudget : 16.7);
+      if (adaptive.scale !== before) renderer.setPixelRatio(currentPixelRatio());
+    }
+    _fpsFrames = 0; _fpsAcc = 0;
+  }
   uTime.value = t;
   grassMat.uniforms.fieldCenter.value.set(player.pos.x, player.pos.z);
   bflyMat.uniforms.fieldCenter.value.set(player.pos.x, player.pos.z);
@@ -1038,7 +1318,8 @@ function animate(){
 
   world.update(player.pos.x,player.pos.z);
   const gh = terrainH(player.pos.x, player.pos.z);
-  for(const o of orbs)o.visible=!o.userData.collected&&Math.hypot(o.position.x-player.pos.x,o.position.z-player.pos.z)<650;
+  /* Jarak culled orb ikut setting Jarak pandang (dulu dipatok 650). */
+  for(const o of orbs)o.visible=!o.userData.collected&&Math.hypot(o.position.x-player.pos.x,o.position.z-player.pos.z)<GFX.orbCullDistance;
   birdMat.uniforms.worldCenter.value.set(player.pos.x,gh,player.pos.z);
   dust.position.y=gh;
 
@@ -1063,7 +1344,9 @@ function animate(){
 
   // CAMERA — chase cam (mobil) ATAU third person (jalan kaki)
   if(mode==='car' && car.spawned){
-    car.updateCamera(camera, dt, 1);
+    /* mode kamera: near / far / cine. Disimpan di settings supaya
+       pilihan pemain bertahan antar sesi. */
+    car.updateCamera(camera, dt, 1, settings.carCamera);
   } else {
   if(Math.abs(camera.fov-70)>0.05){ camera.fov+=(70-camera.fov)*Math.min(1,dt*6); camera.updateProjectionMatrix(); }
   _camTarget.set(player.pos.x, groundY+1.30, player.pos.z);
@@ -1115,6 +1398,21 @@ function animate(){
   for(let i=ghosts.length-1;i>=0;i--){ const g=ghosts[i]; g.life-=dt; const k=g.life/g.max; if(g.life<=0){ disposeGhost(g.group); ghosts.splice(i,1); continue; } g.group.traverse(o=>{ if(o.isMesh&&o.material){ if(Array.isArray(o.material)) o.material.forEach(m=>{ m.opacity=k*0.55; }); else o.material.opacity=k*0.55; } }); g.group.scale.setScalar(1+(1-k)*0.08); }
   for(let i=slashPool.length-1;i>=0;i--){ const s=slashPool[i]; s.life-=dt; const k=s.life/s.max; if(s.life<=0){ disposeSlash(s.mesh); slashPool.splice(i,1); continue; } s.mesh.material.opacity=k; s.mesh.scale.setScalar(0.9+k*0.25); }
 
+  /* ---------- parameter post-processing frame ini ----------
+     blur01 naik bersama kecepatan (dan melonjak saat NOS), arah blur
+     mengikuti belokan supaya terasa seperti kamera yang tertinggal. */
+  {
+    const spd01 = mode === 'car'
+      ? Math.min(1, Math.abs(car.speed) / CAR_CFG.maxSpeed)
+      : Math.min(1, player.vel.length() / 16);
+    postOpts.blur01 = Math.max(0, (spd01 - 0.35) / 0.65) * (car.nitroActive ? 1.25 : 1);
+    postOpts.blurDir.set(mode === 'car' ? -car.steerInput * 0.35 : 0, 0);
+    /* posisi matahari di layar untuk god rays */
+    _sunProj.copy(sun.position).project(camera);
+    postOpts.sunScreen.set(_sunProj.x * 0.5 + 0.5, _sunProj.y * 0.5 + 0.5);
+    postOpts.sunVisible = _sunProj.z < 1 && _sunProj.x > -1.25 && _sunProj.x < 1.25;
+  }
+
   /* ---------- HUD mobil + audio (mesin & ambient fantasy) ---------- */
   carHUD.update(car);
   updateCarPrompt();
@@ -1123,7 +1421,13 @@ function animate(){
   AUDIO.setRush(mode==='car'?clamp01(Math.abs(car.speed)/CAR_CFG.maxSpeed):clamp01(player.vel.length()/16));
 
   gameHUD.update();
-  renderer.render(scene, camera);
+  /* Semua efek post ada di satu pass komposit. Saat semuanya Mati,
+     PostFX.render() jatuh ke renderer.render() biasa — nol overhead. */
+  /* bayangan disegarkan berkala saat autoUpdate dimatikan */
+  if (GFX.shadowRefreshFrames > 1 && sun && sun.shadow){
+    if ((_shadowTick = (_shadowTick + 1) % GFX.shadowRefreshFrames) === 0) sun.shadow.needsUpdate = true;
+  }
+  postfx.render(scene, camera, dt, postOpts);
 }
 animate();
 addEventListener('resize', () => {

@@ -1,9 +1,21 @@
 import * as THREE from 'three';
-import {CHUNK_SIZE,WORLD_SIZE,WAYPOINTS,terrainH,terrainColor,regionAt,roadInfo,randomForChunk,chunkPlan,TERRAIN_GLSL} from './world-data.mjs';
+import {CHUNK_SIZE,WORLD_SIZE,WAYPOINTS,terrainH,terrainColor,regionAt,roadInfo,roadX,roadZ,ROAD_SPACING,randomForChunk,chunkPlan,TERRAIN_GLSL} from './world-data.mjs';
 
 export class WorldStream {
- constructor(scene,{mobile=false}={}){
-  this.scene=scene;this.radius=mobile?3:4;this.mobile=mobile;this.chunks=new Map();this.pending=[];this.center='';this.colliders=[];
+ constructor(scene,{mobile=false,textures=null,detail=2,roadProps=true,roadPropSpacing=130,propsNear=0,propsFar=0,segmentsNear=0,segmentsFar=0}={}){
+  this.scene=scene;this.radius=mobile?3:4;this.mobile=mobile;
+  /* Kedetailan dunia & properti jalan datang dari game/quality.mjs.
+     Default-nya = preset "Sedang" supaya pemanggil lama (termasuk
+     tests/world.test.cjs yang tidak mengirim opsi) tetap identik. */
+  this.detail=detail|0;this.roadProps=!!roadProps;this.roadPropSpacing=Math.max(40,roadPropSpacing|0||130);
+  /* Kerapatan properti & detail terrain bisa disetel dari luar
+     (game/quality.mjs). Kalau tidak dikirim, dipakai angka lama supaya
+     tests/world.test.cjs — yang tidak mengirim opsi — tetap identik. */
+  this.propsNear=propsNear|0||(mobile?32:48);
+  this.propsFar=propsFar|0||8;
+  this.segmentsNear=Math.max(8,segmentsNear|0||64);
+  this.segmentsFar=Math.max(4,segmentsFar|0||12);
+  this.textures=textures||null;this.chunks=new Map();this.pending=[];this.center='';this.colliders=[];
   this.terrainMaterial=new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,metalness:0});
   this.terrainMaterial.onBeforeCompile=shader=>{
    shader.vertexShader='varying vec2 vWorldXZ;\n'+shader.vertexShader;
@@ -25,12 +37,39 @@ export class WorldStream {
     diffuseColor.rgb=mix(diffuseColor.rgb,stone,pave);
    `);
   };
-  this.geometries={trunk:new THREE.CylinderGeometry(.35,.7,7,6),leaf:new THREE.IcosahedronGeometry(3.3,1),pine:new THREE.ConeGeometry(3.4,10,7),rock:new THREE.DodecahedronGeometry(1,0),pillar:new THREE.CylinderGeometry(1.4,1.8,12,8),box:new THREE.BoxGeometry(1,1,1),roof:new THREE.ConeGeometry(3.5,5,6),crystal:new THREE.OctahedronGeometry(1.5),plinth:new THREE.CylinderGeometry(7,8,1.2,12)};
-  this.materials={trunk:new THREE.MeshStandardMaterial({color:0x615041,roughness:1}),leaf:new THREE.MeshStandardMaterial({color:0xffffff,roughness:1}),rock:new THREE.MeshStandardMaterial({color:0x8e958b,roughness:1}),stone:new THREE.MeshStandardMaterial({color:0xb6b7a0,roughness:.85}),roof:new THREE.MeshStandardMaterial({color:0x426776,roughness:.65}),crystal:new THREE.MeshStandardMaterial({color:0x9cede3,emissive:0x52b8ba,emissiveIntensity:.65,roughness:.3})};
+  this.geometries={trunk:new THREE.CylinderGeometry(.35,.7,7,6),leaf:new THREE.IcosahedronGeometry(3.3,1),pine:new THREE.ConeGeometry(3.4,10,7),rock:new THREE.DodecahedronGeometry(1,0),pillar:new THREE.CylinderGeometry(1.4,1.8,12,8),box:new THREE.BoxGeometry(1,1,1),roof:new THREE.ConeGeometry(3.5,5,6),crystal:new THREE.OctahedronGeometry(1.5),plinth:new THREE.CylinderGeometry(7,8,1.2,12),
+   /* tiang lampu jalan: batang + kepala + lengan. Segmentasi rendah
+      (6-8) karena tiang tipis; detail datang dari tekstur, bukan geometri */
+   pole:new THREE.CylinderGeometry(.16,.22,7.4,7),poleArm:new THREE.BoxGeometry(1.5,.16,.16),lampHead:new THREE.CylinderGeometry(.42,.3,.5,8),post:new THREE.CylinderGeometry(.13,.17,3.2,6)};
+  this.materials={trunk:new THREE.MeshStandardMaterial({color:0x615041,roughness:1}),leaf:new THREE.MeshStandardMaterial({color:0xffffff,roughness:1}),rock:new THREE.MeshStandardMaterial({color:0x8e958b,roughness:1}),stone:new THREE.MeshStandardMaterial({color:0xb6b7a0,roughness:.85}),roof:new THREE.MeshStandardMaterial({color:0x426776,roughness:.65}),crystal:new THREE.MeshStandardMaterial({color:0x9cede3,emissive:0x52b8ba,emissiveIntensity:.65,roughness:.3}),
+   metal:new THREE.MeshStandardMaterial({color:0x9aa1ab,roughness:.42,metalness:.7}),
+   lampGlass:new THREE.MeshStandardMaterial({color:0xfff3d0,emissive:0xffd79a,emissiveIntensity:1.15,roughness:.35})};
+  /* Tekstur prosedural dipasang HANYA kalau diberikan. Di tes headless
+     (tanpa DOM) textures=null, dan material tetap berwarna polos —
+     jadi modul ini tidak pernah menyentuh canvas sendiri. */
+  this._applyTextures();
   this.disposedChunks=0;
  }
+ _applyTextures(){
+  const t=this.textures;if(!t)return;
+  const map=(mat,key,rx=2,ry=2)=>{
+   const src=t[key];if(!src)return;
+   /* clone supaya tiap material punya repeat sendiri; tekstur sumber
+      tetap milik pemanggil (index.html) dan di-dispose di sana */
+   const c=src.clone();c.needsUpdate=true;c.wrapS=c.wrapT=THREE.RepeatWrapping;c.repeat.set(rx,ry);
+   mat.map=c;mat.needsUpdate=true;
+  };
+  map(this.materials.trunk,'bark',1,3);
+  map(this.materials.rock,'rock',2,2);
+  map(this.materials.stone,'stone',2,2);
+  map(this.materials.roof,'roof',3,3);
+  map(this.materials.metal,'metal',1,4);
+  /* logam jadi lebih "logam" begitu ada tekstur: pantulan panjang
+     terlihat hanya kalau roughness diturunkan */
+  this.materials.metal.roughness=.34;this.materials.metal.metalness=.78;
+ }
  createTerrain(cx,cz,near){
-  const segments=near?64:12,step=CHUNK_SIZE/segments;
+  const segments=near?this.segmentsNear:this.segmentsFar,step=CHUNK_SIZE/segments;
   const positions=[],colors=[],indices=[];
   for(let z=0;z<=segments;z++)for(let x=0;x<=segments;x++){
    const wx=cx*CHUNK_SIZE+x*step,wz=cz*CHUNK_SIZE+z*step,h=terrainH(wx,wz);
@@ -56,7 +95,7 @@ export class WorldStream {
   const colliders=[],random=randomForChunk(cx,cz),dummy=new THREE.Object3D();
   const matrices={trunk:[],leaf:[],pine:[],rock:[]},tints={leaf:[],pine:[]};
   const add=(kind,x,y,z,sx,sy,sz,yaw=0)=>{dummy.position.set(x,y,z);dummy.rotation.set(0,yaw,0);dummy.scale.set(sx,sy,sz);dummy.updateMatrix();matrices[kind].push(dummy.matrix.clone());};
-  const count=near?(this.mobile?32:48):8;
+  const count=near?this.propsNear:this.propsFar;
   for(let i=0;i<count;i++){
    const x=random()*CHUNK_SIZE,z=random()*CHUNK_SIZE,wx=x+group.position.x,wz=z+group.position.z,y=terrainH(wx,wz);
    const scale=.65+random()*1.05,region=regionAt(wx,wz);
@@ -79,6 +118,7 @@ export class WorldStream {
    if(Math.floor(waypoint.x/CHUNK_SIZE)!==cx||Math.floor(waypoint.z/CHUNK_SIZE)!==cz)continue;
    this.addLandmark(group,colliders,waypoint);
   }
+  this.addRoadProps(group,colliders,cx,cz,near,dummy);
   this.scene.add(group);return {...spec,group,geometry,colliders};
  }
  addLandmark(group,colliders,w){
@@ -109,6 +149,59 @@ export class WorldStream {
   piece('pillar','stone',tx,ty+6*height,tz,3,height,3);piece('roof','roof',tx,ty+12*height+3,tz,2.2,1.2,2.2);
   colliders.push({x:tx,z:tz,r:5.4});
  }
+ /* ---------- properti jalan: TIANG lampu & tonggak penanda ----------
+    Diminta pemain ("tambahin texture untuk yang perlu di tambahin kayak
+    tiang"). Dua InstancedMesh per chunk, bukan satu Mesh per tiang:
+    49 chunk x ~8 tiang jadi 98 draw call, bukan 400.
+    Hanya dipasang di chunk `near` supaya chunk jauh tetap murah. */
+ addRoadProps(group,colliders,cx,cz,near,dummy){
+  if(!this.roadProps||!near)return;
+  const ox=group.position.x,oz=group.position.z;
+  const spacing=this.roadPropSpacing, half=CHUNK_SIZE/2;
+  const ccx=ox+half, ccz=oz+half;
+  const poles=[],heads=[];
+  const place=(wx,wz,yaw)=>{
+   const y=terrainH(wx,wz);
+   dummy.position.set(wx-ox,y+3.7,wz-oz);dummy.rotation.set(0,yaw,0);dummy.scale.set(1,1,1);dummy.updateMatrix();
+   poles.push(dummy.matrix.clone());
+   /* kepala lampu sedikit di atas tiang, condong ke arah jalan */
+   dummy.position.set(wx-ox+Math.sin(yaw)*0.6,y+7.5,wz-oz+Math.cos(yaw)*0.6);
+   dummy.updateMatrix();heads.push(dummy.matrix.clone());
+   colliders.push({x:wx,z:wz,r:.5});
+  };
+  /* jalan membujur (z konstan per lane) */
+  const laneZ0=Math.round((ccz-roadZ(ccx))/ROAD_SPACING);
+  for(let lane=laneZ0-1;lane<=laneZ0+1;lane++){
+   if(Math.abs(roadZ(ccx,lane)-ccz)>half)continue;
+   for(let x=ox+spacing*0.5;x<ox+CHUNK_SIZE;x+=spacing){
+    const z=roadZ(x,lane);
+    if(z<oz-8||z>oz+CHUNK_SIZE+8)continue;
+    place(x,z+11.6,Math.PI*0.5);
+    place(x,z-11.6,-Math.PI*0.5);
+   }
+  }
+  /* jalan melintang (x konstan per lane) */
+  const laneX0=Math.round((ccx-roadX(ccz))/ROAD_SPACING);
+  for(let lane=laneX0-1;lane<=laneX0+1;lane++){
+   if(Math.abs(roadX(ccz,lane)-ccx)>half)continue;
+   for(let z=oz+spacing*0.5;z<oz+CHUNK_SIZE;z+=spacing){
+    const x=roadX(z,lane);
+    if(x<ox-8||x>ox+CHUNK_SIZE+8)continue;
+    place(x+11.6,z,0);
+    place(x-11.6,z,Math.PI);
+   }
+  }
+  if(poles.length){
+   const m=new THREE.InstancedMesh(this.geometries.pole,this.materials.metal,poles.length);
+   poles.forEach((mx,i)=>m.setMatrixAt(i,mx));
+   m.castShadow=true;m.receiveShadow=true;m.computeBoundingSphere();group.add(m);
+  }
+  if(heads.length){
+   const m=new THREE.InstancedMesh(this.geometries.lampHead,this.materials.lampGlass,heads.length);
+   heads.forEach((mx,i)=>m.setMatrixAt(i,mx));
+   m.receiveShadow=false;m.computeBoundingSphere();group.add(m);
+  }
+ }
  remove(chunk){
   this.scene.remove(chunk.group);chunk.geometry.dispose();
   chunk.group.traverse(o=>{if(o.isInstancedMesh)o.dispose();});this.disposedChunks++;
@@ -126,6 +219,11 @@ export class WorldStream {
   for(let i=0;i<budget&&this.pending.length;i++){const p=this.pending.shift();this.chunks.set(p.key,this.build(p));changed=true;}
   if(changed||force){this.colliders.length=0;for(const chunk of this.chunks.values())this.colliders.push(...chunk.colliders);}
  }
- dispose(){for(const chunk of this.chunks.values())this.remove(chunk);this.chunks.clear();this.pending=[];this.colliders.length=0;this.terrainMaterial.dispose();Object.values(this.geometries).forEach(g=>g.dispose());Object.values(this.materials).forEach(m=>m.dispose());}
+ dispose(){for(const chunk of this.chunks.values())this.remove(chunk);this.chunks.clear();this.pending=[];this.colliders.length=0;this.terrainMaterial.dispose();Object.values(this.geometries).forEach(g=>g.dispose());
+  /* material.dispose() TIDAK melepas .map. Karena _applyTextures()
+     meng-clone tekstur per material, klon itu milik kita dan wajib
+     dibuang di sini — kalau tidak, tiap kali dunia di-dispose VRAM
+     untuk tekstur menumpuk. Tekstur SUMBER tetap milik pemanggil. */
+  Object.values(this.materials).forEach(m=>{if(m.map&&m.map.dispose)m.map.dispose();m.dispose();});}
  get stats(){return {loaded:this.chunks.size,pending:this.pending.length,max:(this.radius*2+1)**2,disposed:this.disposedChunks};}
 }
