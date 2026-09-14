@@ -28,7 +28,7 @@ jobs:
       - name: Syntax semua file JS + script module index.html
         run: |
           set -e
-          for f in js/*.js tests/*.mjs tools/*.mjs; do
+          for f in js/*.js game/*.mjs tests/*.mjs tools/*.mjs; do
             node --check "$f" && echo "OK  $f"
           done
           node -e '
@@ -40,7 +40,7 @@ jobs:
           '
           node --check /tmp/_idx.mjs && echo "OK  index.html <script type=module>"
 
-      - name: Tes fisika mobil (10 skenario headless)
+      - name: Tes fisika mobil (11 skenario headless)
         run: node tests/car.physics.mjs
 
       - name: Tes graph audio (aturan parameter WebAudio)

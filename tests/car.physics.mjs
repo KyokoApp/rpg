@@ -3,8 +3,9 @@
    Jalankan:  node tests/car.physics.mjs        (dari root repo)
 
    three.js yang dipakai adalah file VENDORED di repo (lihat importmap.mjs),
-   jadi hasilnya persis seperti di browser. terrainH() juga diekstrak langsung
-   dari index.html supaya tes tidak pernah tidak sinkron dengan gamenya.
+   jadi hasilnya persis seperti di browser. terrainH(), batas dunia, dan tinggi
+   air diimpor langsung dari game/world-data.mjs — sumber yang sama dipakai
+   index.html — supaya tes tidak pernah tidak sinkron dengan gamenya.
 ============================================================ */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -14,12 +15,12 @@ import './stubs.mjs';         // stub DOM + canvas 2D
 const THREE = await import('three');
 const { Car, CAR_CFG } = await import('../js/car.js');
 
-/* Ambil terrainH() ASLI dari index.html — kalau rumusnya berubah, tes ikut berubah. */
-const _html = fs.readFileSync(path.resolve(import.meta.dirname,'../index.html'),'utf8');
-const _m = _html.match(/function terrainH\(x,z\)\{\s*return ([^;]+);/);
-if(!_m) throw new Error('terrainH() tidak ditemukan di index.html — pola ekstrak perlu diperbarui');
-const realTerrain = new Function('x','z','return '+_m[1]);
-const flat=()=>0;
+/* terrainH() ASLI dari modul dunia — kalau rumusnya berubah, tes ikut berubah. */
+const { terrainH: realTerrain, WATER_LEVEL, WORLD_LIMIT } = await import('../game/world-data.mjs');
+/* Dataran uji 2 m di atas permukaan air: game memakai WATER_LEVEL=0, jadi
+   tanah "rata" di tes juga harus di atas air (kalau tidak, mobil dianggap
+   berada di air dan tidak bisa bergerak). */
+const flat=()=>2;
 const DT=1/60;
 const bad=[];
 function chk(name,cond,extra=''){ if(!cond) bad.push(name+' '+extra); }
@@ -28,9 +29,9 @@ function nanCheck(tag,c){
     if(!Number.isFinite(c[k])) bad.push(`NaN di ${tag}.${k} = ${c[k]}`);
   for(const k of ['x','y','z']) if(!Number.isFinite(c.pos[k])) bad.push(`NaN di ${tag}.pos.${k}`);
 }
-function mkCar(terrainH=flat, colliders=[], limit=1e7){
+function mkCar(terrainH=flat, colliders=[], limit=WORLD_LIMIT){
   const scene=new THREE.Scene();
-  const c=new Car(scene,{terrainH,colliders,limit,waterY:-0.9,audio:null});
+  const c=new Car(scene,{terrainH,colliders,limit,waterY:WATER_LEVEL,audio:null});
   c.spawnAt(0,0,0);
   return c;
 }
@@ -144,10 +145,57 @@ const IN=(o={})=>Object.assign({throttle:0,brake:0,steer:0,handbrake:false,nitro
     c.update(DT,IN({throttle:Math.random()<0.75?1:0,brake:Math.random()<0.2?1:0,
       steer:Math.sin(i*0.03)*1.2,handbrake:Math.random()<0.05,nitro:Math.random()<0.2}),true);
     nanCheck('T10',c);
-    chk('T10 dalam batas dunia', Math.abs(c.pos.x)<=202.5&&Math.abs(c.pos.z)<=202.5);
+    chk('T10 dalam batas dunia', Math.abs(c.pos.x)<=WORLD_LIMIT&&Math.abs(c.pos.z)<=WORLD_LIMIT);
     chk('T10 rpm tidak negatif', c.rpm>0);
   }
   console.log(`T10 stress 60s: speed=${c.speed.toFixed(1)} rpm=${c.rpm.toFixed(0)} gear=${c.gear} nitro=${c.nitro.toFixed(0)} skidAlive=${c.skid.anyAlive}`);
+}
+/* ===== T11: gravitasi sepanjang lereng (dunia 24 km punya jalan menanjak) ===== */
+{
+  const TAN=Math.tan(0.20);                       // ~11,5 derajat
+  const hill=(x,z)=>8+x*TAN;                      // menanjak ke arah +X
+  const yaw=Math.PI/2;                            // forward = (sin,cos) = +X
+
+  /* (a) menanjak: kecepatan puncak harus lebih rendah daripada di datar */
+  const up=mkCar(hill); up.spawnAt(0,0,yaw); let upMax=0;
+  for(let i=0;i<60*90;i++){ up.update(DT,IN({throttle:1}),true); upMax=Math.max(upMax,up.speed); nanCheck('T11a',up); }
+  const flatCar=mkCar(flat); flatCar.spawnAt(0,0,yaw); let flatMax=0;
+  for(let i=0;i<60*90;i++){ flatCar.update(DT,IN({throttle:1}),true); flatMax=Math.max(flatMax,flatCar.speed); }
+  console.log(`T11 tanjakan 11,5°: puncak ${upMax.toFixed(1)} m/s vs datar ${flatMax.toFixed(1)} m/s | slope=${(up.slope*57.3).toFixed(1)}°`);
+  chk('T11 slope terukur benar', Math.abs(up.slope-0.20)<0.02, `slope=${up.slope}`);
+  chk('T11 menanjak lebih lambat', upMax<flatMax-2.0, `${upMax.toFixed(1)} vs ${flatMax.toFixed(1)}`);
+  chk('T11 masih bisa menanjak', upMax>10, `upMax=${upMax.toFixed(1)}`);
+
+  /* (b) turunan: base 400 m supaya tidak berakhir di bawah permukaan air
+        (WATER_LEVEL=0) selama pengujian. Kecepatan puncak di turunan tetap
+        terpotong cap maxSpeed, jadi yang diukur adalah WAKTU mencapai 60 m/s
+        dan kemampuan meluncur tanpa gas. */
+  const down=(x,z)=>400-x*TAN;
+  const time60=c=>{ let t=null; for(let i=0;i<60*60;i++){ c.update(DT,IN({throttle:1}),true);
+    nanCheck('T11b',c); if(t===null&&c.speed>=60) t=(i+1)*DT; } return t===null?Infinity:t; };
+  const dn=mkCar(down); dn.spawnAt(0,0,yaw); const tDown=time60(dn);
+  const fl=mkCar(flat); fl.spawnAt(0,0,yaw);   const tFlat=time60(fl);
+  console.log(`T11 waktu ke 60 m/s: turunan ${tDown.toFixed(2)} s vs datar ${tFlat.toFixed(2)} s`);
+  chk('T11 turunan lebih cepat mencapai 60', tDown<tFlat-0.15, `${tDown.toFixed(2)} vs ${tFlat.toFixed(2)}`);
+
+  /* tanpa gas pun mobil meluncur turun (bukti komponen gravitasi benar-benar ada) */
+  const coast=mkCar(down); coast.spawnAt(0,0,yaw);
+  for(let i=0;i<60*4;i++){ coast.update(DT,IN({}),true); nanCheck('T11c',coast); }
+  console.log(`T11 meluncur tanpa gas 4 s di turunan 11,5°: ${coast.speed.toFixed(2)} m/s`);
+  chk('T11 meluncur turun tanpa gas', coast.speed>4.0, `speed=${coast.speed.toFixed(2)}`);
+
+  /* (c) rem parkir: mobil tanpa pengemudi tidak merayap di tanjakan landai */
+  const park=(x,z)=>5+x*Math.tan(0.14);           // ~8 derajat
+  const pc=mkCar(park); pc.spawnAt(0,0,yaw);
+  for(let i=0;i<60*5;i++) pc.update(DT,IN({}),false);
+  console.log(`T11 parkir di 8°: speed=${pc.speed.toFixed(4)} m/s (harus 0)`);
+  chk('T11 parkir tidak merayap', pc.speed===0, `speed=${pc.speed}`);
+
+  /* (d) lereng sangat terjal tetap membuat mobil meluncur (tidak beku palsu) */
+  const steep=(x,z)=>60-x*Math.tan(0.90);         // ~42 derajat, menurun ke +X
+  const sc=mkCar(steep); sc.spawnAt(0,0,yaw);
+  for(let i=0;i<60*4;i++){ sc.update(DT,IN({}),false); nanCheck('T11d',sc); }
+  chk('T11 lereng terjal meluncur', sc.speed>0.5, `speed=${sc.speed.toFixed(2)}`);
 }
 console.log('\n================ HASIL ================');
 if(bad.length===0) console.log('✅ SEMUA TES LULUS (0 kegagalan)');

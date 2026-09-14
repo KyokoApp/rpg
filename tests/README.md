@@ -7,13 +7,18 @@ di repo. Tidak perlu `npm install`, tidak perlu `package.json`, tidak perlu buil
 ```bash
 cd rpg
 node tools/check-imports.mjs   # module graph utuh? (penjaga bug halaman blank)
-node tests/car.physics.mjs     # 10 skenario fisika mobil
+node tests/car.physics.mjs     # 11 skenario fisika mobil
 node tests/audio.graph.mjs     # validasi graph WebAudio + aturan parameternya
 ```
 
 Ketiganya mengatur `process.exitCode` sesuai hasil (0 = lulus, 1 = ada kegagalan),
 jadi aman dipakai di CI — lihat `.github/workflows/verify.yml`, yang menjalankan
 ketiganya di setiap push dan setiap pull request.
+
+Folder ini juga berisi **suite kedua** milik regresi dunia/karakter
+(`tests/*.test.cjs`, dijalankan `.github/workflows/test.yml` lewat
+`node --test tests/*.test.cjs`). Keduanya hidup berdampingan: pola nama
+`*.test.cjs` tidak cocok dengan file `.mjs` di atas, jadi tidak saling ganggu.
 
 Butuh **Node ≥ 22.15** (untuk `module.registerHooks`).
 
@@ -23,7 +28,7 @@ Butuh **Node ≥ 22.15** (untuk `module.registerHooks`).
 |---|---|
 | `importmap.mjs` | Hook resolver: `'three'` → `../three.module.js`, `'three/addons/*'` → `../jsm/*`. Cermin persis dari `importmap` di `index.html`, jadi tes menguji kode yang sama dengan yang jalan di browser. |
 | `stubs.mjs` | Stub `document`, `canvas` 2D context, `matchMedia`, `requestAnimationFrame` — cukup supaya `js/car.js` bisa membangun scene graph tanpa DOM sungguhan. |
-| `car.physics.mjs` | 10 skenario fisika. `terrainH()` **diekstrak langsung dari `index.html`** (bukan disalin manual) supaya tes tidak pernah tidak sinkron dengan rumus terrain game. |
+| `car.physics.mjs` | 11 skenario fisika. `terrainH()`, `WORLD_LIMIT`, dan `WATER_LEVEL` **diimpor langsung dari `game/world-data.mjs`** — sumber yang sama dipakai `index.html` — supaya tes tidak pernah tidak sinkron dengan dunia game. |
 | `audio.graph.mjs` | Stub `AudioContext` yang **mencatat setiap nilai parameter** lalu menegakkan aturan WebAudio asli. |
 
 ## Apa yang dijamin `car.physics.mjs`
@@ -39,10 +44,15 @@ Butuh **Node ≥ 22.15** (untuk `module.registerHooks`).
 | T7 | Nitro | kecepatan naik, isi nitro berkurang |
 | T8 | Tabrak pohon | terdeteksi, **tidak menembus** collider, kecepatan berkurang, `cameraShake` naik |
 | T9 | 25 detik di terrain asli | pitch/roll terbatas (tidak jungkir) |
-| T10 | 60 detik input acak | tidak ada `NaN`/`Infinity` di state mana pun |
+| T10 | 60 detik input acak | tidak ada `NaN`/`Infinity` di state mana pun, tetap dalam batas dunia |
+| T11 | Lereng (tanjak/turun/parkir) | `slope` terukur benar, menanjak lebih lambat, turun lebih cepat, **meluncur tanpa gas**, rem parkir menahan di 8° |
 
 Setiap skenario juga memanggil `nanCheck()` tiap frame pada `speed`, `rpm`, `slip`,
 `steer`, `yaw`, `pitch`, `roll`, `nitro`, `suspension`, `yawRate`.
+
+Terrain "datar" untuk pengujian diletakkan 2 m di atas `WATER_LEVEL`, karena mobil
+(sama seperti pemain) menolak bergerak di bawah permukaan air — kalau tes memakai
+ketinggian 0 dengan `waterY` 0, semua skenario akan gagal karena alasan yang salah.
 
 ## Apa yang dijamin `audio.graph.mjs`
 

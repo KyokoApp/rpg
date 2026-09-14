@@ -23,19 +23,21 @@ export const CAR_CFG = {
   wheelbase: 2.62, track: 1.60, wheelRadius: 0.34, wheelWidth: 0.28,
   mass: 1380,
   /* --- performa ---
-     maxSpeed sengaja 46 m/s (165 km/h): dunia game ini cuma 440x440 m,
-     jadi 280 km/h tidak akan bisa dipakai. Naikkan kalau map diperbesar. */
-  maxSpeed: 46.0, reverseSpeed: 12.0,
-  /* Gearing sengaja "pendek": peakTorque x finalDrive dijaga ~konstan
-     (242 x 6.65 = 470 x 3.42 = ~1608) supaya gaya dorong tidak berubah,
-     tapi rpm naik 1.94x lebih cepat per m/s. Efeknya keenam gigi kepakai
-     semua di rentang 0-165 km/j (gigi 6 ~7000 rpm di top speed), bukan
-     mentok di gigi 3. Persis rasa gearbox close-ratio ala CarX Street. */
-  peakTorque: 242,          // Nm di poros mesin (sudah termasuk faktor gearing pendek)
+     maxSpeed 72 m/s (259 km/j): dunia sekarang 24x24 km dengan jalan
+     kerajaan selebar 16 m, jadi kecepatan tinggi benar-benar terpakai.
+     dragK diturunkan otomatis dari angka ini (lihat constructor). */
+  maxSpeed: 72.0, reverseSpeed: 12.0,
+  /* Gaya dorong ditentukan oleh HASIL KALI peakTorque x finalDrive, dan
+     hasil kali itu dijaga ~konstan (342 x 4.70 = 242 x 6.65 = ~1608) supaya
+     akselerasi tidak berubah waktu top speed dinaikkan. Yang berubah hanya
+     rpm per m/s: gigi 6 sekarang ~7800 rpm di 259 km/j (di bawah shiftUp
+     7950), jadi keenam gigi tetap kepakai semua. Rasa gearbox close-ratio
+     ala CarX Street dipertahankan. */
+  peakTorque: 342,          // Nm di poros mesin (sudah termasuk faktor gearing pendek)
   idleRpm: 900, redline: 8600, revLimit: 8800,
   shiftUp: 7950, shiftDown: 3300,
   gears: [3.35, 2.28, 1.68, 1.28, 1.00, 0.82],
-  reverse: 1.60, finalDrive: 6.65,
+  reverse: 1.60, finalDrive: 4.70,
   mu: 1.28,                 // koefisien gesek ban (kering)
   driveWeightFrac: 0.62,    // porsi berat di roda penggerak (RWD)
   /* --- handling --- */
@@ -213,7 +215,7 @@ export class Car {
     this.nitro=CAR_CFG.nitroMax; this.nitroActive=false;
     this.engineOn=false; this.occupied=false; this.spawned=false;
     this.wheelAngle=0; this.tractionSlip=0; this.suspension=0; this.cameraShake=0;
-    this.kmh=0;
+    this.kmh=0; this.slope=0;
     this._impactCd=0;
 
     /* --- scene graph --- */
@@ -659,10 +661,26 @@ export class Car {
       force = -3400*brake;
     }
 
+    /* ---------- gravitasi sepanjang lereng ----------
+       Dunia 24 km punya jalan yang menanjak dan gunung sampai +225 m.
+       Tanpa komponen ini mobil menaiki lereng 40 derajat seolah-olah datar.
+       gaya = -m.g.sin(theta); theta diukur dari tinggi terrain di depan dan
+       belakang mobil (bukan dari this.pitch, yang sudah tercampur suspensi
+       dan di-damp sehingga telat satu frame). */
+    const sfx=Math.sin(this.yaw), sfz=Math.cos(this.yaw);
+    const hUp=this.terrainH(this.pos.x+sfx*C.wheelbase, this.pos.z+sfz*C.wheelbase);
+    const hDn=this.terrainH(this.pos.x-sfx*C.wheelbase, this.pos.z-sfz*C.wheelbase);
+    const slope=Math.atan2(hUp-hDn, C.wheelbase*2);           // + berarti menanjak
+    const gradeAccel=-9.81*Math.sin(slope);
+    this.slope=slope;
+
     const drag = this.dragK*spd*Math.abs(spd);
     const roll = Math.sign(spd)*this._rollF()*(Math.abs(spd)>0.05?1:0);
-    const accel = force/C.mass - (drag+roll)/C.mass;
+    const accel = force/C.mass - (drag+roll)/C.mass + gradeAccel;
     this.speed += accel*dt;
+    /* rem parkir statis: mobil tanpa pengemudi tidak boleh merayap pelan di
+       tanjakan yang masih sanggup ditahan rem parkir (batas ~41 derajat). */
+    if(!occupied && Math.abs(this.speed)<0.35 && Math.abs(gradeAccel)*C.mass<9000) this.speed=0;
     if(!occupied && Math.abs(this.speed)<0.08) this.speed=0;
     const cap = spd<-0.5 ? C.reverseSpeed : C.maxSpeed*(this.nitroActive?1.12:1);
     this.speed = clamp(this.speed, -C.reverseSpeed, cap);
