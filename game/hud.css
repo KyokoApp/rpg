@@ -43,3 +43,137 @@ button,input{font:inherit}button{color:inherit;cursor:pointer}button:focus-visib
 #updateBanner{position:fixed;left:50%;bottom:max(22px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:30;display:flex;gap:14px;align-items:center;background:#24382df2;border:1px solid #e8d4a155;border-radius:3px;padding:10px 14px;font:13px system-ui;color:#fff8e4;box-shadow:0 8px 34px #0009;white-space:nowrap}
 #updateBtn{background:#4b6059;color:#fff8e4;border:0;border-radius:2px;padding:8px 18px;letter-spacing:.6px;font-size:12px;transition:background .15s}
 #updateBtn:hover{background:#587a6e}
+
+/* ============================================================
+   TAMBAHAN v2 — analog squircle, tombol monokrom, layar loading,
+   dan panel pengaturan grafis (preset / FPS / opsi custom).
+   Semua ditempel di akhir supaya aturan lama tidak perlu diedit;
+   spesifikasi CSS membuat deklarasi terakhir yang menang.
+============================================================ */
+
+/* ---------- bentuk analog: bundar (default) / kotak-bulat ----------
+   Permintaan pemain: kotak tapi sudutnya TIDAK lancip. border-radius
+   30% menghasilkan "squircle" — terasa kotak di mata tapi tetap
+   melengkung mulus di keempat sudut. */
+body.stick-square #stickBase{border-radius:30%}
+body.stick-square #stickBase:after{border-radius:26%}
+body.stick-square #stickKnob{border-radius:28%}
+
+/* ---------- tombol sentuh jalan kaki: monokrom ---------- */
+body:not(.ui-color) .tBtn{color:#fff;filter:drop-shadow(0 2px 3px #0009)}
+body:not(.ui-color) #attackHint{color:#ffffffcc}
+body:not(.ui-color) .icon-button{color:#fff}
+body:not(.ui-color) #fullscreenBtn.on svg{stroke:#fff}
+
+/* ---------- meter FPS (opsional, untuk cek optimasi) ---------- */
+#fpsMeter{position:fixed;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);
+  z-index:22;pointer-events:none;display:none;
+  font:600 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:1px;
+  color:#fff;background:rgba(8,8,10,.66);border:1px solid rgba(255,255,255,.35);
+  border-radius:999px;padding:5px 11px;text-shadow:0 1px 2px #000}
+#fpsMeter.on{display:block}
+
+/* ============================================================
+   LAYAR LOADING (gaya Genshin: muncul sebelum apa pun, baru
+   hilang di 100%). Markup-nya statis di index.html supaya bisa
+   dilukis SEBELUM module deferred dijalankan.
+============================================================ */
+#loadScreen{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;background:#07090b;
+  color:#f2f2f4;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  transition:opacity .55s ease;overflow:hidden}
+#loadScreen.gone{opacity:0;pointer-events:none}
+#loadScreen.hidden{display:none}
+/* latar gradasi lembut + vignette supaya tidak terasa layar kosong */
+#loadBg{position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(120% 85% at 50% 18%, rgba(255,255,255,.10), rgba(255,255,255,0) 62%),
+    radial-gradient(90% 70% at 50% 108%, rgba(255,255,255,.055), rgba(255,255,255,0) 60%);
+  animation:loadBreathe 6s ease-in-out infinite}
+@keyframes loadBreathe{0%,100%{opacity:.75}50%{opacity:1}}
+#loadInner{position:relative;text-align:center;width:min(520px,86vw);padding:0 18px}
+#loadTitle{font-family:Georgia,'Times New Roman',serif;font-size:clamp(26px,6vw,46px);
+  font-weight:400;letter-spacing:.42em;text-indent:.42em;color:#fff;margin-bottom:10px}
+#loadSub{font-size:10.5px;letter-spacing:.42em;text-indent:.42em;color:rgba(255,255,255,.42);
+  text-transform:uppercase}
+#loadBarWrap{margin:38px auto 0;width:100%;height:3px;background:rgba(255,255,255,.14);
+  border-radius:2px;overflow:hidden}
+#loadBar{height:100%;width:0%;background:#fff;border-radius:2px;
+  transition:width .22s cubic-bezier(.3,.9,.3,1)}
+#loadMeta{display:flex;justify-content:space-between;align-items:baseline;margin-top:11px;
+  font-size:10.5px;letter-spacing:.16em;color:rgba(255,255,255,.55)}
+#loadPct{font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;letter-spacing:.06em}
+#loadStep{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62%;text-align:left}
+#loadTip{margin-top:34px;font-size:11px;line-height:1.75;color:rgba(255,255,255,.34);min-height:34px}
+#loadTip b{color:rgba(255,255,255,.6);font-weight:600}
+#loadErr{display:none;margin-top:26px;font-size:12px;line-height:1.7;color:#fff;
+  background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.3);
+  border-radius:8px;padding:12px 16px}
+#loadErr.on{display:block}
+/* spinner tipis di pojok, tanda proses masih hidup */
+#loadSpin{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
+  width:16px;height:16px;border:1.5px solid rgba(255,255,255,.18);
+  border-top-color:rgba(255,255,255,.8);border-radius:50%;animation:loadSpin .9s linear infinite}
+@keyframes loadSpin{to{transform:translateX(-50%) rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){
+  #loadBg,#loadSpin{animation:none}
+}
+
+/* ============================================================
+   PANEL PENGATURAN GRAFIS
+============================================================ */
+.set-section{margin-top:26px}
+.set-section>h3{font-size:11px;letter-spacing:.24em;text-transform:uppercase;
+  color:#6d7a74;margin:0 0 12px}
+/* chip preset / FPS */
+.chips{display:flex;gap:7px;flex-wrap:wrap}
+.chip{flex:1 1 0;min-width:58px;padding:10px 6px;text-align:center;cursor:pointer;
+  background:#e0ded3;color:#4a564f;border:1px solid #aeb5a9;border-radius:3px;
+  font:600 11px/1.2 system-ui,sans-serif;letter-spacing:.09em;transition:background .14s,color .14s}
+.chip:hover{background:#d6d4c8}
+.chip[aria-pressed="true"]{background:#2f3a35;color:#f4f1e6;border-color:#2f3a35}
+.chip small{display:block;font-weight:400;font-size:9px;opacity:.66;margin-top:3px;letter-spacing:.04em}
+/* baris opsi bertingkat */
+.opt-row{display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;
+  padding:10px 0;border-bottom:1px solid #4050571a}
+.opt-row:last-child{border-bottom:0}
+.opt-name{font-size:13px;color:#3d484b}
+.opt-name small{display:block;font:10.5px/1.5 system-ui;color:#7d8880;margin-top:2px}
+.opt-val{font:600 10.5px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em;
+  color:#3d484b;background:#e0ded3;border:1px solid #bcbdb0;border-radius:3px;
+  padding:6px 9px;min-width:70px;text-align:center;cursor:pointer}
+.opt-val[data-off="1"]{color:#8a8f87;background:#e9e7dc}
+.set-hint{font:11px/1.7 system-ui;color:#737f7b;margin-top:10px}
+.set-warn{font:11px/1.6 system-ui;color:#8a6a3a;margin-top:8px}
+/* tab */
+.tabs{display:flex;gap:6px;margin-bottom:4px;border-bottom:1px solid #40505730}
+.tab{padding:9px 15px;background:transparent;border:0;border-bottom:2px solid transparent;
+  color:#6d7a74;font:600 11.5px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase}
+.tab[aria-selected="true"]{color:#3d484b;border-bottom-color:#3d484b}
+.tabpane[hidden]{display:none}
+/* slider skala tombol */
+input[type=range].thin{accent-color:#4b6059}
+
+/* panel jadi lebih gelap & netral supaya konsisten dengan UI hitam-putih */
+body:not(.ui-color) .panel{background:#e9e7df;color:#2b3134}
+body:not(.ui-color) .panel-button{background:#22282b;color:#f2f2f4}
+
+/* ============================================================
+   PANEL ERROR RUNTIME
+   Tanpa ini, error apa pun di dalam loop render hanya tercatat di
+   konsol: pemain melihat layar hitam dengan UI normal dan tidak
+   punya petunjuk apa pun. z-index di atas segalanya (loadScreen 60).
+============================================================ */
+#fatalErr{display:none;position:fixed;z-index:90;left:50%;top:50%;
+  transform:translate(-50%,-50%);width:min(92vw,460px);
+  padding:20px 22px;border-radius:10px;
+  background:rgba(18,20,22,.96);border:1px solid rgba(255,255,255,.28);
+  color:#f2f2f4;font:13px/1.7 system-ui,sans-serif;
+  box-shadow:0 18px 60px rgba(0,0,0,.55)}
+#fatalErr.on{display:block}
+#fatalErrTitle{font:700 14px/1.3 system-ui,sans-serif;letter-spacing:.02em;margin-bottom:8px}
+#fatalErrMsg{font:11.5px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;
+  color:rgba(242,242,244,.78);word-break:break-word;
+  max-height:34vh;overflow:auto;white-space:pre-wrap}
+#fatalErrReload{margin-top:14px;padding:9px 16px;border:0;border-radius:5px;
+  background:#f2f2f4;color:#1b1e20;font:600 12px/1 system-ui,sans-serif;cursor:pointer}

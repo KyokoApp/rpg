@@ -43,17 +43,29 @@ export class AudioEngine {
     try { this.ctx = new AC(); } catch(e){ this.ok=false; return false; }
     const ctx = this.ctx;
 
-    /* master chain: gain -> compressor -> speaker */
-    this.master = ctx.createGain(); this.master.gain.value = this.muted?0:0.85;
-    const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value=-16; comp.knee.value=26; comp.ratio.value=4.5;
-    comp.attack.value=0.004; comp.release.value=0.22;
-    this.master.connect(comp); comp.connect(ctx.destination);
+    /* master chain: gain -> compressor -> LIMITER -> speaker
 
-    /* reverb "ruang terbuka" — impulse response dibikin prosedural (noise * decay) */
+       Penyebab "kresek-kresek": kompresor saja tidak cukup. Attack 4ms
+       masih meloloskan transient tajam (backfire, gigi masuk) dan bus
+       mesin + ban + angin + reverb bisa menjumlah > 1.0, yang lalu
+       DIPOTONG KERAS oleh DAC -> klik/pop. Rantai baru:
+       kompresor meratakan level, lalu soft-clipper (tanh) jadi plafon
+       mulus. Sinyal tidak pernah menyentuh 1.0, jadi tidak ada clipping. */
+    this.master = ctx.createGain(); this.master.gain.value = this.muted?0:0.72;
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value=-18; comp.knee.value=24; comp.ratio.value=3.2;
+    comp.attack.value=0.012; comp.release.value=0.18;
+    this.limiter = this._makeLimiter();
+    this.master.connect(comp); comp.connect(this.limiter); this.limiter.connect(ctx.destination);
+
+    /* reverb "ruang terbuka" — impulse response dibikin prosedural.
+       Dipangkas dari 2.6s ke 1.5s: konvolusi stereo 2.6s adalah node
+       paling mahal di seluruh graph dan di ponsel ia bikin audio thread
+       telat -> buffer underrun -> kresek. 1.5s terdengar sama untuk
+       ruang terbuka dan jauh lebih ringan. */
     this.reverb = ctx.createConvolver();
-    this.reverb.buffer = this._makeIR(2.6, 2.4);
-    this.reverbGain = ctx.createGain(); this.reverbGain.gain.value = 0.5;
+    this.reverb.buffer = this._makeIR(1.5, 2.6);
+    this.reverbGain = ctx.createGain(); this.reverbGain.gain.value = 0.34;
     this.reverb.connect(this.reverbGain); this.reverbGain.connect(this.master);
 
     /* bus */
@@ -66,13 +78,51 @@ export class AudioEngine {
     this._buildEngine();
     this._buildTire();
     this._buildWind();
+    this._buildNitro();
 
     this.ok = true;
     return true;
   }
 
   resume(){ if(this.ctx && this.ctx.state!=='running'){ this.ctx.resume().catch(()=>{}); } }
-  setMuted(m){ this.muted=m; if(this.master) this.master.gain.setTargetAtTime(m?0:0.85, this.ctx.currentTime, 0.05); }
+  /* Saat tab disembunyikan, matikan context sepenuhnya. Kalau dibiarkan
+     berjalan, browser men-throttle timer tapi audio thread tetap minta
+     data -> underrun -> "kresek" keras saat pemain kembali. */
+  suspend(){ if(this.ctx && this.ctx.state==='running') this.ctx.suspend().catch(()=>{}); }
+  setMuted(m){ this.muted=m; if(this.master) this.master.gain.setTargetAtTime(m?0:0.72, this.ctx.currentTime, 0.05); }
+
+  /* Limiter plafon-keras (gain terakhir sebelum speaker).
+     Kurva tanh jenuh mulus tepat di bawah 1.0, jadi puncak tajam
+     (backfire, NOS meletup, downshift) tidak pernah dipotong keras oleh
+     DAC. Oversample 4x supaya harmonik hasil saturasi tidak aliasing
+     menjadi "kresek". */
+  _makeLimiter(){
+    const ctx=this.ctx, len=4096, curve=new Float32Array(len);
+    const k=1.6, norm=Math.tanh(k);
+    for(let i=0;i<len;i++){
+      const x=i*2/len-1;
+      /* bagian bawah linear (suara pelang tidak berubah warna),
+         bagian atas melengkung lembut */
+      curve[i]= Math.abs(x)<0.55 ? x*0.94 : Math.tanh(k*x)/norm;
+    }
+    const ws=ctx.createWaveShaper(); ws.curve=curve; ws.oversample='4x';
+    const trim=ctx.createGain(); trim.gain.value=0.98;
+    ws.connect(trim);
+    return trim;
+  }
+
+  /* Setter param yang "sadar biaya".
+     setTargetAtTime dipanggil ~60x/detik untuk puluhan param. Kalau
+     nilainya nyaris tidak berubah, panggilan itu hanya membebani audio
+     thread (dan di beberapa browser memicu zipper noise karena kurva
+     lama dibatalkan terus-menerus). Lewati bila selisihnya < eps. */
+  _setP(param, value, tau){
+    if(!Number.isFinite(value)) return;
+    const last=param.__last;
+    if(last!==undefined && Math.abs(last-value) < (Math.abs(value)*0.004 + 1e-4)) return;
+    param.__last=value;
+    param.setTargetAtTime(value, this.ctx.currentTime, tau);
+  }
 
   /* ---------- utility ---------- */
   _makeIR(seconds, decay){
@@ -271,19 +321,24 @@ export class AudioEngine {
     /* firing frequency: tiap silinder menyala sekali per 2 putaran crank */
     const f=Math.max(18, rpm/60*(this.cylinders*0.5));
     const tau=0.035;
-    for(const {o,r} of e.oscs) o.frequency.setTargetAtTime(f*r, now, tau);
-    e.rough.frequency.setTargetAtTime(f*0.5, now, tau);
-    e.roughG.gain.setTargetAtTime(0.16 - 0.11*(rpm/8600), now, 0.08);   // kasar di idle, halus di atas
-    e.lp.frequency.setTargetAtTime(340 + f*2.4 + throttle*900, now, 0.06);
-    e.bp.frequency.setTargetAtTime(170 + f*0.85, now, 0.08);
+    for(const {o,r} of e.oscs) this._setP(o.frequency, f*r, tau);
+    /* LFO "kasar" wajib tetap SUB-AUDIO. Sebelumnya f*0.5 bisa mencapai
+       215 Hz pada 8600 rpm -> itu bukan getaran lagi melainkan
+       amplitude-modulation di rentang dengar, dan bunyinya persis
+       "kresek". Dibatasi 28 Hz; karakter "kasar di idle" dijaga lewat
+       KEDALAMAN, bukan frekuensi. */
+    this._setP(e.rough.frequency, Math.min(28, Math.max(9, f*0.42)), tau);
+    this._setP(e.roughG.gain, 0.17 - 0.115*(rpm/8600), 0.08);   // kasar di idle, halus di atas
+    this._setP(e.lp.frequency, 340 + f*2.4 + throttle*900, 0.06);
+    this._setP(e.bp.frequency, 170 + f*0.85, 0.08);
     const vol = on ? (0.085 + 0.20*load + 0.16*throttle) : 0.0;
-    e.out.gain.setTargetAtTime(vol, now, on?0.07:0.30);
-    e.ig.gain.setTargetAtTime(on ? (0.03 + 0.30*throttle*(0.35+rpm/12000)) : 0.0, now, 0.07);
+    if(Math.abs((e.out.gain.__last??0)-vol) > 0.0004){ e.out.gain.__last=vol; e.out.gain.setTargetAtTime(vol, now, on?0.07:0.30); }
+    this._setP(e.ig.gain, on ? (0.03 + 0.30*throttle*(0.35+rpm/12000)) : 0.0, 0.07);
     const turboAmt = on ? clamp((rpm-3600)/5000,0,1) * (0.25+0.75*throttle) : 0;
-    e.turbG.gain.setTargetAtTime(turboAmt*0.030, now, 0.09);
-    e.turb.frequency.setTargetAtTime(1500 + rpm*0.30, now, 0.09);
-    e.turb2G.gain.setTargetAtTime(turboAmt*0.021, now, 0.12);
-    e.turb2.frequency.setTargetAtTime(1560 + rpm*0.315, now, 0.12);
+    this._setP(e.turbG.gain, turboAmt*0.030, 0.09);
+    this._setP(e.turb.frequency, 1500 + rpm*0.30, 0.09);
+    this._setP(e.turb2G.gain, turboAmt*0.021, 0.12);
+    this._setP(e.turb2.frequency, 1560 + rpm*0.315, 0.12);
 
     /* WASTEGATE / blow-off: lepas gas mendadak di rpm atas -> "stututu".
        Dipicu sekali per transisi (bukan tiap frame) + cooldown 0.30 s. */
@@ -327,9 +382,11 @@ export class AudioEngine {
   setTireSlip(slip01, speed01){
     if(!this.ok) return;
     const now=this.ctx.currentTime, s=clamp(slip01,0,1);
-    this.tire.g.gain.setTargetAtTime(s*0.115*Math.min(1,speed01*2.4), now, 0.045);
-    this.tire.g2.gain.setTargetAtTime(s*0.045*Math.min(1,speed01*2.4), now, 0.05);
-    this.tire.bp.frequency.setTargetAtTime(2000+s*1500+Math.random()*90, now, 0.09);
+    this._setP(this.tire.g.gain, s*0.115*Math.min(1,speed01*2.4), 0.045);
+    this._setP(this.tire.g2.gain, s*0.045*Math.min(1,speed01*2.4), 0.05);
+    /* TIDAK boleh ada Math.random() di jalur per-frame: frekuensi filter
+       yang di-random tiap 16ms terdengar sebagai zipper noise ("krrk"). */
+    this._setP(this.tire.bp.frequency, 2000+s*1500, 0.09);
   }
 
   /* ---------- angin (dipakai jalan kaki & mobil) ---------- */
@@ -346,8 +403,8 @@ export class AudioEngine {
   setRush(speed01){
     if(!this.ok) return;
     const now=this.ctx.currentTime, s=clamp(speed01,0,1);
-    this.rush.g.gain.setTargetAtTime(s*s*0.075, now, 0.12);
-    this.rush.lp.frequency.setTargetAtTime(320+s*2200, now, 0.15);
+    this._setP(this.rush.g.gain, s*s*0.075, 0.12);
+    this._setP(this.rush.lp.frequency, 320+s*2200, 0.15);
   }
 
   /* ---------- one-shot ---------- */
@@ -361,7 +418,10 @@ export class AudioEngine {
     g.gain.exponentialRampToValueAtTime(vol,now+0.006);
     g.gain.exponentialRampToValueAtTime(0.0001,now+dur);
     n.connect(f); f.connect(g); g.connect(this.master); g.connect(this.sendRev);
-    n.start(now, Math.random()*2.0, dur+0.05); n.stop(now+dur+0.06);
+    /* offset acak dibatasi supaya offset+durasi tidak melewati ujung
+       buffer 3 detik; kalau lewat, node berhenti mendadak -> klik. */
+    const off = Math.min(Math.random()*2.0, Math.max(0, (this.noiseBuf?this.noiseBuf.duration:3) - dur - 0.08));
+    n.start(now, off, dur+0.05); n.stop(now+dur+0.06);
   }
 
   impact(force=1){
@@ -390,6 +450,85 @@ export class AudioEngine {
     this._burst({freq:900,q:0.6,dur:0.12,vol:0.16,to:200});
   }
   gearShift(){ this._burst({freq:2600,q:2.4,dur:0.05,vol:0.05}); }
+
+  /* ============================================================
+     NITRO / NOS — "sssHHH" khas mobil arcade.
+     Dibuat SEKALI lalu di-mute/un-mute, bukan dibuat ulang tiap
+     dipakai: membuat 3 oscillator + 3 filter tiap kali NOS ditekan
+     justru sumber klik, dan mahal di ponsel.
+  ============================================================ */
+  _buildNitro(){
+    const ctx=this.ctx;
+    const g=ctx.createGain(); g.gain.value=0;
+    /* 1) desis gas bertekanan: noise -> highpass -> bandpass menyempit */
+    const n=this._noiseSrc(true);
+    const hp=ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=900;
+    const bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2400; bp.Q.value=1.6;
+    const ng=ctx.createGain(); ng.gain.value=0.55;
+    n.connect(hp); hp.connect(bp); bp.connect(ng); ng.connect(g);
+    /* 2) dorongan rendah: dua sawtooth naik, memberi rasa "ditembak" */
+    const o1=ctx.createOscillator(); o1.type='sawtooth'; o1.frequency.value=90;
+    const o2=ctx.createOscillator(); o2.type='sawtooth'; o2.frequency.value=136;
+    const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1400; lp.Q.value=3.0;
+    const og=ctx.createGain(); og.gain.value=0.30;
+    o1.connect(lp); o2.connect(lp); lp.connect(og); og.connect(g);
+    g.connect(this.carBus); g.connect(this.sendRev);
+    n.start(); o1.start(); o2.start();
+    this.nitro={g,ng,og,bp,lp,n,o1,o2};
+  }
+
+  /* active: bool. Dipanggil dari car.js hanya saat STATUS berubah. */
+  setNitro(active, strength=1){
+    if(!this.ok) return;
+    const e=this.nitro; if(!e) return;
+    const now=this.ctx.currentTime, s=clamp(strength,0.2,1.4);
+    if(active && !this._nitroOn){
+      this._nitroOn=true;
+      /* "pukulan" awal: bandpass menyapu naik, terasa seperti valve membuka */
+      e.bp.frequency.cancelScheduledValues(now);
+      e.bp.frequency.setValueAtTime(1500,now);
+      e.bp.frequency.exponentialRampToValueAtTime(3800,now+0.22);
+      e.g.gain.cancelScheduledValues(now);
+      e.g.gain.setValueAtTime(0.0001,now);
+      e.g.gain.exponentialRampToValueAtTime(0.30*s,now+0.05);
+      this._burst({freq:1700,q:1.1,dur:0.16,vol:0.13*s,to:3200});
+    } else if(active){
+      this._setP(e.g.gain, 0.30*s, 0.06);
+    } else if(this._nitroOn){
+      this._nitroOn=false;
+      e.g.gain.cancelScheduledValues(now);
+      e.g.gain.setTargetAtTime(0, now, 0.05);
+      /* blow-off saat dilepas */
+      this._burst({freq:2600,q:2.0,dur:0.20,vol:0.10,to:900});
+    }
+  }
+
+  /* ---------- letupan knalpot (exhaust pop / decel "meletup") ----------
+     Dibedakan dari backfire(): ini pendek, kering, dan boleh beruntun.
+     Dipakai saat lepas gas di kecepatan tinggi dan saat NOS habis. */
+  exhaustPop(intensity=1){
+    if(!this.ok) return;
+    const ctx=this.ctx, now=ctx.currentTime, i=clamp(intensity,0.3,1.6);
+    /* throttle keras: maksimal 1 letupan per 55ms supaya tidak jadi
+       "kresek" saat beberapa roda/mechanic memicunya bersamaan */
+    if(this._popCd && now - this._popCd < 0.055) return;
+    this._popCd=now;
+    const o=ctx.createOscillator(); o.type='square';
+    const f0=150+Math.random()*120;
+    o.frequency.setValueAtTime(f0,now);
+    o.frequency.exponentialRampToValueAtTime(Math.max(38,f0*0.34),now+0.055);
+    const g=ctx.createGain();
+    g.gain.setValueAtTime(0.0001,now);
+    /* attack 9ms (bukan 4ms): cukup cepat untuk terasa menendang,
+       cukup lambat untuk tidak berbunyi "klik" */
+    g.gain.exponentialRampToValueAtTime(0.13*i,now+0.009);
+    g.gain.exponentialRampToValueAtTime(0.0001,now+0.10);
+    const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=2200;
+    o.connect(lp); lp.connect(g); g.connect(this.carBus); g.connect(this.sendRev);
+    o.start(now); o.stop(now+0.12);
+    /* percikan api: noise sangat pendek di frekuensi tinggi */
+    this._burst({freq:2600+Math.random()*900, q:1.3, dur:0.055, vol:0.075*i, to:900});
+  }
   door(open){
     if(!this.ok) return;
     this._burst({freq:open?520:700, q:1.6, dur:0.16, vol:0.14, to:open?260:180});
