@@ -106,6 +106,38 @@ python -m http.server 8000
 
 Untuk Android: deploy ke GitHub Pages / Netlify, lalu buka di Chrome. Warna sudah fix.
 
+## 🌐 Deploy ke Vercel
+
+Site ini 100% static (framework: **Other**, tanpa build command), jadi Vercel tinggal serve file apa adanya.
+
+**Penting: Vercel hanya baca dari push GitHub.** Alurnya:
+
+```
+edit code → git push ke GitHub (main) → Vercel auto-deploy → URL update
+```
+
+Kalau kamu edit tapi **belum `git push`**, Vercel tidak akan pernah berubah.
+
+**Setup sekali:**
+1. [vercel.com](https://vercel.com) → **Add New → Project** → import `KyokoApp/rpg`
+2. Framework Preset: **Other** (biarkan build command kosong)
+3. **Deploy**
+
+**Setiap kali ada perubahan:**
+```bash
+git add -A
+git commit -m "update game"
+git push origin main
+```
+→ Vercel auto-deploy dalam hitungan detik. Cek di dashboard → tab **Deployments**.
+
+**Cek versi di browser:** layar start ada tag versi (mis. `v1.1`) di baris credit — naikkan konstanta `VERSION` di `index.html` tiap rilis biar gampang yakin deploy baru sudah live. `vercel.json` sudah set `Cache-Control` no-cache di `index.html` supaya browser tidak nyimpan versi lama.
+
+Kalau deploy Vercel "nyangkut" padahal push sudah masuk:
+- Dashboard → **Settings → Git** → pastikan **Production Branch = `main`**
+- Klik **Redeploy** di deployment terakhir
+- Hard refresh browser (Ctrl+Shift+R) / buka mode incognito
+
 ## 🔧 Tech Detail Penting
 
 - **Material Fix:** CanvasTexture ramp bukan DataTexture RedFormat → fix Adreno white bug

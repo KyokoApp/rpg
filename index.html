@@ -93,7 +93,7 @@
   </div>
   <div class="cta" id="ctaText">— Klik untuk memulai —</div>
   <p class="installHint" id="installHint" style="display:none">💡 Di Android: menu Chrome ⋮ → <b>Tambahkan ke layar utama</b> untuk full-screen.</p>
-  <div class="credit">Three.js · Aether · Cel Shading · GPU Grass & Fauna</div>
+  <div class="credit">Three.js · Aether · Cel Shading · GPU Grass & Fauna · <span id="versionTag" style="color:#8ff0c0">v…</span></div>
   <div id="loadStatus">Loading...</div>
 </div>
 
@@ -113,7 +113,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
-console.log('[BOOT] Old stable + Aether character');
+const VERSION = 'v1.1'; // naikkan tiap deploy buat cek versi di layar
+console.log('[BOOT] Old stable + Aether character — ' + VERSION);
+document.getElementById('versionTag').textContent = VERSION;
 
 // ===== DETEKSI PERANGKAT - SAMA PERSIS VERSI LAWAS =====
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches);
