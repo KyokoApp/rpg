@@ -6,19 +6,17 @@ di repo. Tidak perlu `npm install`, tidak perlu `package.json`, tidak perlu buil
 
 ```bash
 cd rpg
-node tools/check-imports.mjs   # module graph utuh? (penjaga bug halaman blank)
-node tests/car.physics.mjs     # 11 skenario fisika mobil
-node tests/audio.graph.mjs     # validasi graph WebAudio + aturan parameternya
+node tools/check-imports.mjs                # module graph utuh? (penjaga bug halaman blank)
+node --test tests/*.test.cjs tests/*.mjs    # suite node:test (lihat tabel di bawah)
+node tests/car.physics.mjs                  # 11 skenario fisika mobil
+node tests/audio.graph.mjs                  # validasi graph WebAudio + aturan parameternya
+node tests/pwa.test.mjs                     # PWA: manifest, precache, SW, ikon, path relatif
 ```
 
-Ketiganya mengatur `process.exitCode` sesuai hasil (0 = lulus, 1 = ada kegagalan),
-jadi aman dipakai di CI — lihat `.github/workflows/verify.yml`, yang menjalankan
-ketiganya di setiap push dan setiap pull request.
-
-Folder ini juga berisi **suite kedua** milik regresi dunia/karakter
-(`tests/*.test.cjs`, dijalankan `.github/workflows/test.yml` lewat
-`node --test tests/*.test.cjs`). Keduanya hidup berdampingan: pola nama
-`*.test.cjs` tidak cocok dengan file `.mjs` di atas, jadi tidak saling ganggu.
+Semuanya mengatur exit code sesuai hasil (0 = lulus, 1 = ada kegagalan),
+jadi aman dipakai di CI — `.github/workflows/verify.yml` menjalankan semuanya
+di setiap push dan pull request, dan `.github/workflows/test.yml` menjalankan
+suite `node:test`.
 
 Butuh **Node ≥ 22.15** (untuk `module.registerHooks`).
 
@@ -30,6 +28,8 @@ Butuh **Node ≥ 22.15** (untuk `module.registerHooks`).
 | `stubs.mjs` | Stub `document`, `canvas` 2D context, `matchMedia`, `requestAnimationFrame` — cukup supaya `js/car.js` bisa membangun scene graph tanpa DOM sungguhan. |
 | `car.physics.mjs` | 11 skenario fisika. `terrainH()`, `WORLD_LIMIT`, dan `WATER_LEVEL` **diimpor langsung dari `game/world-data.mjs`** — sumber yang sama dipakai `index.html` — supaya tes tidak pernah tidak sinkron dengan dunia game. |
 | `audio.graph.mjs` | Stub `AudioContext` yang **mencatat setiap nilai parameter** lalu menegakkan aturan WebAudio asli. |
+| `car.model.test.mjs` | **Pipeline GLB mobil** (`js/car.js`) diuji headless dengan *mirror* adegan yang faithful terhadap `GLTFLoader` (node ber-mesh = `THREE.Mesh`, matriks node di-decompose, bbox dari min/max accessor) — deteksi 4 roda `car.glb` (tanpa 46 group setir interior), arah nose, flip sekali, panjang/tanjakan, pivot, hingga animasi "semua roda berputar + hanya depan menyetir" lewat `Car.update` sungguhan. Plus model sintetis untuk edge-case (setir interior, sumbu panjang di X, root berotasi ala Sketchfab, roda tanpa nama). |
+| `pwa.test.mjs` | Manifest valid + path relatif, ikon PNG benar-benar valid dengan dimensi sesuai, **precache `sw.js` mencakup semua aset game dan semua path-nya eksis**, alur update `SKIP_WAITING`/banner "Perbarui", registrasi SW relatif di `index.html`, `make-icons.mjs` deterministik (byte-identik), dan `vercel.json` no-cache untuk `sw.js`/manifest. |
 
 ## Apa yang dijamin `car.physics.mjs`
 
@@ -75,5 +75,9 @@ di browser**, jadi tes ini menangkap bug yang tidak kelihatan dari membaca kode:
   browser.
 - `js/car.js` membangun geometry lewat three.js asli, jadi jumlah mesh/segitiga bisa
   dihitung headless — tapi warna, bayangan, dan komposisi tidak.
-- Belum ada runner terpadu (`npm test`) dan belum ada CI; keduanya harus dipanggil
-  manual.
+- Mirror GLB di `car.model.test.mjs` memakai bounding box primitif (bukan
+  vertex-by-vertex): cukup untuk pipeline (deteksi/align/pivot/animasi) karena
+  yang dibutuhkan hanyalah transformasi dan bbox, tapi bukan untuk menilai
+  bentuk visual.
+- PWA dites struktural (manifest/SW/path/ikon) — perilaku *service worker sungguhan*
+  (preflight, update di browser nyata) tetap perlu dicek sekali di browser.

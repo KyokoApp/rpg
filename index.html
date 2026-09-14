@@ -2,8 +2,17 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Orb Hunt — Aurelia — The Seven Realms</title>
+<meta name="description" content="Game dunia fantasy 24×24 km: kumpulkan 12 orb purba dan jelajah dengan mobil balap. Bisa dipasang sebagai aplikasi dan dimainkan offline.">
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#151a1c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Orb Hunt">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="./icons/icon-192.png">
 <link rel="stylesheet" href="./game/hud.css">
 <link rel="stylesheet" href="./game/car.css">
 </head>
@@ -17,6 +26,7 @@
   <button id="mapBtn" aria-label="Buka peta"><canvas id="minimap" width="256" height="256"></canvas><span class="north">N</span><span class="map-caption" id="regionLabel">AURELIA HEARTLANDS</span></button>
   <div id="topbar"><div class="stat" id="orbStat"><span class="label">Orb purba</span><span class="value">0 / 12</span></div><div class="stat" id="timeStat"><span class="label">Eksplorasi</span><span id="timeVal" class="value">0.0s</span></div></div>
   <nav id="topActions" aria-label="Menu permainan">
+    <button id="fullscreenBtn" class="icon-button" aria-label="Layar penuh" title="Layar penuh"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 13V8h5M24 13V8h-5M8 19v5h5M24 19v5h-5"/></svg></button>
     <button id="muteBtn" class="icon-button" aria-label="Bisu" title="Bisu (N)"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 12.5h4l6-5v17l-6-5H7z"/><g id="muteWaves"><path d="M21 12c1.8 2.4 1.8 5.6 0 8"/><path d="M24.5 9c3.2 4 3.2 10 0 14"/></g></svg></button>
     <button id="settingsBtn" class="icon-button" aria-label="Pengaturan"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m13 3-1 4-4 2-4-1-2 5 3 3-1 4 4 3 4-1 3 3 5-2 1-4 4-2-1-5-4-1-2-4Z"/><circle cx="14" cy="14" r="4"/></svg></button>
     <button id="pauseBtn" class="icon-button" aria-label="Jeda permainan"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M11 7v18M21 7v18"/></svg></button>
@@ -31,6 +41,18 @@
   <button class="tBtn" id="jumpBtn" type="button" aria-label="Lompat"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="19" cy="5" r="2" fill="currentColor" stroke="none"/><path d="m16 10-5 6-6-2m11-4 5 3 5-6m-10 3-3 10 6 7m-6-7-7 6" stroke-width="2.8"/></svg></button>
   <button class="tBtn hide" id="carBtn" type="button" aria-label="Mobil"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4.5 19.5v-3.2l2.2-4.6A2.8 2.8 0 0 1 9.2 10h13.6a2.8 2.8 0 0 1 2.5 1.7l2.2 4.6v3.2"/><path d="M4.5 19.5h23"/><path d="M7 19.5v2.8h3.4v-2.8M21.6 19.5v2.8H25v-2.8"/><path d="M8.5 16h15"/></svg></button>
   <span id="attackHint">TAP TO STRIKE</span>
+</div>
+<div id="rotateOverlay" class="hidden" role="dialog" aria-modal="false" aria-live="polite" aria-label="Permintaan putar perangkat">
+  <div class="rotate-card">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><rect x="23" y="13" width="18" height="30" rx="3.5" transform="rotate(90 32 28)"/><path d="M44 44a15 15 0 0 1-9.5 7.4"/><path d="M34.5 47.5l-2-3.4 4-.4"/></svg>
+    <h2>Putar perangkatmu</h2>
+    <p>Orb Hunt dirancang untuk <b>layar mendatar</b>. Putar ponsel ke posisi landscape untuk tampilan terbaik — atau lanjutkan seperti ini.</p>
+    <button id="rotateDismiss" type="button">Lanjut tetap</button>
+  </div>
+</div>
+<div id="updateBanner" class="hidden" role="status" aria-live="polite">
+  <span>Versi baru tersedia.</span>
+  <button id="updateBtn" type="button">Perbarui</button>
 </div>
 <div id="settingsPanel" class="panel-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle"><section class="panel">
   <header class="panel-header"><h2 id="settingsTitle">Pengaturan</h2><button class="close-panel" data-close-panel aria-label="Tutup pengaturan"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m8 8 16 16M24 8 8 24"/></svg></button></header>
@@ -432,6 +454,99 @@ let mouseLookFallback = false;
 const hud = document.getElementById('hud');
 const startOverlay = document.getElementById('startOverlay');
 const winOverlay = document.getElementById('winOverlay');
+
+/* ============================================================
+   MODE IMMERSIVE — fullscreen + landscape (PWA)
+   Dipanggil dari gesture "klik/ketuk mulai" supaya request
+   fullscreen selalu sah. Kalau browser MENOLAK atau tidak
+   mendukung, game tetap berjalan normal — fullscreen opsional.
+============================================================ */
+const rotateOverlay = document.getElementById('rotateOverlay');
+const fullscreenBtn = document.getElementById('fullscreenBtn');
+let rotateDismissed = false;   // pengguna memilih tetap portrait
+function isPortrait(){ return innerWidth < innerHeight; }
+function maybeShowRotate(){
+  const show = isPortrait() && !rotateDismissed
+    && (document.fullscreenElement || state === 'playing' || state === 'paused');
+  rotateOverlay.classList.toggle('hidden', !show);
+}
+function syncFullscreenBtn(){
+  const on = !!document.fullscreenElement;
+  fullscreenBtn.setAttribute('aria-label', on ? 'Keluar layar penuh' : 'Layar penuh');
+  fullscreenBtn.setAttribute('title', on ? 'Keluar layar penuh' : 'Layar penuh');
+  fullscreenBtn.classList.toggle('on', on);
+}
+function requestFs(){
+  const el = document.documentElement;
+  const p = el.requestFullscreen
+    ? el.requestFullscreen({ navigationUI: 'hide' })
+    : (el.webkitRequestFullscreen ? el.webkitRequestFullscreen() : Promise.reject(new Error('unsupported')));
+  return Promise.resolve(p);
+}
+async function enterImmersive(){
+  if (document.fullscreenElement){ maybeShowRotate(); return; }
+  try {
+    await requestFs();
+    if (screen.orientation && screen.orientation.lock)
+      screen.orientation.lock('landscape').catch(() => {});   // lock opsional
+  } catch (err) { /* ditolak/tidak didukung: lanjut normal */ }
+  maybeShowRotate();
+}
+async function toggleFullscreen(){
+  try {
+    if (document.fullscreenElement) await Promise.resolve(document.exitFullscreen());
+    else { await enterImmersive(); }
+  } catch (err) { /* diam-diam: game tetap bisa dimainkan */ }
+}
+document.addEventListener('fullscreenchange', () => { syncFullscreenBtn(); maybeShowRotate(); });
+document.addEventListener('fullscreenerror', () => maybeShowRotate());
+addEventListener('resize', () => maybeShowRotate());   // overlay hilang sendiri saat diputar
+fullscreenBtn.addEventListener('click', e => { e.stopPropagation(); toggleFullscreen(); });
+document.getElementById('rotateDismiss').addEventListener('click', () => {
+  rotateDismissed = true;
+  rotateOverlay.classList.add('hidden');
+});
+
+/* ============================================================
+   PWA — service worker + banner "Perbarui"
+   Registrasi relatif ('./sw.js') agar jalan di Vercel & GitHub
+   Pages. Reload HANYA saat pengguna klik "Perbarui" (SKIP_WAITING)
+   atau saat controller baru benar-benar memegang halaman.
+============================================================ */
+const updateBanner = document.getElementById('updateBanner');
+const updateBtn = document.getElementById('updateBtn');
+let updateAvailable = false, swReloading = false;
+function showUpdateBanner(){ updateAvailable = true; updateBanner.classList.remove('hidden'); }
+updateBtn.addEventListener('click', () => {
+  if (swReloading) return;
+  swReloading = true;
+  updateBanner.classList.add('hidden');
+  const reg = ('serviceWorker' in navigator) ? navigator.serviceWorker.registration : null;
+  if (reg && reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+  setTimeout(() => location.reload(), 3000);   // fallback bila controllerchange lambat
+});
+if ('serviceWorker' in navigator){
+  addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner();
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller){
+            showUpdateBanner();   // versi baru menunggu di belakang — tawarkan Perbarui
+          } else if (nw.state === 'redundent'){
+            console.warn('[SW] worker baru gagal menjadi aktif');
+          }
+        });
+      });
+    }).catch((e) => console.warn('[SW] register gagal:', e));
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (updateAvailable || swReloading) location.reload();
+    });
+  });
+}
+syncFullscreenBtn();
 const elTime = document.getElementById('timeVal');
 const elOrb  = document.querySelector('#orbStat .value');
 const elStamWrap=document.getElementById('staminaWrap'), elStamBar=document.getElementById('staminaBar'), elSpeed=document.getElementById('speedLines');
@@ -457,11 +572,12 @@ renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 // INI KUNCI VERSI LAWAS YANG WORK - JANGAN UBAH!
 startOverlay.addEventListener('click', () => {
   if(!CHAR.ready) return;
+  enterImmersive();   // fullscreen + lock landscape dari dalam gesture; aman kalau ditolak
   // Di dalam mobil pointer lock sengaja tidak dipakai: kursor perlu untuk tombol HUD.
   if (isTouch || mode === 'car'){ if (state === 'ready' || state === 'paused') startGame(); }
   else requestLock();
 });
-winOverlay.addEventListener('click', () => { resetGame(); if (!isTouch) requestLock(); });
+winOverlay.addEventListener('click', () => { resetGame(); enterImmersive(); if (!isTouch) requestLock(); });
 document.addEventListener('pointerlockchange', () => {
   lockPending = false;
   locked = document.pointerLockElement === renderer.domElement;

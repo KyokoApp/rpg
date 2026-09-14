@@ -28,3 +28,18 @@ button,input{font:inherit}button{color:inherit;cursor:pointer}button:focus-visib
 @media(max-width:540px) and (orientation:portrait){.atlas-chart{width:100%}.atlas-sidebar #waypointList{max-height:none}.map-panel{width:100%}}
 .atlas-sidebar #waypointList{max-height:max(95px,calc(90dvh - 300px))}.atlas-sidebar .waypoint-button{padding:5px 8px;margin:2px 0;font-size:12px;line-height:14px}
 @media(max-width:540px) and (orientation:portrait){.atlas-sidebar #waypointList{max-height:none}.atlas-sidebar .waypoint-button{padding:9px 5px;margin:0;font-size:11px}}
+
+/* ===== PWA: tombol fullscreen, overlay putar, banner update ===== */
+#fullscreenBtn.on svg{stroke:#e8d4a1}
+#rotateOverlay{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:#10181ae6;backdrop-filter:blur(6px);padding:24px}
+.rotate-card{max-width:380px;text-align:center;background:#1b2b26f2;border:1px solid #e8d4a140;border-radius:6px;padding:30px 28px;box-shadow:0 18px 70px #000a}
+.rotate-card svg{width:74px;height:74px;color:#ffd469;filter:drop-shadow(0 3px 8px #0007);animation:rotateNudge 2.4s ease-in-out infinite}
+@keyframes rotateNudge{0%,100%{transform:rotate(0)}50%{transform:rotate(90deg)}}
+.rotate-card h2{font-size:21px;font-weight:400;letter-spacing:2px;margin-top:18px;color:#fff8df}
+.rotate-card p{font:13px/1.8 system-ui;color:#cfd6c9;margin-top:10px}
+.rotate-card p b{color:#ffe08a}
+#rotateDismiss{margin-top:20px;padding:10px 22px;background:#4b6059;color:#fff8e4;border:0;border-radius:2px;letter-spacing:1px;font-size:12px}
+#rotateDismiss:hover{background:#587a6e}
+#updateBanner{position:fixed;left:50%;bottom:max(22px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:30;display:flex;gap:14px;align-items:center;background:#24382df2;border:1px solid #e8d4a155;border-radius:3px;padding:10px 14px;font:13px system-ui;color:#fff8e4;box-shadow:0 8px 34px #0009;white-space:nowrap}
+#updateBtn{background:#4b6059;color:#fff8e4;border:0;border-radius:2px;padding:8px 18px;letter-spacing:.6px;font-size:12px;transition:background .15s}
+#updateBtn:hover{background:#587a6e}

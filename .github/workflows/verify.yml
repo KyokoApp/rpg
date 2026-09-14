@@ -40,11 +40,20 @@ jobs:
           '
           node --check /tmp/_idx.mjs && echo "OK  index.html <script type=module>"
 
+      # Suite node:test: regression (script index.html), world, motion,
+      # car.model (pipeline GLB roda/nose/align via mirror faithful) dan
+      # pwa (manifest, precache, SW, ikon, path relatif).
+      - name: Tes node:test (regression, world, motion, car.model, pwa)
+        run: node --test tests/*.test.cjs tests/*.mjs
+
       - name: Tes fisika mobil (11 skenario headless)
         run: node tests/car.physics.mjs
 
       - name: Tes graph audio (aturan parameter WebAudio)
         run: node tests/audio.graph.mjs
+
+      - name: Tes PWA (panggilan eksplisit sesuai SOP)
+        run: node tests/pwa.test.mjs
 
       # Memastikan addon yang di-vendor tidak pernah bercampur versi dengan
       # three.module.js. Kalau salah satu di-upgrade tanpa yang lain, GLTFLoader
