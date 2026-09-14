@@ -974,7 +974,12 @@ let score = 0, elapsed = 0;
    kalau semua efek Mati, PostFX.render() langsung merender ke kanvas
    tanpa render target sama sekali. */
 const postfx = new PostFX(renderer);
-const postOpts = { blur01:0, blurDir:new THREE.Vector2(), sunScreen:{x:0.5,y:0.35}, sunVisible:true };
+/* sunScreen HARUS Vector2, bukan objek polos: blok di animate() memanggil
+   .set() padanya. Objek polos tidak punya .set(), jadi setiap frame melempar
+   TypeError — dan karena requestAnimationFrame dipanggil di baris pertama
+   animate(), loop tetap hidup sementara canvas tidak pernah digambar.
+   Hasilnya layar hitam dengan UI tetap terlihat. */
+const postOpts = { blur01:0, blurDir:new THREE.Vector2(), sunScreen:new THREE.Vector2(0.5,0.35), sunVisible:true };
 const _sunProj = new THREE.Vector3();
 
 /* ============================================================
