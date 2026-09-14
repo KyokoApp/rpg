@@ -78,7 +78,41 @@ tapi **tidak** membawa header lisensinya sendiri):
 
 ---
 
-## 3. Kode game (`index.html`, `js/car.js`, `js/audio.js`)
+## 3. Model mobil — `car.glb`
+
+| Field | Nilai |
+|---|---|
+| Judul | **2025 BMW M4 GT3 EVO G82** |
+| Author | **Ddiaz Design** |
+| Sumber | https://sketchfab.com/3d-models/2025-bmw-m4-gt3-evo-g82-113f83dd87064697a5ec2511d280b9d5 |
+| Profil author | https://sketchfab.com/ddiaz-design |
+| Lisensi | **CC-BY-NC-SA-4.0** — http://creativecommons.org/licenses/by-nc-sa/4.0/ |
+| Generator | Sketchfab-0.13.0 (glTF 2.0) |
+
+Informasi di atas diambil langsung dari `asset.extras` di dalam `car.glb`,
+jadi bisa diverifikasi ulang kapan saja (metode sama seperti `character.glb` di atas).
+
+**Kewajiban CC-BY-NC-SA-4.0:** menyebut nama pembuat, judul, sumber, dan lisensi;
+menyatakan perubahan; hasil turunan harus memakai lisensi yang sama; **komersial
+dilarang**. Perubahan yang dilakukan repo ini terhadap model:
+
+- Dipakai apa adanya — tidak ada mesh yang dihapus atau di-edit.
+- Saat runtime (`js/car.js → alignCarModel`) model di-luruskan: sumbu terpanjang
+  ke Z, nose ke −Z (auto-deteksi dari posisi roda), di-scale agar panjang = 4,55 m,
+  dipusatkan, dan diturunkan supaya ban napak. Semua itu transformasi scene graph,
+  bukan modifikasi file.
+- Roda dianimasikan lewat pivot baru yang dibuat runtime (putar sesuai kecepatan,
+  roda depan ikut setir); node asli GLB tidak diubah.
+
+> Catatan IP: *BMW M4 GT3* dan merek BMW adalah milik **BMW AG**. Model di atas
+> dirilis author-nya di bawah CC-BY-NC-SA-4.0. Repo ini tidak berafiliasi dengan
+> BMW dan tidak mengklaim kepemilikan atas merek tersebut. Batas **non-komersial**
+> dari lisensi model mewajibkan project ini tetap non-komersial selama memakai
+> `car.glb`.
+
+---
+
+## 4. Kode game (`index.html`, `js/car.js`, `js/audio.js`)
 
 Seluruh kode game ditulis sendiri oleh pemilik repo — dunia & pemain di
 `index.html`, mobil di `js/car.js`, audio di `js/audio.js` — **kecuali** bagian yang
@@ -97,12 +131,12 @@ Kalau memang mau dibuka, tambahkan file `LICENSE`. Pilihan umum:
 - **CC-BY-NC-4.0** — kalau mau boleh dipakai asal non-komersial.
 
 Jangan lupa: lisensi kode **tidak** menimpa lisensi aset. `character.glb` tetap
-CC-BY-4.0 milik Seifert dan `three.module.js` tetap MIT, apa pun lisensi yang
-dipilih untuk kode.
+CC-BY-4.0 milik Seifert, `car.glb` tetap CC-BY-NC-SA-4.0 milik Ddiaz Design,
+dan `three.module.js` tetap MIT, apa pun lisensi yang dipilih untuk kode.
 
 ---
 
-## 4. Yang TIDAK dipakai
+## 5. Yang TIDAK dipakai
 
 Supaya tidak salah kredit:
 

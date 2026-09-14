@@ -24,6 +24,47 @@ Repo ini terhubung ke Vercel lewat Git integration, jadi **setiap push ter-deplo
 
 Preview branch berbeda dari production: jika production memakai `main`, merge PR setelah memeriksa preview. Preview Vercel dilindungi *Vercel Authentication* secara default, jadi perlu login ke akun Vercel untuk membukanya; production tetap publik.
 
+## 📲 PWA — install, offline, update
+
+Game ini adalah **Progressive Web App**: bisa dipasang seperti aplikasi native dan **diputarkan offline total** setelah kunjungan pertama online. Semua path relatif (`./...`), jadi perilaku sama di Vercel maupun GitHub Pages (root atau sub-path).
+
+| Komponen | File |
+| --- | --- |
+| Manifest (nama, ikon, `display: standalone`, `orientation: landscape`) | `manifest.webmanifest` |
+| Service worker (precache + strategi fetch + alur update) | `sw.js` |
+| Ikon 192×192, 512×512, 512 maskable, apple 180×180 | `icons/` (di-generate `node tools/make-icons.mjs`) |
+| Wiring: registrasi SW, banner "Perbarui", fullscreen, overlay putar | `index.html` + `game/hud.css` |
+
+### Install (Android / Chrome)
+
+1. Buka production di Chrome Android.
+2. Menu **⋮ → "Tambahkan ke layar utama"** / *"Add to Home screen"* — atau ketuk ikon **⊕** di address bar (*"Install app"*).
+3. Ikon **Orb Hunt** muncul di layar utama; saat dibuka ia jalan **standalone** (tanpa address bar).
+
+iPhone/iPad: **Safari → ikon bagikan → "Layar Beranda"**. (Service worker di iOS terbatas pada PWA yang terinstall; offline penuh di Android/Chrome/Edge.)
+
+### Offline
+
+Saat `sw.js` ter-install, **seluruh aset** di-cache: `index.html`, semua file `game/`, `js/`, `jsm/`, `three.module.js`, `character.glb`, `car.glb`, manifest, dan ikon. Setelah itu:
+
+- Buka game **tanpa internet** → langsung jalan (navigasi `network-first`: online = selalu segar, offline = cache).
+- Aset lain yang belum pernah diakses di-cache saat pertama kali diminta (`cache-first`).
+
+### Update
+
+Versi cache dikelola oleh **satu string** di `sw.js`: `const VERSION = 'v1'`. Naikkan jadi `v2` dsb. setiap kali aset berubah — cache lama otomatis dibuang saat versi baru aktif. Alurnya terkendali:
+
+1. Push ke `main` → Vercel deploy. `sw.js` & `manifest.webmanifest` di-serve `no-cache` (`vercel.json`) jadi browser selalu mengunduh yang baru.
+2. Browser mendeteksi worker baru → halaman menampilkan banner **"Versi baru tersedia — Perbarui"**.
+3. Klik **Perbarui** → worker lama diganti (`SKIP_WAITING`) dan halaman reload. **Tanpa** klik, versi lama tetap jalan (tidak ada penggantian di tengah permainan).
+
+### Fullscreen & landscape
+
+- Klik/ketuk **mulai** (atau tombol mulai lagi setelah menang) meminta **fullscreen** *dari dalam gesture* — syarat Chrome — lalu mencoba `screen.orientation.lock('landscape')` (opsional; banyak browser mobile menolak lock di web, dan itu aman).
+- Kalau fullscreen **ditolak atau tidak didukung, game tetap jalan normal** — fullscreen murni kenyamanan.
+- Saat layar **portrait** (mis. ponsel tidak diputar), muncul overlay **"Putar perangkatmu"** dengan tombol *Lanjut tetap*; overlay hilang sendiri begitu layar menjadi landscape atau user menutupnya.
+- Tombol **⛶ layar penuh** di HUD (kanan atas) untuk masuk/keluar fullscreen kapan saja.
+
 ## Kontrol
 
 ### Desktop
@@ -128,7 +169,17 @@ Fisika dan rendering mobil ada di **`js/car.js`** (dependency-injected), HUD-nya
 
 ### Aset & biaya render
 
-`car.loadModel('./car.glb')` dipanggil saat init: kalau file GLB ada, model procedural otomatis diganti (termasuk pelurusan sumbu dan deteksi roda lewat nama node). **`car.glb` belum ada di repo** — jadi yang tampil sekarang adalah mobil procedural gaya toon: 31 mesh / 10 material / 17 geometry / 3.744 segitiga (~38 draw call, sudah dioptimasi dari 76). Jejak rem adalah satu draw call (ring buffer 460 quad, alpha per vertex, fade 4,5 s) dan debu 170 point.
+`car.loadModel('./car.glb')` dipanggil saat init: kalau file GLB ada, model procedural otomatis diganti. **`car.glb` sudah ada di repo** (BMW M4 GT3 EVO G82, lihat `CREDITS.md` §3) — pipeline yang menjalankannya ada di `js/car.js`:
+
+- **Pelurusan otomatis** (`alignCarModel`): sumbu terpanjang diputar ke Z, arah nose di-deteksi dari posisi roda depan/belakang lalu diputar sekali kalau perlu (override manual: `CAR_CFG.modelNoseFlip`), di-scale sampai panjang = 4,55 m, dipusatkan, dan diturunkan sampai ban napak. Semua transformasi dipasang di *holder* baru — rotasi author di node GLB tidak pernah ditimpa.
+- **Deteksi roda** (`detectCarWheels`): group bernama *wheel/roda* yang punya mesh, container dan mesh anak dikecualikan, group setir interior (`steering`) tidak ikut; pasangan front/rear dipercaya kalau namanya lengkap, kalau tidak ada fallback z-split.
+- **Animasi roda** (`buildWheelPivots`): pivot identitas dibuat di pusat tiap roda di frame aligned; roda **keempatnya berputar sesuai kecepatan** dan **hanya roda depan mengikuti setir**. Roda kanan yang di-author sebagai salinan kiri berotasi 180° tetap berputar searah karena animasi dikomposisikan di frame aligned, bukan di belakang rotasi author.
+- **Material** (`fixCarModelMaterials`): `map`/`emissiveMap` diberi color-space sRGB + mipmap trilinear; `normalMap` tetap linear; `flipY` dan wrapping **tidak disentuh** (pasangan GLTFLoader).
+- **Fallback**: kalau `car.glb` gagal dimuat/rusak/kosong, model procedural gaya toon dipakai (31 mesh / 10 material / 17 geometry / 3.744 segitiga, ~38 draw call) — game tidak pernah blank.
+
+Jejak rem adalah satu draw call (ring buffer 460 quad, alpha per vertex, fade 4,5 s) dan debu 170 point.
+
+> Catatan GPU Android: toon ramp **bukan** lagi `THREE.RedFormat` (format 1 kanal bermasalah di beberapa GPU Android) — sekarang `DataTexture` RGBA8 eksplisit 4 langkah `[70,140,205,255]` dengan `NearestFilter`, yang dijamin didukung semua konteks WebGL.
 
 Untuk devtools: `window.car`, `window.CAR_CFG`, dan `window.AUDIO` diekspos, jadi aset mobil bisa di-tuning tanpa edit kode (misal `CAR_CFG.modelNoseFlip = true` kalau GLB eksternal menghadap belakang).
 

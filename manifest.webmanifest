@@ -1,0 +1,19 @@
+{
+  "name": "Orb Hunt — Aurelia — The Seven Realms",
+  "short_name": "Orb Hunt",
+  "description": "Game dunia fantasy 24×24 km: kumpulkan 12 orb purba dan jelajah dengan mobil balap. Bisa dipasang sebagai aplikasi dan dimainkan offline.",
+  "id": "./",
+  "lang": "id",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#151a1c",
+  "theme_color": "#151a1c",
+  "categories": ["games"],
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
