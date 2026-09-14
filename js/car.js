@@ -66,6 +66,236 @@ function outlineMat(color, thickness){
 
 /* scratch vectors — dipakai ulang supaya tidak ada alokasi per frame */
 const _fwd=new THREE.Vector3(), _des=new THREE.Vector3(), _look=new THREE.Vector3();
+const _AXX=new THREE.Vector3(1,0,0), _AXY=new THREE.Vector3(0,1,0);
+const _qSpin=new THREE.Quaternion(), _qSteer=new THREE.Quaternion();
+
+/* ============================================================
+   PIPELINE MODEL GLB — fungsi murni, bisa diuji headless
+   (tanpa GLTFLoader) di tests/car.model.test.mjs.
+
+   Konvensi akhir: NOSE model harus di -Z lokal. Deteksi arah nose
+   memakai nama roda ("Front"/"Rear") kalau ada, dan sebagai cadangan
+   membandingkan posisi DUNIA roda depan vs belakang — posisi lokal
+   node tidak boleh dipakai: di car.glb repositori ini transformasi
+   disimpan sebagai `matrix` node dan vertex di-bake, sehingga
+   `object.position` sering (0,0,0) padahal roda ada di tempat lain.
+============================================================ */
+const WHEEL_NAME_RE=/wheel|roda/i;
+/* "SteeringWheel" (setir) BUKAN roda kendaraan — car.glb di repo ini punya
+   46 segmen setir interior yang namanya mengandung "Wheel". Harus disaring
+   atau semuanya ikut berputar ikut-ikutan. */
+const NOT_WHEEL_RE=/steering|setir/i;
+const FRONT_NAME_RE=/front|depan/i;
+const REAR_NAME_RE=/rear|belakang|back/i;
+
+function _hasMeshDescendant(o){
+  let found=false;
+  o.traverse(c=>{ if(c.isMesh) found=true; });
+  return found;
+}
+function _isAncestor(anc, node){
+  let c=node.parent;
+  while(c){ if(c===anc) return true; c=c.parent; }
+  return false;
+}
+
+/* Cari GROUP roda (node bukan-mesh yang punya mesh di bawahnya dan namanya
+   mengandung "wheel"/"roda"). Dua aturan penting:
+
+   1. Node "container" (mis. `Wheel1A_3D_00` yang memayungi keempat roda)
+      TIDAK boleh dianimasikan — kalau diputar, keempat roda berputar
+      sebagai satu benda kaku. Container dikenali: ada kandidat lain di
+      dalam subtreenya.
+   2. Mesh anak (ban/velg) yang kebetulan namanya mengandung "wheel"
+      (mis. `polySurface1_Tire:..._Wheel1A_...`) juga tidak ikut — rotasi
+      harus dipasang di group RODA UTAMA, bukan di semua mesh ban/rim anak,
+      karena kalau keduanya diputar roda berputar DOBEL.
+
+   Hasil: {wheels:[{node, z}] (urutan terurut z dunia), front:Set, rear:Set}
+   atau null kalau kandidat roda kurang dari 2. */
+export function detectCarWheels(root){
+  const named=[];
+  root.traverse(o=>{
+    const nm=o.name||'';
+    if(o!==root && WHEEL_NAME_RE.test(nm) && !NOT_WHEEL_RE.test(nm)) named.push(o);
+  });
+  const groups=named.filter(o=>!o.isMesh && _hasMeshDescendant(o));
+  const candidates=groups.filter(g=>!groups.some(h=>h!==g && _isAncestor(g,h)));
+  if(candidates.length<2) return null;
+  root.updateMatrixWorld(true);
+  const pv=new THREE.Vector3();
+  const withZ=candidates.map(w=>{ w.getWorldPosition(pv); return {node:w, z:pv.z}; });
+  withZ.sort((a,b)=>a.z-b.z);
+  const namedFront=withZ.filter(x=>FRONT_NAME_RE.test(x.node.name||''));
+  const namedRear=withZ.filter(x=>REAR_NAME_RE.test(x.node.name||''));
+  let front, rear, byName, selected=withZ;
+  if(namedFront.length>=1 && namedRear.length>=1){
+    /* Pasangan front/rear yang lengkap dipercaya: hanya node bernama itu
+       yang dianggap roda (node "roda" anonim lain diabaikan). */
+    front=namedFront; rear=namedRear; byName=true;
+    selected=[...namedFront, ...namedRear];
+  } else {
+    /* Tidak ada nama front/rear yang lengkap. Kita BELUM tahu arah nose,
+       jadi pasang asumsi sementara "nose di -Z" (konvensi internal):
+       sisi z kecil = roda depan. Kalau ternyata model harus di-flip
+       (CAR_CFG.modelNoseFlip), alignCarModel menukar set-nya. */
+    const zmid=(withZ[0].z+withZ[withZ.length-1].z)/2;
+    front=withZ.filter(x=>x.z<zmid);
+    rear=withZ.filter(x=>x.z>=zmid);
+    byName=false;
+  }
+  return {
+    wheels:selected,
+    front:new Set(front.map(x=>x.node)),
+    rear:new Set(rear.map(x=>x.node)),
+    byName,
+  };
+}
+
+/* Arah nose relatif terhadap sumbu Z DUNIA (setelah sumbu terpanjang
+   diluruskan ke Z): -1 = nose sudah menunjuk -Z, +1 = nose menunjuk +Z
+   (harus di-flip), 0 = tidak bisa ditentukan. */
+export function modelNoseSign(frontSet, rearSet){
+  if(!frontSet||!rearSet||frontSet.size===0||rearSet.size===0) return 0;
+  const avg=set=>{ let z=0; const p=new THREE.Vector3();
+    set.forEach(w=>{ w.getWorldPosition(p); z+=p.z; });
+    return z/set.size; };
+  const zf=avg(frontSet), zr=avg(rearSet);
+  /* ambang relatif terhadap rentang z semua roda (model bisa di-author
+     dalam cm — car.glb di repo ini di-scale 0.01 oleh node root-nya) */
+  let zmin=Infinity, zmax=-Infinity;
+  const scan=set=>set.forEach(w=>{ const p=new THREE.Vector3(); w.getWorldPosition(p);
+    if(p.z<zmin) zmin=p.z; if(p.z>zmax) zmax=p.z; });
+  scan(frontSet); scan(rearSet);
+  const span=Math.max(1e-9, zmax-zmin);
+  if(Math.abs(zf-zr)<span*0.02) return 0;
+  return zf<zr ? -1 : +1;
+}
+
+/* Luruskan model GLB mobil ke konvensi internal:
+   - sumbu terpanjang -> Z (tanpa memiringkan sumbu Y-up),
+   - nose -> -Z di frame kontainer (auto-detect dari roda;
+     CAR_CFG.modelNoseFlip sebagai override manual — flip
+     DITERAPKAN PERSIS SEKALI, bukan dua kali),
+   - skala sehingga panjang = cfg.length, dipusatkan, dan ban napak
+     sedikit "tenggelam" di atas tanah.
+   Semua transformasi penyelarasan dipasang di GROUP HOLDER baru, bukan
+   di node root GLB — karena root GLB sering sudah membawa rotasi author
+   (car.glb di repo ini: node root berotasi -90° di sumbu X) dan menulis
+   .rotation pada node itu akan MENIMPA rotasi author, bukan menambah flip.
+   Melempar Error kalau model kosong/tidak punya mesh (supaya loadModel
+   bisa jatuh ke model procedural). */
+export function alignCarModel(m, cfg){
+  let hasMesh=false;
+  m.traverse(o=>{ if(o.isMesh) hasMesh=true; });
+  if(!hasMesh) throw new Error('model GLB tidak punya mesh — model kosong');
+
+  const holder=new THREE.Group();
+  holder.name='carAlignedRoot';
+  holder.add(m);
+  holder.updateMatrixWorld(true);
+  const size=new THREE.Box3().setFromObject(holder).getSize(new THREE.Vector3());
+  if(size.x>size.z) holder.rotation.y=-Math.PI/2;    // holder masih identitas -> Euler aman
+  holder.updateMatrixWorld(true);
+
+  /* deteksi roda & arah nose (posisi dunia, bukan posisi lokal node) */
+  const wheels=detectCarWheels(holder);
+  let nose=0;
+  if(wheels && wheels.byName) nose=modelNoseSign(wheels.front, wheels.rear);
+  if(nose===0) nose=CAR_CFG.modelNoseFlip ? +1 : -1;      // tidak bisa ditebak -> asumsi (atau override manual)
+  else if(CAR_CFG.modelNoseFlip) nose=-nose;              // override manual: balikkan deteksi
+  if(nose>0){
+    holder.rotation.y+=Math.PI;                           // flip SEKALI supaya nose berakhir di -Z
+    if(wheels && !wheels.byName){                         // set z-based harus ikut dibalik
+      const tmp=wheels.front; wheels.front=wheels.rear; wheels.rear=tmp;
+    }
+  }
+  holder.updateMatrixWorld(true);
+
+  const b2=new THREE.Box3().setFromObject(holder);
+  const s2=b2.getSize(new THREE.Vector3());
+  const sc=cfg.length/Math.max(0.001,s2.z);
+  holder.scale.multiplyScalar(sc);
+  holder.updateMatrixWorld(true);
+  const b3=new THREE.Box3().setFromObject(holder);
+  const c3=b3.getCenter(new THREE.Vector3());
+  holder.position.x-=c3.x;
+  holder.position.z-=c3.z;
+  holder.position.y-=b3.min.y-cfg.wheelRadius*0.06;   // ban sedikit "tenggelam" biar napak
+  m.traverse(o=>{
+    if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; }
+  });
+  return {scale:sc, nose, wheels, holder};
+}
+
+/* Perbaiki color-space & filtering texture material GLB.
+   flipY dan wrapping TIDAK disentuh — GLTFLoader sudah menyetelnya
+   sesuai spesifikasi glTF (flipY=false), dan mengubahnya merusak UV. */
+export function fixCarModelMaterials(root){
+  root.traverse(o=>{
+    if(!o.isMesh) return;
+    const mats=Array.isArray(o.material)?o.material:[o.material];
+    for(const mm of mats){
+      if(!mm) continue;
+      for(const k of ['map','emissiveMap']){
+        const t=mm[k];
+        if(t){
+          t.colorSpace=THREE.SRGBColorSpace;           // warna = data sRGB
+          t.minFilter=THREE.LinearMipmapLinearFilter;  // trilinear mipmap
+          t.magFilter=THREE.LinearFilter;
+          t.needsUpdate=true;
+        }
+      }
+      if(mm.normalMap){
+        mm.normalMap.minFilter=THREE.LinearMipmapLinearFilter;
+        mm.normalMap.magFilter=THREE.LinearFilter;
+        mm.normalMap.needsUpdate=true;                 // normal map tetap linear (NoColorSpace)
+      }
+    }
+  });
+}
+
+/* Bungkus tiap group roda dengan PIVOT di frame model-yang-sudah-diluruskan
+   (sumbu panjang=Z, up=Y, poros roda=X). Pivot inilah yang berputar
+   (spin) dan berputar yaw (steer) — group roda aslinya tidak disentuh
+   lagi, jadi transformasi yang di-author di GLB (matrix node, tilt,
+   scale) tetap utuh dan tidak dirotasi dobel.
+
+   Hasil: [{pivot, group, front, baseQ}] atau null. */
+export function buildWheelPivots(m, det){
+  if(!det) return null;
+  const out=[];
+  m.updateMatrixWorld(true);
+  const mW=new THREE.Matrix4().copy(m.matrixWorld);
+  const A=new THREE.Matrix4();
+  for(const w of det.wheels){
+    w.node.updateWorldMatrix(true,false);
+    /* transformasi roda di frame aligned (mW^-1 * world).
+       PIVOT disimpan IDENTITAS di pusat roda; transformasi author
+       RODA UTUH dipindah ke node roda (anak pivot). Animasi
+       (steer+spin) kemudian ditulis langsung di pivot — yaitu di
+       frame aligned, SUMBU X = poros roda.
+       Ini PENTING: beberapa GLB menulis roda kanan sebagai salinan
+       roda kiri yang dirotasi ~180° (car.glb di repo ini begitu:
+       matriks 3DWheel Front R memetakan X->-X, Z->-Z). Kalau animasi
+       dikomposisikan di SEBELAH KANAN rotasi author (baseQ*Qy*Qx),
+       rotasi 180° itu mengonjugasi spin dan ARAH PUTARAN roda kanan
+       TERTUKAR. Dengan pivot identitas, spin/steer diterapkan di
+       frame aligned SEBELUM orientasi roda — arah putaran konsisten
+       untuk semua roda. */
+    A.copy(mW).invert().multiply(w.node.matrixWorld);
+    const pivot=new THREE.Group();
+    pivot.name='carWheelPivot';
+    pivot.position.setFromMatrixPosition(A);
+    m.add(pivot);
+    pivot.add(w.node);
+    w.node.position.set(0,0,0);
+    w.node.quaternion.setFromRotationMatrix(A);
+    w.node.scale.setFromMatrixScale(A);
+    out.push({pivot, group:w.node, front:det.front.has(w.node), baseQ:new THREE.Quaternion()});
+  }
+  return out;
+}
 
 /* ============================================================
    SKID MARK — satu draw call, ring buffer quad + alpha per vertex
@@ -269,9 +499,20 @@ export class Car {
     const g=new THREE.Group();
     this.procedural=g;
 
-    const ramp=(()=>{ const d=new Uint8Array([70,140,205,255]);
-      const t=new THREE.DataTexture(d,4,1,THREE.RedFormat);
-      t.minFilter=t.magFilter=THREE.NearestFilter; t.needsUpdate=true; return t; })();
+    const ramp=(()=>{
+      /* Toon ramp 4 langkah sebagai texture RGBA8 eksplisit.
+         SEBELUMNYA memakai THREE.RedFormat — format 1 kanal itu bermasalah di
+         beberapa GPU Android (shading menggelap/merah) dan tidak portable.
+         RGBA 8-bit dijamin didukung semua konteks WebGL; NearestFilter menjaga
+         langkah toon tetap tegas (tanpa blur antar tangga). */
+      const steps=[70,140,205,255];
+      const d=new Uint8Array(steps.length*4);
+      steps.forEach((v,i)=>{ d[i*4]=v; d[i*4+1]=v; d[i*4+2]=v; d[i*4+3]=255; });
+      const t=new THREE.DataTexture(d,steps.length,1,THREE.RGBAFormat,THREE.UnsignedByteType);
+      t.minFilter=t.magFilter=THREE.NearestFilter;
+      t.generateMipmaps=false;
+      t.needsUpdate=true;
+      return t; })();
     /* Material di-CACHE per (warna + opsi). Sebelumnya tiap bagian memanggil
        toon() sendiri -> 71 mesh punya 69 material unik, jadi renderer tidak bisa
        menghemat satu pun state change. Visual identik, jumlah material turun ~6x. */
@@ -455,52 +696,33 @@ export class Car {
   }
 
   /* ============================================================
-     GLB SWAP — drop car.glb ke root repo, otomatis kepakai
+     GLB SWAP — drop car.glb ke root repo, otomatis kepakai.
+     Pipeline: fixCarModelMaterials -> alignCarModel ->
+     buildWheelPivots. Kalau GLB tidak ada/rusak/kosong, model
+     procedural tetap dipakai (game tidak boleh blank).
   ============================================================ */
   loadModel(url='./car.glb'){
     return new Promise((resolve)=>{
       new GLTFLoader().load(url,(gltf)=>{
-        const m=gltf.scene;
-        const box=new THREE.Box3().setFromObject(m);
-        const size=box.getSize(new THREE.Vector3());
-        const center=box.getCenter(new THREE.Vector3());
-        /* Sumbu terpanjang = panjang mobil; luruskan ke sumbu Z. Arah nose TIDAK
-           bisa ditebak dari bounding box, jadi kalau hasilnya kebalik cukup set
-           CAR_CFG.modelNoseFlip = true (lihat log di bawah). */
-        const longX = size.x >= size.z;
-        if(longX) m.rotation.y = -Math.PI/2;
-        // GLB harus berakhir dengan nose di -Z lokal, sama seperti model procedural.
-        if(CAR_CFG.modelNoseFlip) m.rotation.y += Math.PI;
-        if(CAR_CFG.modelNoseFlip) m.rotation.y += Math.PI;
-        m.updateMatrixWorld(true);
-        const b2=new THREE.Box3().setFromObject(m);
-        const s2=b2.getSize(new THREE.Vector3());
-        const c2=b2.getCenter(new THREE.Vector3());
-        const sc=this.cfg.length/Math.max(0.001,s2.z);
-        m.scale.multiplyScalar(sc);
-        m.updateMatrixWorld(true);
-        const b3=new THREE.Box3().setFromObject(m);
-        const c3=b3.getCenter(new THREE.Vector3());
-        m.position.x -= c3.x;
-        m.position.z -= c3.z;
-        m.position.y -= b3.min.y - this.cfg.wheelRadius*0.06;   // ban sedikit "tenggelam" biar napak
-        m.traverse(o=>{
-          if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; }
-        });
-        /* cari roda dari nama node; kalau tidak ketemu, roda procedural tetap dipakai */
-        const found=[];
-        m.traverse(o=>{ if(/wheel|tire|tyre|rim|roda/i.test(o.name||'')) found.push(o); });
-        if(found.length>=2){
-          found.sort((a,b)=>a.position.z-b.position.z);
-          this.glbWheels=found.map(o=>({obj:o,front:false}));
-          const zmid=(found[0].position.z+found[found.length-1].position.z)/2;
-          this.glbWheels.forEach(w=>{ w.front = w.obj.position.z < zmid; });
-        } else this.glbWheels=null;
-        if(this.procedural) this.procedural.visible=false;
-        this.model=m; this.body.add(m);
-        console.log('[CAR] GLB dipakai:',url,'| skala',sc.toFixed(3),'| roda terdeteksi',found.length);
-        console.info('[CAR] Kalau mobilnya malah jalan MUNDUR: ketik  CAR_CFG.modelNoseFlip=true  di console, lalu keluar-masuk mobil lagi.');
-        resolve(true);
+        try{
+          const m=gltf.scene;
+          fixCarModelMaterials(m);
+          const info=alignCarModel(m,this.cfg);
+          this.glbWheels=buildWheelPivots(info.holder,info.wheels);
+          if(this.procedural) this.procedural.visible=false;
+          this.model=info.holder; this.body.add(info.holder);
+          console.log('[CAR] GLB dipakai:',url,'| skala',info.scale.toFixed(3),
+            '| nose',info.nose>0?'di-flip otomatis':'sudah benar',
+            '| roda terdeteksi',this.glbWheels?this.glbWheels.length:0);
+          if(!this.glbWheels)
+            console.info('[CAR] roda GLB tidak terdeteksi -> model tetap dipakai, tapi roda tidak ikut berputar/menyetir.');
+          else if(CAR_CFG.modelNoseFlip)
+            console.info('[CAR] CAR_CFG.modelNoseFlip=true sedang aktif (override arah nose manual). Set false lagi kalau arah sudah benar.');
+          resolve(true);
+        }catch(err){
+          console.warn('[CAR] car.glb gagal diolah -> pakai model procedural:',err.message);
+          resolve(false);
+        }
       },undefined,()=>{ console.info('[CAR] car.glb tidak ada -> pakai model procedural'); resolve(false); });
     });
   }
@@ -792,7 +1014,20 @@ export class Car {
       w.group.position.y = C.wheelRadius - this.suspension*0.5;
     }
     if(this.model && this.glbWheels){
-      for(const w of this.glbWheels){ w.obj.rotation.x = -spinVis; }
+      /* Roda GLB dianimasikan lewat PIVOT (bukan group aslinya, supaya
+         transformasi author di GLB tidak rusak dan tidak berputar dobel).
+         Semua roda berputar sesuai kecepatan; roda DEPAN juga mengikuti
+         steering. Sumbu aligned: X = poros roda, Y = ke atas, nose = -Z —
+         jadi konvensi tanda sama persis dengan roda procedural. */
+      _qSpin.setFromAxisAngle(_AXX, -spinVis);
+      for(const w of this.glbWheels){
+        if(w.front){
+          _qSteer.setFromAxisAngle(_AXY, -this.steer);
+          w.pivot.quaternion.copy(w.baseQ).multiply(_qSteer).multiply(_qSpin);
+        } else {
+          w.pivot.quaternion.copy(w.baseQ).multiply(_qSpin);
+        }
+      }
     }
     if(this.model && this.procedural) this.procedural.visible=false;
 
