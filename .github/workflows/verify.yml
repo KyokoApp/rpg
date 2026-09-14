@@ -1,0 +1,60 @@
+name: verify
+
+# Jalan otomatis di setiap push dan setiap pull request.
+# Semua langkah memakai three.js yang SUDAH di-vendor di repo, jadi tesnya
+# menguji kode yang persis sama dengan yang dikirim ke browser.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Penjaga bug paling parah yang pernah ada di repo ini: satu file addon
+      # yang hilang membuat SELURUH module graph gagal dan halaman blank total
+      # tanpa error yang terlihat. Murah, jadi dijalankan paling awal.
+      - name: Module graph (import & importmap & getElementById)
+        run: node tools/check-imports.mjs
+
+      - name: Syntax semua file JS + script module index.html
+        run: |
+          set -e
+          for f in js/*.js game/*.mjs tests/*.mjs tools/*.mjs; do
+            node --check "$f" && echo "OK  $f"
+          done
+          node -e '
+            const fs=require("fs");
+            const s=fs.readFileSync("index.html","utf8");
+            const m=[...s.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)];
+            if(m.length!==1){console.error("blok module harus 1, ketemu "+m.length);process.exit(1);}
+            fs.writeFileSync("/tmp/_idx.mjs",m[0][1]);
+          '
+          node --check /tmp/_idx.mjs && echo "OK  index.html <script type=module>"
+
+      - name: Tes fisika mobil (11 skenario headless)
+        run: node tests/car.physics.mjs
+
+      - name: Tes graph audio (aturan parameter WebAudio)
+        run: node tests/audio.graph.mjs
+
+      # Memastikan addon yang di-vendor tidak pernah bercampur versi dengan
+      # three.module.js. Kalau salah satu di-upgrade tanpa yang lain, GLTFLoader
+      # bisa gagal diam-diam.
+      - name: File vendored harus identik dengan three@0.160.0 resmi
+        run: |
+          set -e
+          npm install --no-save --silent three@0.160.0
+          diff -q three.module.js                        node_modules/three/build/three.module.js
+          diff -q jsm/loaders/GLTFLoader.js              node_modules/three/examples/jsm/loaders/GLTFLoader.js
+          diff -q jsm/utils/SkeletonUtils.js             node_modules/three/examples/jsm/utils/SkeletonUtils.js
+          diff -q jsm/utils/BufferGeometryUtils.js       node_modules/three/examples/jsm/utils/BufferGeometryUtils.js
+          echo "OK  keempat file vendored byte-identik dengan three@0.160.0"
