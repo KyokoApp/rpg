@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Orb Hunt — Whispering Valley</title>
+<title>Orb Hunt — Aurelia — The Seven Realms</title>
 <link rel="stylesheet" href="./game/hud.css">
 </head>
 <body>
@@ -13,12 +13,13 @@
 <div id="hud">
   <div id="vignette"></div>
   <div id="cameraHint" style="display:none">Kamera: tahan klik kanan dan geser · Esc: pause</div>
-  <button id="mapBtn" aria-label="Buka peta"><canvas id="minimap" width="256" height="256"></canvas><span class="north">N</span><span class="map-caption">WHISPERING VALLEY</span></button>
+  <button id="mapBtn" aria-label="Buka peta"><canvas id="minimap" width="256" height="256"></canvas><span class="north">N</span><span class="map-caption" id="regionLabel">AURELIA HEARTLANDS</span></button>
   <div id="topbar"><div class="stat" id="orbStat"><span class="label">Orb purba</span><span class="value">0 / 12</span></div><div class="stat" id="timeStat"><span class="label">Eksplorasi</span><span id="timeVal" class="value">0.0s</span></div></div>
   <nav id="topActions" aria-label="Menu permainan">
     <button id="settingsBtn" class="icon-button" aria-label="Pengaturan"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m13 3-1 4-4 2-4-1-2 5 3 3-1 4 4 3 4-1 3 3 5-2 1-4 4-2-1-5-4-1-2-4Z"/><circle cx="14" cy="14" r="4"/></svg></button>
     <button id="pauseBtn" class="icon-button" aria-label="Jeda permainan"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M11 7v18M21 7v18"/></svg></button>
   </nav>
+  <div id="worldInfo"><span>24 × 24 km</span><span id="streamStatus">Memuat kawasan…</span></div>
   <div id="healthHUD"><span class="level">Lv. 1</span><div class="hp-main"><div class="hp-text" id="hpValue">1000 / 1000</div><div class="hp-track"><div class="hp-fill" id="hpFill"></div></div><div class="hp-name">WANDERER</div></div></div>
   <div id="staminaWrap"><div id="staminaBar"></div></div><div id="speedLines"></div>
 </div>
@@ -39,14 +40,15 @@
   <button class="panel-button" data-close-panel>Kembali ke permainan</button>
 </section></div>
 <div id="mapPanel" class="panel-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="mapTitle"><section class="panel map-panel">
-  <header class="panel-header"><h2 id="mapTitle">Whispering Valley</h2><button class="close-panel" data-close-panel aria-label="Tutup peta"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m8 8 16 16M24 8 8 24"/></svg></button></header>
-  <canvas id="worldMap" width="512" height="512" aria-label="Peta lembah, posisi pemain, dan orb tersisa"></canvas>
-  <div class="map-legend"><span>▲ Posisi kamu</span><span>◇ Orb purba</span><span>N ↑</span></div>
+  <header class="panel-header"><h2 id="mapTitle">Atlas of Aurelia</h2><button class="close-panel" data-close-panel aria-label="Tutup peta"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m8 8 16 16M24 8 8 24"/></svg></button></header>
+  <div class="atlas-layout"><div class="atlas-chart"><canvas id="worldMap" width="512" height="512" aria-label="Peta lembah, posisi pemain, dan orb tersisa"></canvas>
+  <div class="map-legend"><span>▲ Kamu</span><span>◇ Waypoint</span><span>━ Jalan kerajaan</span></div><div class="atlas-scale">24 km × 24 km · 576 km² · N ↑</div></div>
+  <aside class="atlas-sidebar"><p class="atlas-eyebrow">THE SEVEN REALMS</p><div id="waypointList"></div><div id="destinationInfo" aria-live="polite">Pilih kawasan untuk fast travel.</div><button id="travelBtn" class="panel-button" disabled>Fast travel</button><p class="panel-note">Semua gerbang terbuka untuk eksplorasi. Medan, jalan, dan landmark dimuat di sekitar pemain.</p></aside></div>
 </section></div>
 
 <div class="overlay" id="startOverlay">
   <h1>ORB HUNT</h1>
-  <p class="sub">Jelajahi lembah sejuk di kala senja dan kumpulkan <b style="color:#ffe08a">12 orb purba</b>. Cari <b style="color:#8ff0c0">pilar cahaya</b> yang menjulang di kejauhan — di sanalah orb menunggu.<br><span style="color:#8ff0c0;font-size:13px">WHISPERING VALLEY</span></p>
+  <p class="sub">Jelajahi tujuh kawasan dunia fantasy seluas <b>24 × 24 km</b> dan kumpulkan <b style="color:#ffe08a">12 orb purba</b>. Ikuti jalan batu kerajaan selebar 16 meter. Buka peta untuk fast travel ke tujuh gerbang dunia.<br><span style="color:#8ff0c0;font-size:13px">AURELIA HEARTLANDS</span></p>
   <div class="keys" id="keysDesktop">
     <div class="key"><b>W A S D</b>Bergerak</div>
     <div class="key"><b>Mouse</b>Lihat sekeliling</div>
@@ -64,7 +66,7 @@
   </div>
   <div class="cta" id="ctaText">— Klik untuk memulai —</div>
   <p class="installHint" id="installHint" style="display:none">💡 Di Android: menu Chrome ⋮ → <b>Tambahkan ke layar utama</b> untuk full-screen.</p>
-  <div class="credit">ORB HUNT · WHISPERING VALLEY</div>
+  <div class="credit">ORB HUNT · AURELIA HEARTLANDS</div>
   <div id="loadStatus">Loading...</div>
 </div>
 
@@ -85,10 +87,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {samplePose, damp, joystickAxis} from './game/locomotion.mjs';
 import {readSettings, initHUD} from './game/hud.mjs';
+import {WORLD_SIZE,WORLD_LIMIT,WATER_LEVEL,WAYPOINTS,regionAt,terrainH,TERRAIN_GLSL} from './game/world-data.mjs';
+import {WorldStream} from './game/world-stream.mjs';
 let settings;
 try { settings=readSettings(localStorage); } catch { settings=readSettings(null); }
 
-console.log('[BOOT] Orb Hunt — Whispering Valley');
+console.log('[BOOT] Orb Hunt — Aurelia — The Seven Realms');
 
 // ===== DETEKSI PERANGKAT - SAMA PERSIS VERSI LAWAS =====
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches);
@@ -114,8 +118,8 @@ document.getElementById('app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 const FOG_COLOR = 0xe8bf8d;
-scene.fog = new THREE.Fog(FOG_COLOR, 80, 380);
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1200);
+scene.fog = new THREE.Fog(FOG_COLOR, isTouch?260:450, isTouch?700:950);
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 8000);
 const uTime = { value: 0 };
 
 function toonRamp(steps){
@@ -138,7 +142,7 @@ const RAMP3 = toonRamp(3);
 const RAMP4 = toonRamp(4);
 
 const SUN_DIR = new THREE.Vector3(-0.60, 0.165, -0.62).normalize();
-const skyGeo = new THREE.SphereGeometry(1000, 40, 24);
+const skyGeo = new THREE.SphereGeometry(6000, 40, 24);
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite:false, fog:false,
   uniforms: { sunDir:{ value:SUN_DIR }, time:uTime },
@@ -160,7 +164,7 @@ const skyMat = new THREE.ShaderMaterial({
       gl_FragColor=vec4(col,1.0);
     }`
 });
-scene.add(new THREE.Mesh(skyGeo, skyMat));
+const skyDome=new THREE.Mesh(skyGeo,skyMat); scene.add(skyDome);
 
 const sun = new THREE.DirectionalLight(0xffdbb0, 2.5);
 sun.castShadow = true;
@@ -170,18 +174,14 @@ scene.add(sun); scene.add(sun.target);
 scene.add(new THREE.HemisphereLight(0xaed2f0, 0x7d6238, 0.60));
 scene.add(new THREE.AmbientLight(0xffd9ae, 0.20));
 
-const WATER_Y=-0.9;
-function terrainH(x,z){ return Math.sin(x*0.045)*Math.cos(z*0.05)*2.6 + Math.sin(x*0.11+1.7)*Math.sin(z*0.09+0.6)*1.1 + Math.sin((x+z)*0.023)*1.6 + Math.cos(x*0.31)*Math.sin(z*0.27)*0.28; }
-const T_SIZE=440, T_SEG=isTouch?120:160;
-const tGeo=new THREE.PlaneGeometry(T_SIZE,T_SIZE,T_SEG,T_SEG); tGeo.rotateX(-Math.PI/2);
-const pos=tGeo.attributes.position; const colors=new Float32Array(pos.count*3);
-const cSand=new THREE.Color(0xd8c093), cGrass=new THREE.Color(0x789b42), cGrass2=new THREE.Color(0x537430), cRock=new THREE.Color(0x8e8574);
-for(let i=0;i<pos.count;i++){ const x=pos.getX(i),z=pos.getZ(i); const y=terrainH(x,z); pos.setY(i,y); let c; const n=Math.sin(x*0.7)*Math.cos(z*0.6)*0.5+0.5; if(y<WATER_Y+0.55) c=cSand.clone().lerp(cGrass2,Math.min(1,(y-(WATER_Y-0.4))/1.0)*0.35); else if(y>3.4) c=cGrass.clone().lerp(cRock,Math.min(1,(y-3.4)/1.6)); else c=cGrass.clone().lerp(cGrass2,n*0.7); colors[i*3]=c.r; colors[i*3+1]=c.g; colors[i*3+2]=c.b; }
-tGeo.setAttribute('color',new THREE.BufferAttribute(colors,3)); tGeo.computeVertexNormals();
-const terrain=new THREE.Mesh(tGeo,new THREE.MeshToonMaterial({vertexColors:true,gradientMap:RAMP4})); terrain.receiveShadow=true; scene.add(terrain);
+const WATER_Y=WATER_LEVEL;
+const T_SIZE=WORLD_SIZE;
+const world=new WorldStream(scene,{mobile:isTouch});
+world.update(0,6,true);
+const COLLIDERS=world.colliders;
 
 const FIELD=95, HALF=47.5;
-const GRASS_N=isTouch?30000:130000;
+const GRASS_N=isTouch?9000:28000;
 const BLADE_SEG=6;
 function makeBladeGeometry(){
   const positions=[], uvs=[], indices=[]; const BLADES=4;
@@ -200,8 +200,8 @@ const grassMat=new THREE.ShaderMaterial({
   side:THREE.DoubleSide,
   uniforms:{ time:uTime, fieldCenter:{value:new THREE.Vector2(0,0)}, sunDir:{value:SUN_DIR}, fogColor:{value:new THREE.Color(FOG_COLOR)}, fogNear:{value:80}, fogFar:{value:380} },
   vertexShader:`uniform float time; uniform vec2 fieldCenter; attribute vec2 offset; attribute float rand; varying float vY; varying float vRand; varying float vDist; varying float vGust;
-    float terrainH(vec2 p){return sin(p.x*0.045)*cos(p.y*0.05)*2.6 + sin(p.x*0.11+1.7)*sin(p.y*0.09+0.6)*1.1 + sin((p.x+p.y)*0.023)*1.6 + cos(p.x*0.31)*sin(p.y*0.27)*0.28;}
-    void main(){ vec2 wxz=fieldCenter+mod(offset-fieldCenter+47.5,vec2(95.0))-47.5; float h=terrainH(wxz); float ok=step(-0.2,h)*(1.0-step(3.6,h)); float ang=rand*6.2831; float ca=cos(ang),sa=sin(ang); vec3 p=position; vec3 rp=vec3(p.x*ca-p.z*sa,p.y,p.x*sa+p.z*ca); float wave=sin(dot(wxz,vec2(0.055,0.041))-time*1.25); float wave2=sin(dot(wxz,vec2(-0.031,0.068))-time*0.75); float gust=(wave*0.62+wave2*0.38); float flutter=sin(time*4.4+rand*25.0)*0.06; float amt=(gust*0.34+flutter); float bend=rp.y*rp.y; float sc=mix(0.42,0.95,rand); vec2 windDir=normalize(vec2(0.80,0.60)); vec3 wp; wp.x=wxz.x+rp.x+windDir.x*amt*bend*1.15*sc; wp.z=wxz.y+rp.z+windDir.y*amt*bend*1.15*sc; wp.y=h+rp.y*sc-bend*abs(amt)*0.30*sc; float d=distance(cameraPosition.xz,wxz); float sink=smoothstep(34.0,46.0,d); wp.y-=sink*rp.y*sc*1.2; vY=rp.y; vRand=rand; vGust=gust; vec4 mv=viewMatrix*vec4(wp,1.0); vDist=-mv.z; gl_Position=projectionMatrix*mv; if(ok<0.5) gl_Position=vec4(0.0,0.0,2.0,1.0); }`,
+    ${TERRAIN_GLSL}
+    void main(){ vec2 wxz=fieldCenter+mod(offset-fieldCenter+47.5,vec2(95.0))-47.5; float h=terrainH(wxz); float grassClear=mix(4.0,45.0,smoothstep(60.0,120.0,h)); float ok=step(1.0,h)*step(grassClear,roadData(wxz).x); float ang=rand*6.2831; float ca=cos(ang),sa=sin(ang); vec3 p=position; vec3 rp=vec3(p.x*ca-p.z*sa,p.y,p.x*sa+p.z*ca); float wave=sin(dot(wxz,vec2(0.055,0.041))-time*1.25); float wave2=sin(dot(wxz,vec2(-0.031,0.068))-time*0.75); float gust=(wave*0.62+wave2*0.38); float flutter=sin(time*4.4+rand*25.0)*0.06; float amt=(gust*0.34+flutter); float bend=rp.y*rp.y; float sc=mix(0.24,0.55,rand); vec2 windDir=normalize(vec2(0.80,0.60)); vec3 wp; wp.x=wxz.x+rp.x+windDir.x*amt*bend*1.15*sc; wp.z=wxz.y+rp.z+windDir.y*amt*bend*1.15*sc; wp.y=h+rp.y*sc-bend*abs(amt)*0.30*sc; float d=distance(cameraPosition.xz,wxz); float sink=smoothstep(34.0,46.0,d); wp.y-=sink*rp.y*sc*1.2; vY=rp.y; vRand=rand; vGust=gust; vec4 mv=viewMatrix*vec4(wp,1.0); vDist=-mv.z; gl_Position=projectionMatrix*mv; if(ok<0.5) gl_Position=vec4(0.0,0.0,2.0,1.0); }`,
   fragmentShader:`uniform vec3 fogColor; uniform float fogNear,fogFar; varying float vY; varying float vRand; varying float vDist; varying float vGust; void main(){ vec3 root=vec3(0.10,0.20,0.12); vec3 mid=vec3(0.26,0.42,0.18); vec3 tip=vec3(0.55,0.60,0.26); vec3 col=mix(root,mid,smoothstep(0.0,0.52,vY)); col=mix(col,tip,smoothstep(0.42,1.0,vY)); col*=mix(0.90,1.10,vRand); float band=floor(vY*3.0)/3.0; col*=mix(1.0,0.88+band*0.22,0.55); col+=vec3(0.26,0.18,0.05)*pow(vY,2.6)*0.42; col+=vec3(0.14,0.12,0.04)*max(vGust,0.0)*vY*vY*0.38; float f=smoothstep(fogNear,fogFar,vDist); col=mix(col,fogColor,f); gl_FragColor=vec4(col,1.0); }`
 });
 const grass=new THREE.Mesh(grassGeo,grassMat); grass.frustumCulled=false; scene.add(grass);
@@ -214,36 +214,20 @@ const waterMat=new THREE.ShaderMaterial({
 });
 const water=new THREE.Mesh(new THREE.PlaneGeometry(T_SIZE,T_SIZE,isTouch?64:96,isTouch?64:96),waterMat); water.rotation.x=-Math.PI/2; water.position.y=WATER_Y; scene.add(water);
 
-const WIND_GLSL=`vec3 applyWind(vec3 tp,vec3 iw,float t,float stiff){float ph=iw.x*0.055+iw.z*0.045; float g=sin(t*1.05+ph)*0.62+sin(t*1.9+ph*1.7)*0.3; float infl=smoothstep(0.0,stiff,tp.y); tp.x+=g*infl*0.42; tp.z+=g*infl*0.26; return tp;}`;
-function addWind(mat,stiffness){ mat.onBeforeCompile=(sh)=>{ sh.uniforms.uTime=uTime; sh.vertexShader=`uniform float uTime;\n${WIND_GLSL}\n`+sh.vertexShader; sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>',`\n#include <begin_vertex>\nvec3 iwPos=(instanceMatrix*vec4(0.0,0.0,0.0,1.0)).xyz;\ntransformed=applyWind(transformed,iwPos,uTime,${stiffness.toFixed(1)});\n`); }; return mat; }
-function outlineMaterial(color,thickness,stiffness){ const m=new THREE.MeshBasicMaterial({color,side:THREE.BackSide,fog:false}); m.onBeforeCompile=(sh)=>{ sh.uniforms.uTime=uTime; sh.vertexShader=`uniform float uTime;\n${WIND_GLSL}\n`+sh.vertexShader; sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>',`\n#include <begin_vertex>\nvec3 iwPos=(instanceMatrix*vec4(0.0,0.0,0.0,1.0)).xyz;\nvec3 wPosApprox=(modelMatrix*instanceMatrix*vec4(position,1.0)).xyz;\nfloat dCam=distance(cameraPosition,wPosApprox);\nfloat grow=${thickness.toFixed(3)}*clamp(1.0+dCam*0.016,1.0,2.4);\ntransformed+=normalize(normal)*grow;\ntransformed=applyWind(transformed,iwPos,uTime,${stiffness.toFixed(1)});\n`); }; return m; }
-
-const COLLIDERS=[];
-function groundClear(x,z){ const y=terrainH(x,z); return y>WATER_Y+0.7 && Math.hypot(x,z)>9; }
-const TREE_N=isTouch?60:95; const ROCK_N=isTouch?30:44;
-const treeData=[], blobData=[], rockData=[]; const _d=new THREE.Object3D();
-const FOLIAGE_TINTS=[new THREE.Color(0x74b03f),new THREE.Color(0x5b9733),new THREE.Color(0x8cc44b),new THREE.Color(0x477a2b)];
-const blobColors=[]; let placed=0,tries=0;
-while(placed<TREE_N && tries<6000){ tries++; const x=(Math.random()-0.5)*T_SIZE*0.86,z=(Math.random()-0.5)*T_SIZE*0.86; if(!groundClear(x,z)) continue; const y=terrainH(x,z),s=0.85+Math.random()*0.95,rotY=Math.random()*Math.PI*2; const tilt=(Math.random()-0.5)*0.10; _d.position.set(x,y-0.05,z); _d.rotation.set(tilt,rotY,(Math.random()-0.5)*0.10); _d.scale.set(s,s,s); _d.updateMatrix(); treeData.push(_d.matrix.clone()); const tint=FOLIAGE_TINTS[(Math.random()*FOLIAGE_TINTS.length)|0]; const nBlob=4+((Math.random()*3)|0); const baseY=2.35*s; for(let b=0;b<nBlob;b++){ const t=b/(nBlob-1); const ringR=(1.0-t*0.55)*(0.95+Math.random()*0.5)*s; const a=Math.random()*Math.PI*2; const bx=x+Math.cos(a)*ringR*0.62, bz=z+Math.sin(a)*ringR*0.62, by=baseY+t*2.15*s+(Math.random()-0.5)*0.3*s, bs=(1.12-t*0.42)*(0.85+Math.random()*0.4)*s; _d.position.set(bx,by,bz); _d.rotation.set(Math.random()*0.6,Math.random()*Math.PI*2,Math.random()*0.6); _d.scale.set(bs*1.18,bs*0.86,bs*1.18); _d.updateMatrix(); blobData.push(_d.matrix.clone()); const c=tint.clone(); c.offsetHSL(0,0,(Math.random()-0.5)*0.10+(1.0-t)*0.05); blobColors.push(c); } COLLIDERS.push({x,z,r:0.42*s}); placed++; }
-placed=0; tries=0; while(placed<ROCK_N && tries<6000){ tries++; const x=(Math.random()-0.5)*T_SIZE*0.9,z=(Math.random()-0.5)*T_SIZE*0.9; if(!groundClear(x,z)) continue; const y=terrainH(x,z),s=0.45+Math.random()*1.7; _d.position.set(x,y+s*0.32,z); _d.rotation.set(Math.random()*3,Math.random()*3,Math.random()*3); _d.scale.set(s*(0.9+Math.random()*0.4),s*(0.75+Math.random()*0.35),s*(0.9+Math.random()*0.4)); _d.updateMatrix(); rockData.push(_d.matrix.clone()); COLLIDERS.push({x,z,r:s*0.80}); placed++; }
-function buildInstanced(geo,mat,mats,cols){ const m=new THREE.InstancedMesh(geo,mat,mats.length); for(let i=0;i<mats.length;i++){ m.setMatrixAt(i,mats[i]); if(cols) m.setColorAt(i,cols[i]); } m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; m.castShadow=true; m.receiveShadow=true; m.frustumCulled=false; return m; }
-const trunkGeo=new THREE.CylinderGeometry(0.15,0.30,2.6,7); trunkGeo.translate(0,1.3,0);
-const foliageGeo=new THREE.IcosahedronGeometry(1.0,1);
-const rockGeo=new THREE.DodecahedronGeometry(1.0,0);
-const trunkMat=addWind(new THREE.MeshToonMaterial({color:0x6f4a2a,gradientMap:RAMP3}),4.0);
-const foliMat=addWind(new THREE.MeshToonMaterial({color:0xffffff,gradientMap:RAMP2}),5.0);
-const rockMat=new THREE.MeshToonMaterial({color:0x9a9789,gradientMap:RAMP3});
-const trunks=buildInstanced(trunkGeo,trunkMat,treeData); const foliage=buildInstanced(foliageGeo,foliMat,blobData,blobColors); const rocks=buildInstanced(rockGeo,rockMat,rockData);
-scene.add(trunks,foliage,rocks);
-{ const oTrunk=buildInstanced(trunkGeo,outlineMaterial(0x0d1408,0.085,4.0),treeData); const oFoli=buildInstanced(foliageGeo,outlineMaterial(0x0d1408,0.095,5.0),blobData); const oRock=buildInstanced(rockGeo,outlineMaterial(0x14140f,0.080,0.1),rockData); [oTrunk,oFoli,oRock].forEach(o=>{o.castShadow=false;o.receiveShadow=false;}); scene.add(oTrunk,oFoli,oRock); }
-
 function glowTexture(){ const c=document.createElement('canvas'); c.width=c.height=128; const g=c.getContext('2d'); const grd=g.createRadialGradient(64,64,4,64,64,64); grd.addColorStop(0,'rgba(255,248,210,1)'); grd.addColorStop(0.35,'rgba(255,215,120,0.55)'); grd.addColorStop(1,'rgba(255,195,70,0)'); g.fillStyle=grd; g.fillRect(0,0,128,128); const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; }
 const orbGeo=new THREE.IcosahedronGeometry(0.34,2); const orbMat=new THREE.MeshBasicMaterial({color:0xfff0b8});
 const glowMat=new THREE.SpriteMaterial({map:glowTexture(),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false});
 const beaconGeo=new THREE.CylinderGeometry(0.5,0.85,46,12,1,true); beaconGeo.translate(0,23,0);
 const beaconMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,fog:false,uniforms:{time:uTime},vertexShader:`varying vec2 vUv; void main(){vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,fragmentShader:`varying vec2 vUv; uniform float time; void main(){float up=1.0-smoothstep(0.0,0.85,vUv.y); float pulse=0.72+0.28*sin(time*2.1-vUv.y*7.0); float edge=smoothstep(0.0,0.22,vUv.x)*smoothstep(1.0,0.78,vUv.x); vec3 col=mix(vec3(1.0,0.92,0.60),vec3(0.55,0.95,0.85),vUv.y*0.8); gl_FragColor=vec4(col,up*pulse*edge*0.30);}`});
-const orbs=[]; const ORB_COUNT=12; let oPlaced=0,oTries=0;
-while(oPlaced<ORB_COUNT && oTries<8000){ oTries++; const x=(Math.random()-0.5)*T_SIZE*0.72,z=(Math.random()-0.5)*T_SIZE*0.72; const y=terrainH(x,z); if(y<WATER_Y+0.35 || Math.hypot(x,z)<7) continue; if(orbs.some(o=>o.position.distanceTo(new THREE.Vector3(x,y+1.1,z))<26)) continue; const grp=new THREE.Group(); grp.add(new THREE.Mesh(orbGeo,orbMat)); const orbLine=new THREE.Mesh(orbGeo,new THREE.MeshBasicMaterial({color:0x3a2708,side:THREE.BackSide,fog:false})); orbLine.scale.setScalar(1.16); grp.add(orbLine); const glow=new THREE.Sprite(glowMat); glow.scale.set(3.0,3.0,1); grp.add(glow); const beacon=new THREE.Mesh(beaconGeo,beaconMat); beacon.frustumCulled=false; grp.add(beacon); const light=new THREE.PointLight(0xffd88a,3.2,12,2); grp.add(light); grp.position.set(x,y+1.1,z); grp.userData.baseY=y+1.1; scene.add(grp); orbs.push(grp); oPlaced++; }
+const orbs=[]; const ORB_COUNT=12;
+for(let i=0;i<ORB_COUNT;i++){
+  const waypoint=WAYPOINTS[i%WAYPOINTS.length];
+  const x=waypoint.x+(i%2?18:-18),z=waypoint.z-25-Math.floor(i/WAYPOINTS.length)*55,y=terrainH(x,z);
+  const grp=new THREE.Group();grp.add(new THREE.Mesh(orbGeo,orbMat));
+  const glow=new THREE.Sprite(glowMat);glow.scale.set(2.5,2.5,1);grp.add(glow);
+  grp.add(new THREE.Mesh(beaconGeo,beaconMat));
+  grp.position.set(x,y+1.1,z);grp.userData.baseY=y+1.1;grp.userData.collected=false;scene.add(grp);orbs.push(grp);
+}
 
 const BFLY_N=isTouch?26:55; const BFLY_SPAN=70;
 function makeButterflyGeo(){ const pos=[],wing=[],idx=[]; for(let w=0;w<2;w++){ const sgn=w===0?1:-1; const b=pos.length/3; pos.push(0,0,0,sgn*0.16,0,0.10,sgn*0.17,0,-0.09,sgn*0.05,0,-0.12); for(let k=0;k<4;k++) wing.push(sgn); idx.push(b,b+1,b+2,b,b+2,b+3); } const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('wing',new THREE.Float32BufferAttribute(wing,1)); g.setIndex(idx); return g; }
@@ -251,14 +235,14 @@ const bflyBase=makeButterflyGeo(); const bflyGeo=new THREE.InstancedBufferGeomet
 const bOff=new Float32Array(BFLY_N*2), bRnd=new Float32Array(BFLY_N*3);
 for(let i=0;i<BFLY_N;i++){ bOff[i*2]=(Math.random()-0.5)*BFLY_SPAN; bOff[i*2+1]=(Math.random()-0.5)*BFLY_SPAN; bRnd[i*3]=Math.random(); bRnd[i*3+1]=Math.random(); bRnd[i*3+2]=Math.random(); }
 bflyGeo.setAttribute('bOffset',new THREE.InstancedBufferAttribute(bOff,2)); bflyGeo.setAttribute('bRand',new THREE.InstancedBufferAttribute(bRnd,3)); bflyGeo.instanceCount=BFLY_N;
-const bflyMat=new THREE.ShaderMaterial({ side:THREE.DoubleSide, transparent:true, depthWrite:true, uniforms:{ time:uTime, fieldCenter:{value:new THREE.Vector2(0,0)}, fogColor:{value:new THREE.Color(FOG_COLOR)}, fogNear:{value:80}, fogFar:{value:380} }, vertexShader:`uniform float time; uniform vec2 fieldCenter; attribute vec2 bOffset; attribute vec3 bRand; attribute float wing; varying vec3 vCol; varying float vDist; varying float vFlap; float terrainH(vec2 p){return sin(p.x*0.045)*cos(p.y*0.05)*2.6 + sin(p.x*0.11+1.7)*sin(p.y*0.09+0.6)*1.1 + sin((p.x+p.y)*0.023)*1.6 + cos(p.x*0.31)*sin(p.y*0.27)*0.28;} mat2 rot(float a){float c=cos(a),s=sin(a); return mat2(c,-s,s,c);} void main(){float SPAN=70.0,H=35.0; float sp=0.22+bRand.x*0.30; float rad=2.5+bRand.y*7.0; float ph=bRand.z*6.2831; vec2 drift=vec2(cos(time*sp+ph)*rad, sin(time*sp*0.85+ph*1.7)*rad); vec2 home=bOffset+drift; vec2 wxz=fieldCenter+mod(home-fieldCenter+H,vec2(SPAN))-H; float g=terrainH(wxz); float hover=0.55+bRand.x*1.5+sin(time*(1.1+bRand.y)+ph)*0.35; vec3 wp=vec3(wxz.x,g+hover,wxz.y); float flap=sin(time*(15.0+bRand.y*7.0)+ph)*1.05; vFlap=flap; vec3 p=position; float ang=flap*wing; p.yz=rot(ang)*p.yz; float head=atan(cos(time*sp+ph), sin(time*sp*0.85+ph*1.7)); p.xz=rot(head)*p.xz; float sc=0.34+bRand.z*0.26; wp+=p*sc; vec3 c1=vec3(1.00,0.82,0.35); vec3 c2=vec3(1.00,0.58,0.28); vec3 c3=vec3(0.93,0.74,0.46); vCol=bRand.x<0.4?c1:(bRand.x<0.75?c2:c3); vec4 mv=viewMatrix*vec4(wp,1.0); vDist=-mv.z; gl_Position=projectionMatrix*mv;}`, fragmentShader:`uniform vec3 fogColor; uniform float fogNear,fogFar; varying vec3 vCol; varying float vDist; varying float vFlap; void main(){float shade=0.72+0.28*abs(cos(vFlap)); vec3 col=vCol*shade; float f=smoothstep(fogNear,fogFar,vDist); col=mix(col,fogColor,f); float a=1.0-smoothstep(30.0,52.0,vDist); gl_FragColor=vec4(col,a);}`});
+const bflyMat=new THREE.ShaderMaterial({ side:THREE.DoubleSide, transparent:true, depthWrite:true, uniforms:{ time:uTime, fieldCenter:{value:new THREE.Vector2(0,0)}, fogColor:{value:new THREE.Color(FOG_COLOR)}, fogNear:{value:80}, fogFar:{value:380} }, vertexShader:`uniform float time; uniform vec2 fieldCenter; attribute vec2 bOffset; attribute vec3 bRand; attribute float wing; varying vec3 vCol; varying float vDist; varying float vFlap; ${TERRAIN_GLSL} mat2 rot(float a){float c=cos(a),s=sin(a); return mat2(c,-s,s,c);} void main(){float SPAN=70.0,H=35.0; float sp=0.22+bRand.x*0.30; float rad=2.5+bRand.y*7.0; float ph=bRand.z*6.2831; vec2 drift=vec2(cos(time*sp+ph)*rad, sin(time*sp*0.85+ph*1.7)*rad); vec2 home=bOffset+drift; vec2 wxz=fieldCenter+mod(home-fieldCenter+H,vec2(SPAN))-H; float g=terrainH(wxz); float hover=0.55+bRand.x*1.5+sin(time*(1.1+bRand.y)+ph)*0.35; vec3 wp=vec3(wxz.x,g+hover,wxz.y); float flap=sin(time*(15.0+bRand.y*7.0)+ph)*1.05; vFlap=flap; vec3 p=position; float ang=flap*wing; p.yz=rot(ang)*p.yz; float head=atan(cos(time*sp+ph), sin(time*sp*0.85+ph*1.7)); p.xz=rot(head)*p.xz; float sc=0.34+bRand.z*0.26; wp+=p*sc; vec3 c1=vec3(1.00,0.82,0.35); vec3 c2=vec3(1.00,0.58,0.28); vec3 c3=vec3(0.93,0.74,0.46); vCol=bRand.x<0.4?c1:(bRand.x<0.75?c2:c3); vec4 mv=viewMatrix*vec4(wp,1.0); vDist=-mv.z; gl_Position=projectionMatrix*mv;}`, fragmentShader:`uniform vec3 fogColor; uniform float fogNear,fogFar; varying vec3 vCol; varying float vDist; varying float vFlap; void main(){float shade=0.72+0.28*abs(cos(vFlap)); vec3 col=vCol*shade; float f=smoothstep(fogNear,fogFar,vDist); col=mix(col,fogColor,f); float a=1.0-smoothstep(30.0,52.0,vDist); gl_FragColor=vec4(col,a);}`});
 const butterflies=new THREE.Mesh(bflyGeo,bflyMat); butterflies.frustumCulled=false; scene.add(butterflies);
 
 const BIRD_N=isTouch?18:34;
 function makeBirdGeo(){ const pos=[],side=[],idx=[]; function wingSide(sgn){ const b=pos.length/3; pos.push(0,0,0.06,sgn*0.42,0,0.16,sgn*0.40,0,-0.06,0,0,-0.10); for(let k=0;k<4;k++) side.push(sgn); idx.push(b,b+1,b+2,b,b+2,b+3); const b2=pos.length/3; pos.push(sgn*0.40,0,0.10,sgn*0.86,0,0.06,sgn*0.80,0,-0.10,sgn*0.38,0,-0.06); for(let k=0;k<4;k++) side.push(sgn); idx.push(b2,b2+1,b2+2,b2,b2+2,b2+3);} wingSide(1); wingSide(-1); const segArr=new Float32Array(pos.length/3); for(let i=0;i<segArr.length;i++) segArr[i]=(i%8<4)?0.45:1.0; const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); g.setAttribute('side',new THREE.Float32BufferAttribute(side,1)); g.setAttribute('seg',new THREE.BufferAttribute(segArr,1)); g.setIndex(idx); return g; }
 const birdBase=makeBirdGeo(); const birdGeo=new THREE.InstancedBufferGeometry(); birdGeo.index=birdBase.index; birdGeo.setAttribute('position',birdBase.attributes.position); birdGeo.setAttribute('side',birdBase.attributes.side); birdGeo.setAttribute('seg',birdBase.attributes.seg);
 const kRnd=new Float32Array(BIRD_N*4); for(let i=0;i<BIRD_N;i++){ kRnd[i*4]=Math.random(); kRnd[i*4+1]=Math.random(); kRnd[i*4+2]=Math.random(); kRnd[i*4+3]=Math.floor(Math.random()*3); } birdGeo.setAttribute('kRand',new THREE.InstancedBufferAttribute(kRnd,4)); birdGeo.instanceCount=BIRD_N;
-const birdMat=new THREE.ShaderMaterial({ side:THREE.DoubleSide, transparent:true, depthWrite:false, fog:false, uniforms:{ time:uTime, sunDir:{value:SUN_DIR} }, vertexShader:`uniform float time; attribute vec4 kRand; attribute float side; attribute float seg; varying float vShade; varying float vAlpha; mat2 rot(float a){float c=cos(a),s=sin(a); return mat2(c,-s,s,c);} void main(){float flock=kRand.w; float R=95.0+flock*55.0; float alt=58.0+flock*20.0+kRand.y*16.0; float sp=0.045+flock*0.012; float ph=kRand.x*6.2831; float spread=(kRand.z-0.5)*26.0; float lag=(kRand.x-0.5)*0.30; float a=time*sp+ph*0.35+lag; vec2 c=vec2(cos(flock*2.1)*40.0, sin(flock*1.7)*40.0); vec3 wp=vec3(c.x+cos(a)*(R+spread), alt+sin(a*2.0+ph)*3.5, c.y+sin(a)*(R+spread)); float flap=sin(time*(5.2+kRand.y*2.2)+ph*3.0); vec3 p=position; float lift=flap*seg*0.55*side; p.y+=abs(p.x)*flap*seg*0.75; p.y+=lift*0.10; float head=-a+1.5707; p.xz=rot(head)*p.xz; float sc=2.6+kRand.z*1.6; wp+=p*sc; vShade=0.55+0.45*abs(flap); float d=distance(cameraPosition,wp); vAlpha=1.0-smoothstep(230.0,340.0,d); gl_Position=projectionMatrix*viewMatrix*vec4(wp,1.0);}`, fragmentShader:`varying float vShade; varying float vAlpha; void main(){vec3 col=mix(vec3(0.13,0.11,0.14),vec3(0.34,0.25,0.22),vShade*0.6); gl_FragColor=vec4(col,vAlpha*0.92);}`});
+const birdMat=new THREE.ShaderMaterial({ side:THREE.DoubleSide, transparent:true, depthWrite:false, fog:false, uniforms:{ time:uTime, sunDir:{value:SUN_DIR},worldCenter:{value:new THREE.Vector3()} }, vertexShader:`uniform float time; uniform vec3 worldCenter; attribute vec4 kRand; attribute float side; attribute float seg; varying float vShade; varying float vAlpha; mat2 rot(float a){float c=cos(a),s=sin(a); return mat2(c,-s,s,c);} void main(){float flock=kRand.w; float R=95.0+flock*55.0; float alt=58.0+flock*20.0+kRand.y*16.0; float sp=0.045+flock*0.012; float ph=kRand.x*6.2831; float spread=(kRand.z-0.5)*26.0; float lag=(kRand.x-0.5)*0.30; float a=time*sp+ph*0.35+lag; vec2 c=vec2(cos(flock*2.1)*40.0, sin(flock*1.7)*40.0); vec3 wp=vec3(c.x+cos(a)*(R+spread), alt+sin(a*2.0+ph)*3.5, c.y+sin(a)*(R+spread)); float flap=sin(time*(5.2+kRand.y*2.2)+ph*3.0); vec3 p=position; float lift=flap*seg*0.55*side; p.y+=abs(p.x)*flap*seg*0.75; p.y+=lift*0.10; float head=-a+1.5707; p.xz=rot(head)*p.xz; float sc=2.6+kRand.z*1.6; wp+=p*sc+worldCenter; vShade=0.55+0.45*abs(flap); float d=distance(cameraPosition,wp); vAlpha=1.0-smoothstep(230.0,340.0,d); gl_Position=projectionMatrix*viewMatrix*vec4(wp,1.0);}`, fragmentShader:`varying float vShade; varying float vAlpha; void main(){vec3 col=mix(vec3(0.13,0.11,0.14),vec3(0.34,0.25,0.22),vShade*0.6); gl_FragColor=vec4(col,vAlpha*0.92);}`});
 const birds=new THREE.Mesh(birdGeo,birdMat); birds.frustumCulled=false; scene.add(birds);
 
 const P_COUNT=isTouch?90:190; const P_SPAN=90;
@@ -597,9 +581,24 @@ function applySettings(_settings=settings,key=null){
   if(!key || key==='shadows') scene.traverse(o=>{if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate=true);});
 }
 applySettings();
-const gameHUD=initHUD({terrainH,waterY:WATER_Y,worldSize:T_SIZE,settings,onSettings:applySettings,
+const gameHUD=initHUD({terrainH,waterY:WATER_Y,worldSize:T_SIZE,settings,onSettings:applySettings,onTravel:travelTo,
   onPause:pauseGame,onResume:()=>{if(isTouch)startGame();else requestLock();},
-  getState:()=>({state,x:player.pos.x,z:player.pos.z,yaw:player.yaw,facing:CHAR.turnSmooth,orbs,hp:player.hp,maxHP:player.maxHP})});
+  getState:()=>({state,x:player.pos.x,z:player.pos.z,yaw:player.yaw,facing:CHAR.turnSmooth,region:regionAt(player.pos.x,player.pos.z),stream:world.stats,orbs:orbs.map(o=>({position:o.position,visible:!o.userData.collected})),hp:player.hp,maxHP:player.maxHP})});
+function travelTo(id){
+  const waypoint=WAYPOINTS.find(w=>w.id===id);
+  if(!waypoint||!CHAR.ready) return false;
+  clearKeys();clearTouchInput();clearEffects();
+  player.pos.set(waypoint.x,0,waypoint.z+6);player.vel.set(0,0,0);
+  player.vy=0;player.grounded=true;player.jumpCooldown=0;
+  DASH.timer=0;DASH.cooldown=0;DASH.stamina=DASH.max;DASH.exhausted=false;DASH.trail=0;
+  ATTACK.active=false;ATTACK.cooldown=0;ATTACK.queue=false;
+  CHAR.move=0;CHAR.dash=0;CHAR.phase=0;
+  world.update(player.pos.x,player.pos.z,true);
+  const h=terrainH(player.pos.x,player.pos.z);
+  camera.position.set(player.pos.x+Math.sin(player.yaw)*settings.cameraDistance,h+2.5,player.pos.z+Math.cos(player.yaw)*settings.cameraDistance);
+  charRoot.position.set(player.pos.x,h,player.pos.z);
+  return true;
+}
 function startGame(){
   if(!CHAR.ready) return;
   state = 'playing';
@@ -632,7 +631,7 @@ function resetGame(){
   clearTouchInput(); clearKeys(); clearEffects();
   player.hp=player.maxHP;
   score = 0; elapsed = 0; lastShownTime = -1;
-  orbs.forEach(o => { o.visible = true; });
+  orbs.forEach(o => { o.userData.collected=false; o.visible=true; });
   player.pos.set(0, 0, 6); player.yaw = Math.PI; player.pitch = 0.04;
   player.vel.set(0,0,0); player.vy=0; player.grounded=true;
   CHAR.turnSmooth=0; CHAR.phase=0; CHAR.move=0; CHAR.run=0; CHAR.dash=0; CHAR.bob=0;
@@ -641,6 +640,7 @@ function resetGame(){
   DASH.exhausted=false; DASH.sinceUse=9; player.jumpCooldown=0;
   elOrb.textContent = score+' / '+ORB_COUNT;
   winOverlay.classList.add('hidden');
+  travelTo('heartlands');
   startGame();
 }
 function updateHUD(){ elOrb.textContent = score + ' / ' + ORB_COUNT; }
@@ -734,7 +734,7 @@ function animate(){
       player.pos.x = px; player.pos.z = pz;
       player.vel.multiplyScalar(0.25); DASH.timer=0;
     }
-    const LIM = T_SIZE*0.46;
+    const LIM = WORLD_LIMIT;
     player.pos.x = Math.max(-LIM, Math.min(LIM, player.pos.x));
     player.pos.z = Math.max(-LIM, Math.min(LIM, player.pos.z));
 
@@ -752,7 +752,12 @@ function animate(){
     } else if(ATTACK.cooldown>0) ATTACK.cooldown-=dt;
   }
 
+  world.update(player.pos.x,player.pos.z);
   const gh = terrainH(player.pos.x, player.pos.z);
+  for(const o of orbs)o.visible=!o.userData.collected&&Math.hypot(o.position.x-player.pos.x,o.position.z-player.pos.z)<650;
+  birdMat.uniforms.worldCenter.value.set(player.pos.x,gh,player.pos.z);
+  dust.position.y=gh;
+
   const groundY = Math.max(gh, WATER_Y - 0.4) + player.pos.y;
   const eyeY = groundY + 1.75;
   const moving = state === 'playing' && player.vel.lengthSq() > 1;
@@ -785,9 +790,10 @@ function animate(){
   const safeY=terrainH(camera.position.x,camera.position.z)+0.55; if(camera.position.y<safeY) camera.position.y=safeY;
   camera.lookAt(_camTarget);
 
-  sun.target.position.set(player.pos.x, 0, player.pos.z);
+  sun.target.position.set(player.pos.x, gh, player.pos.z);
   sun.position.copy(SUN_DIR).multiplyScalar(150).add(sun.target.position);
   sun.target.updateMatrixWorld();
+  skyDome.position.copy(camera.position);
 
   if (state === 'playing'){
     for (const o of orbs){
@@ -796,7 +802,7 @@ function animate(){
       o.rotation.y += dt*1.2;
       const d = Math.hypot(o.position.x - player.pos.x, o.position.z - player.pos.z);
       if (d < 2.4 && Math.abs(o.position.y-(groundY+1.0))<3.8){
-        o.visible = false; score++; chime(); updateHUD();
+        o.visible = false; o.userData.collected=true; score++; chime(); updateHUD();
         if (score === ORB_COUNT) winGame();
       }
     }
@@ -810,8 +816,8 @@ function animate(){
     pa.setY(i, y);
     let x = pa.getX(i), z = pa.getZ(i);
     const rx = x - player.pos.x, rz = z - player.pos.z;
-    if (rx >  HS) pa.setX(i, x - P_SPAN); else if (rx < -HS) pa.setX(i, x + P_SPAN);
-    if (rz >  HS) pa.setZ(i, z - P_SPAN); else if (rz < -HS) pa.setZ(i, z + P_SPAN);
+    pa.setX(i,player.pos.x+THREE.MathUtils.euclideanModulo(rx+HS,P_SPAN)-HS);
+    pa.setZ(i,player.pos.z+THREE.MathUtils.euclideanModulo(rz+HS,P_SPAN)-HS);
   }
   pa.needsUpdate = true;
 
