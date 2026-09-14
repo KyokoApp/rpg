@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Orb Hunt — Aether</title>
+<title>Orb Hunt</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent; }
   html,body { width:100%; height:100%; overflow:hidden; background:#0a0a0f; font-family:'Segoe UI',system-ui,sans-serif; }
@@ -33,6 +33,8 @@
   #dashBtn{right:22px;bottom:28px}
   #atkBtn{right:22px;bottom:118px;width:82px;height:82px;font-size:34px;background:rgba(120,180,255,.22);border-color:rgba(180,210,255,.5)}
   #jumpBtn{right:112px;bottom:28px;width:66px;height:66px;font-size:26px;background:rgba(180,255,180,.18);border-color:rgba(180,255,180,.4)}
+  #carBtn{right:112px;bottom:118px;width:66px;height:66px;font-size:26px;background:rgba(140,225,255,.18);border-color:rgba(140,225,255,.48)}
+  #carBtn.hide{display:none}
   #pauseBtn { position:absolute; top:14px; right:14px; width:44px; height:44px; border-radius:12px; border:1px solid rgba(255,255,255,.3); background:rgba(0,0,0,.3); color:#fff; font-size:18px; pointer-events:auto; z-index:6; }
   .overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(ellipse at center, rgba(120,175,215,.55), rgba(28,48,78,.93)); color:#fff; text-align:center; z-index:10; cursor:pointer; padding:20px; }
   .overlay.hidden { display:none; }
@@ -49,6 +51,76 @@
   #attackFlash{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 70% 50%, rgba(120,200,255,.18), transparent 60%);transition:opacity .15s;z-index:4}
   #attackFlash.on{opacity:1}
   #loadStatus{position:absolute; bottom:46px; font-size:11px; color:#8ff0c0; letter-spacing:1px;}
+
+  /* ============ CAR HUD — gaya CarX Street ============ */
+  #carHUD{position:fixed;inset:0;pointer-events:none;z-index:6;opacity:0;transition:opacity .3s;visibility:hidden}
+  #carHUD.on{opacity:1;visibility:visible}
+  #gaugeWrap{position:absolute;right:16px;bottom:14px;width:min(40vw,238px);aspect-ratio:1;
+    filter:drop-shadow(0 8px 26px rgba(0,0,0,.6))}
+  #gauge{width:100%;height:100%;display:block;overflow:visible}
+  .g-face{fill:rgba(9,13,19,.62);stroke:rgba(120,215,255,.26);stroke-width:1.4}
+  .g-tachoBg{fill:none;stroke:rgba(255,255,255,.12);stroke-width:8;stroke-linecap:round}
+  .g-tacho{fill:none;stroke:#5fdcff;stroke-width:8;stroke-linecap:round}
+  .g-red{fill:none;stroke:#ff4a37;stroke-width:8;stroke-linecap:round;opacity:.9}
+  .g-tick{stroke:rgba(255,255,255,.45);stroke-width:1.6}
+  .g-tickMaj{stroke:rgba(255,238,200,.92);stroke-width:2.6}
+  .g-num{fill:rgba(255,255,255,.62);font-size:10px;text-anchor:middle;font-variant-numeric:tabular-nums}
+  .g-needle{stroke:#ffc44d;stroke-width:3;stroke-linecap:round}
+  .g-cap{fill:#0b0f15;stroke:rgba(255,196,77,.55);stroke-width:2}
+  #gKmh{fill:#fff;font-size:42px;font-weight:700;text-anchor:middle;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+  #gUnit{fill:rgba(255,255,255,.45);font-size:9px;text-anchor:middle;letter-spacing:3.5px}
+  #gGear{fill:#5fdcff;font-size:26px;font-weight:700;text-anchor:middle}
+  #gGearLbl{fill:rgba(255,255,255,.35);font-size:7.5px;text-anchor:middle;letter-spacing:2px}
+  #gRpmTxt{fill:rgba(255,255,255,.55);font-size:10px;text-anchor:middle;font-variant-numeric:tabular-nums}
+
+  #carLeft{position:absolute;left:16px;bottom:16px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+  .carStat{background:rgba(9,13,19,.55);backdrop-filter:blur(9px);border:1px solid rgba(120,215,255,.22);
+    border-radius:12px;padding:7px 13px;color:#dfeaf2;min-width:104px}
+  .carStat .k{font-size:8.5px;letter-spacing:2.2px;text-transform:uppercase;color:rgba(255,255,255,.45)}
+  .carStat .v{font-size:17px;font-weight:600;margin-top:1px;font-variant-numeric:tabular-nums;color:#fff}
+  #nosWrap{width:132px;height:7px;border-radius:5px;background:rgba(255,255,255,.12);overflow:hidden;
+    border:1px solid rgba(120,215,255,.3);margin-top:5px}
+  #nosFill{height:100%;width:100%;border-radius:4px;background:linear-gradient(90deg,#3fb6ff,#8ef0ff);transition:width .1s linear}
+  #nosWrap.hot #nosFill{background:linear-gradient(90deg,#ffb347,#ffe08a)}
+
+  #carCtrls{position:absolute;inset:0;pointer-events:none;display:none}
+  #carCtrls.on{display:block}
+  .cBtn{position:absolute;pointer-events:auto;touch-action:none;border-radius:50%;
+    border:2px solid rgba(140,225,255,.42);background:rgba(20,32,44,.42);backdrop-filter:blur(7px);
+    color:#e6f6ff;font-size:13px;font-weight:700;letter-spacing:.5px;display:flex;align-items:center;
+    justify-content:center;flex-direction:column;gap:1px;user-select:none;box-shadow:0 4px 16px rgba(0,0,0,.35)}
+  .cBtn:active,.cBtn.hit{transform:scale(.93);background:rgba(95,220,255,.28);border-color:rgba(160,240,255,.85)}
+  .cBtn small{font-size:8.5px;opacity:.6;letter-spacing:1px}
+  #steerL{left:14px;bottom:96px;width:74px;height:74px;font-size:24px}
+  #steerR{left:98px;bottom:96px;width:74px;height:74px;font-size:24px}
+  #gasBtn{right:16px;bottom:190px;width:88px;height:88px;border-color:rgba(150,255,180,.45);background:rgba(28,60,40,.42)}
+  #gasBtn:active,#gasBtn.hit{background:rgba(120,255,170,.30);border-color:rgba(170,255,200,.9)}
+  #brakeBtn{right:114px;bottom:190px;width:74px;height:74px;border-color:rgba(255,150,140,.45);background:rgba(60,26,26,.42)}
+  #brakeBtn:active,#brakeBtn.hit{background:rgba(255,120,100,.30);border-color:rgba(255,170,160,.9)}
+  #handBtn{right:16px;bottom:288px;width:64px;height:64px;font-size:11px;border-color:rgba(255,209,102,.45);background:rgba(58,44,16,.42)}
+  #nosBtn{right:90px;bottom:288px;width:64px;height:64px;font-size:11px;border-color:rgba(140,225,255,.5);background:rgba(18,48,66,.45)}
+
+  #exitCar{position:absolute;top:14px;left:14px;pointer-events:auto;touch-action:none;
+    background:rgba(9,13,19,.6);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:12px;
+    padding:10px 16px;font-size:12px;letter-spacing:1.5px;font-family:inherit;backdrop-filter:blur(8px)}
+  #exitCar:active{transform:scale(.95);background:rgba(95,220,255,.25)}
+  #muteBtn{position:absolute;top:14px;left:132px;pointer-events:auto;touch-action:none;width:44px;height:44px;
+    border-radius:12px;border:1px solid rgba(255,255,255,.24);background:rgba(9,13,19,.55);color:#fff;font-size:16px;
+    font-family:inherit;backdrop-filter:blur(8px)}
+  #carHint{position:absolute;top:64px;left:14px;font-size:10.5px;letter-spacing:.6px;color:rgba(255,255,255,.5);
+    line-height:1.75;max-width:210px}
+  #carHint b{color:#ffd166;font-weight:600}
+
+  #carPrompt{position:fixed;left:50%;bottom:118px;transform:translateX(-50%);z-index:7;pointer-events:none;
+    background:rgba(9,13,19,.72);border:1px solid rgba(120,215,255,.4);border-radius:999px;
+    padding:9px 20px;color:#eaf6ff;font-size:12.5px;letter-spacing:1.2px;backdrop-filter:blur(8px);
+    opacity:0;transition:opacity .25s;white-space:nowrap}
+  #carPrompt.on{opacity:1}
+  #carPrompt b{color:#5fdcff;font-weight:700}
+  #carPrompt kbd{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);border-radius:5px;
+    padding:1px 7px;font-family:inherit;font-size:11.5px;color:#ffd166}
+  #speedoFlash{position:fixed;inset:0;pointer-events:none;z-index:3;opacity:0;
+    background:radial-gradient(ellipse at center,rgba(255,255,255,0) 42%,rgba(120,220,255,.22) 100%);transition:opacity .18s}
 </style>
 </head>
 <body>
@@ -71,18 +143,56 @@
   <button class="tBtn" id="dashBtn" type="button">⚡</button>
   <button class="tBtn" id="atkBtn" type="button">⚔️</button>
   <button class="tBtn" id="jumpBtn" type="button">⤴</button>
+  <button class="tBtn hide" id="carBtn" type="button">🚗</button>
   <button id="pauseBtn">⏸</button>
 </div>
 
+<div id="speedoFlash"></div>
+
+<div id="carHUD">
+  <div id="carLeft">
+    <div class="carStat"><div class="k">Kecepatan</div><div class="v" id="csSpeed">0 km/j</div></div>
+    <div class="carStat"><div class="k">RPM × 1000</div><div class="v" id="csRpm">0.9</div></div>
+    <div class="carStat"><div class="k">Nitro <span id="nosPct">100%</span></div><div id="nosWrap"><div id="nosFill"></div></div></div>
+  </div>
+
+  <div id="gaugeWrap">
+    <svg id="gauge" viewBox="0 0 240 240" aria-label="Speedometer"></svg>
+  </div>
+
+  <div id="carCtrls">
+    <div class="cBtn" id="steerL">◀<small>KIRI</small></div>
+    <div class="cBtn" id="steerR">▶<small>KANAN</small></div>
+    <div class="cBtn" id="gasBtn">GAS<small>W</small></div>
+    <div class="cBtn" id="brakeBtn">REM<small>S</small></div>
+    <div class="cBtn" id="handBtn">HAND<small>SPASI</small></div>
+    <div class="cBtn" id="nosBtn">NOS<small>SHIFT</small></div>
+  </div>
+
+  <button id="exitCar" type="button">⏻ KELUAR &nbsp;<b>E</b></button>
+  <button id="muteBtn" type="button">🔊</button>
+  <div id="carHint">
+    <b>W/S</b> gas &amp; rem · <b>A/D</b> belok<br>
+    <b>SPASI</b> rem tangan · <b>SHIFT</b> nitro<br>
+    <b>E</b> keluar · <b>B</b> summon mobil · <b>R</b> balikkan · <b>M</b> bisu
+  </div>
+</div>
+
+<div id="carPrompt"></div>
+
 <div class="overlay" id="startOverlay">
   <h1>ORB HUNT</h1>
-  <p class="sub">Jelajahi lembah sejuk di kala senja dan kumpulkan <b style="color:#ffe08a">12 orb purba</b>. Cari <b style="color:#8ff0c0">pilar cahaya</b> yang menjulang di kejauhan — di sanalah orb menunggu.<br><span style="color:#8ff0c0;font-size:13px">+ AETHER CHARACTER</span></p>
+  <p class="sub">Jelajahi lembah sejuk di kala senja dan kumpulkan <b style="color:#ffe08a">12 orb purba</b>. Cari <b style="color:#8ff0c0">pilar cahaya</b> yang menjulang di kejauhan — di sanalah orb menunggu.<br><span style="color:#8ff0c0;font-size:13px">+ KARAKTER HORNET (animasi prosedural) · MOBIL DRIVABLE (HUD gaya CarX Street)</span></p>
   <div class="keys" id="keysDesktop">
     <div class="key"><b>W A S D</b>Bergerak</div>
     <div class="key"><b>Mouse</b>Lihat sekeliling</div>
-    <div class="key"><b>Shift</b>Lari / Dash</div>
-    <div class="key"><b>Klik Kanan / J</b>Attack</div>
-    <div class="key"><b>Space</b>Lompat</div>
+    <div class="key"><b>Shift</b>Lari / Dash · Nitro (mobil)</div>
+    <div class="key"><b>Klik Kiri / J</b>Attack</div>
+    <div class="key"><b>Space</b>Lompat · Rem tangan (mobil)</div>
+    <div class="key"><b>E</b>Masuk / keluar mobil</div>
+    <div class="key"><b>B</b>Summon mobil</div>
+    <div class="key"><b>R</b>Balikkan mobil yang terbalik</div>
+    <div class="key"><b>M</b>Matikan / nyalakan suara</div>
   </div>
   <div class="keys" id="keysTouch" style="display:none">
     <div class="key"><b>Joystick kiri</b>Gerak (dorong penuh = lari)</div>
@@ -90,10 +200,12 @@
     <div class="key"><b>⚡</b>Dash</div>
     <div class="key"><b>⚔️</b>Attack</div>
     <div class="key"><b>Tap kanan</b>Attack</div>
+    <div class="key"><b>🚗</b>Masuk / keluar / summon mobil</div>
+    <div class="key"><b>Pedal &amp; setir</b>Muncul otomatis saat di dalam mobil</div>
   </div>
   <div class="cta" id="ctaText">— Klik untuk memulai —</div>
   <p class="installHint" id="installHint" style="display:none">💡 Di Android: menu Chrome ⋮ → <b>Tambahkan ke layar utama</b> untuk full-screen.</p>
-  <div class="credit">Three.js · Aether · Cel Shading · GPU Grass & Fauna</div>
+  <div class="credit">Three.js r160 (MIT) · GPU Grass &amp; Fauna · Model "Hornet" oleh Seifert — CC-BY-4.0</div>
   <div id="loadStatus">Loading...</div>
 </div>
 
@@ -112,8 +224,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { AUDIO } from './js/audio.js';
+import { Car, CAR_CFG } from './js/car.js';
 
-console.log('[BOOT] Old stable + Aether character');
+console.log('[BOOT] Orb Hunt - world + character rig');
 
 // ===== DETEKSI PERANGKAT - SAMA PERSIS VERSI LAWAS =====
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches);
@@ -198,7 +312,7 @@ for(let i=0;i<pos.count;i++){ const x=pos.getX(i),z=pos.getZ(i); const y=terrain
 tGeo.setAttribute('color',new THREE.BufferAttribute(colors,3)); tGeo.computeVertexNormals();
 const terrain=new THREE.Mesh(tGeo,new THREE.MeshToonMaterial({vertexColors:true,gradientMap:RAMP4})); terrain.receiveShadow=true; scene.add(terrain);
 
-const FIELD=95, HALF=47.5;
+const FIELD=95;
 const GRASS_N=isTouch?30000:130000;
 const BLADE_SEG=6;
 function makeBladeGeometry(){
@@ -287,7 +401,9 @@ const dustTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=
 const dust=new THREE.Points(pGeo,new THREE.PointsMaterial({size:0.16,map:dustTex,transparent:true,opacity:0.30,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true})); dust.frustumCulled=false; scene.add(dust);
 
 /* ============================================================
-   AETHER CHARACTER - TAMBAHAN BARU (TIDAK UBAH LOGIKA LAWAS)
+   KARAKTER PEMAIN - "HORNET" (model oleh Seifert, CC-BY-4.0)
+   Animasi prosedural: rig 33 joint digerakkan manual per bone,
+   clip animasi bawaan GLB ('HORNET RIGAction') tidak dipakai.
 ============================================================ */
 function createSlashTexture(){
   const C=document.createElement('canvas'); C.width=C.height=512; const ctx=C.getContext('2d');
@@ -312,22 +428,20 @@ new GLTFLoader().load('./character.glb', (gltf)=>{
     if(o.isMesh){
       const m0=Array.isArray(o.material)?o.material[0]:o.material; const mname=(m0&&m0.name)||'';
       if(DROP_MAT.test(mname)){ toRemove.push(o); return; }
-      o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false;
-      const oldMats=Array.isArray(o.material)?o.material:[o.material];
-      const newMats=oldMats.map(mm=>{
-        if(mm.map){ mm.map.colorSpace=THREE.SRGBColorSpace; mm.map.minFilter=THREE.LinearMipmapLinearFilter; mm.map.magFilter=THREE.LinearFilter; mm.map.wrapS=mm.map.wrapT=THREE.ClampToEdgeWrapping; mm.map.needsUpdate=true; }
-        const hasMap=!!mm.map;
-        const mat=new THREE.MeshToonMaterial({ map:mm.map||null, color:hasMap?new THREE.Color(0xffffff):(mm.color?mm.color.clone():new THREE.Color(0xffffff)), gradientMap:RAMP4, transparent:!!mm.transparent, opacity:mm.opacity!==undefined?mm.opacity:1, alphaTest:mm.alphaTest||0.1, side:THREE.DoubleSide });
-        return mat;
-      });
-      o.material=Array.isArray(o.material)?newMats:newMats[0];
+      o.castShadow=true; o.frustumCulled=false;
+      // Semua material di character.glb memakai extension KHR_materials_unlit, jadi
+      // GLTFLoader sudah menghasilkan MeshBasicMaterial. Material ASLI dipertahankan
+      // (tidak lagi dikonversi ke MeshToonMaterial) supaya warna karakter persis
+      // seperti niat asli modelnya -- lihat CREDITS.md.
+      // Alasan teknis: konversi ke toon + DirectionalLight 3.3 + ACESFilmic membuat
+      // kanal merah clip. Albedo dress (179,19,61) ter-render jadi (229,0,0).
     }
     if(o.isBone){ const clean=cleanBoneName(o.name); CHAR.bones[clean]=o; CHAR.restQuat[clean]=o.quaternion.clone(); }
   });
   for(const o of toRemove){ if(o.parent) o.parent.remove(o); }
   charRoot.add(model); CHAR.model=model; CHAR.ready=true;
   Object.keys(CHAR.bones).forEach(k=>{ if(k.includes('DRESS')) CHAR.cloakBones.push({bone:CHAR.bones[k], restQ:CHAR.bones[k].quaternion.clone(), curX:0, velX:0}); });
-  document.getElementById('loadStatus').textContent = `Aether Ready • ${Object.keys(CHAR.bones).length} bones • Tap to play`;
+  document.getElementById('loadStatus').textContent = `Character ready • ${Object.keys(CHAR.bones).length} bones • Tap to play`;
   console.log('[CHAR] Ready', Object.keys(CHAR.bones).length, 'bones');
 }, undefined, e=>{ console.warn('char fail', e); document.getElementById('loadStatus').textContent='Char fail: '+e.message; });
 
@@ -337,7 +451,7 @@ function boneRot(name, rx,ry,rz, blend=1){
   _e.set(rx,ry,rz); _q.setFromEuler(_e); _q.premultiply(rest);
   if(blend>=0.999) b.quaternion.copy(_q); else b.quaternion.slerp(_q, blend);
 }
-function animateAether(dt, speed01, moving, isRunning, isDashing, isJumping, isFalling, attackInfo){
+function animateCharacter(dt, speed01, moving, isRunning, isDashing, isJumping, isFalling, attackInfo){
   if(!CHAR.ready) return;
   const blendBase=1-Math.pow(0.001, dt);
   const stepRate=isDashing?11:(isRunning?9.2:5.6);
@@ -375,7 +489,7 @@ function spawnGhost(){
   if(!CHAR.ready||!CHAR.model) return;
   try{
     const clone=SkeletonUtils.clone(CHAR.model);
-    clone.traverse(o=>{ if(o.isMesh){ const mats=Array.isArray(o.material)?o.material:[o.material]; const newMats=mats.map(m=>{ const nm=m.clone(); nm.transparent=true; nm.opacity=0.55; nm.depthWrite=false; nm.emissive=new THREE.Color(0x6ec8ff); nm.emissiveIntensity=0.35; return nm; }); o.material=Array.isArray(o.material)?newMats:newMats[0]; o.castShadow=false; } });
+    clone.traverse(o=>{ if(o.isMesh){ const mats=Array.isArray(o.material)?o.material:[o.material]; const newMats=mats.map(m=>{ const nm=m.clone(); nm.map=null; nm.color=new THREE.Color(0x6ec8ff); nm.transparent=true; nm.opacity=0.55; nm.depthWrite=false; if(nm.emissive) nm.emissive.set(0x123a55); return nm; }); o.material=Array.isArray(o.material)?newMats:newMats[0]; o.castShadow=false; o.receiveShadow=false; } });
     const gRoot=new THREE.Group(); gRoot.position.copy(charRoot.position); gRoot.quaternion.copy(charRoot.quaternion);
     clone.position.copy(CHAR.model.position); clone.rotation.copy(CHAR.model.rotation); clone.scale.copy(CHAR.model.scale);
     gRoot.add(clone); scene.add(gRoot); ghosts.push({group:gRoot, life:0.45, max:0.45});
@@ -387,6 +501,195 @@ function spawnSlash(charPos, charYaw){
   const geo=new THREE.PlaneGeometry(5.2,3.2); const mat=new THREE.MeshBasicMaterial({map:slashTex, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide});
   const mesh=new THREE.Mesh(geo,mat); mesh.position.copy(basePos); mesh.lookAt(mesh.position.clone().add(forward)); mesh.rotateZ(Math.PI*0.15); scene.add(mesh); slashPool.push({mesh, life:0.28, max:0.28});
   document.getElementById('attackFlash').classList.add('on'); setTimeout(()=>document.getElementById('attackFlash').classList.remove('on'),90);
+}
+
+/* ============================================================
+   MOBIL — spawn, masuk/keluar, kontrol, HUD gaya CarX Street
+============================================================ */
+const car = new Car(scene,{ terrainH, colliders:COLLIDERS, limit:T_SIZE*0.46, waterY:WATER_Y, audio:AUDIO });
+car.loadModel('./car.glb');          // kalau car.glb ada -> otomatis ganti model procedural
+/* pegangan devtools: tuning aset mobil tanpa edit kode (mis. CAR_CFG.modelNoseFlip=true) */
+window.car=car; window.CAR_CFG=CAR_CFG; window.AUDIO=AUDIO;
+
+let mode='foot';                     // 'foot' | 'car'
+const ctl={gas:0,brake:0,left:0,right:0,hand:0,nos:0};   // tombol layar (mobil)
+const clamp01=v=>v<0?0:(v>1?1:v);
+
+/* ---------- elemen HUD mobil ---------- */
+const carHUD=document.getElementById('carHUD');
+const carCtrls=document.getElementById('carCtrls');
+const carPrompt=document.getElementById('carPrompt');
+const carBtn=document.getElementById('carBtn');
+const touchUIEl=document.getElementById('touchUI');
+const hudEl=document.getElementById('hud');
+const speedoFlash=document.getElementById('speedoFlash');
+const csSpeed=document.getElementById('csSpeed'), csRpm=document.getElementById('csRpm');
+const nosFill=document.getElementById('nosFill'), nosWrap=document.getElementById('nosWrap'), nosPct=document.getElementById('nosPct');
+
+/* ---------- gauge SVG dibangun runtime (bukan hardcode path) ---------- */
+const GA={svg:document.getElementById('gauge')};
+const GA_A0=-126, GA_SW=252, GA_KMAX=180;
+function polar(cx,cy,r,deg){ const a=(deg-90)*Math.PI/180; return [cx+r*Math.cos(a), cy+r*Math.sin(a)]; }
+function arcPath(cx,cy,r,a0,a1){
+  const p0=polar(cx,cy,r,a0), p1=polar(cx,cy,r,a1);
+  return `M ${p0[0].toFixed(2)} ${p0[1].toFixed(2)} A ${r} ${r} 0 ${Math.abs(a1-a0)>180?1:0} ${a1>a0?1:0} ${p1[0].toFixed(2)} ${p1[1].toFixed(2)}`;
+}
+function svgEl(tag,attrs){ const n=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  for(const k in attrs) n.setAttribute(k,attrs[k]); GA.svg.appendChild(n); return n; }
+(function buildGauge(){
+  svgEl('circle',{cx:120,cy:120,r:112,class:'g-face'});
+  svgEl('path',{d:arcPath(120,120,100,GA_A0,GA_A0+GA_SW),class:'g-tachoBg'});
+  const redFrac=(CAR_CFG.redline-CAR_CFG.idleRpm)/(CAR_CFG.revLimit-CAR_CFG.idleRpm);
+  svgEl('path',{d:arcPath(120,120,100,GA_A0+GA_SW*redFrac,GA_A0+GA_SW),class:'g-red'});
+  GA.tacho=svgEl('path',{d:arcPath(120,120,100,GA_A0,GA_A0+GA_SW),class:'g-tacho'});
+  GA.tachoLen=GA.tacho.getTotalLength();
+  GA.tacho.setAttribute('stroke-dasharray',GA.tachoLen.toFixed(2));
+  GA.tacho.setAttribute('stroke-dashoffset',GA.tachoLen.toFixed(2));
+  for(let k=0;k<=GA_KMAX;k+=20){
+    const a=GA_A0+GA_SW*(k/GA_KMAX);
+    const p1=polar(120,120,86,a), p2=polar(120,120,77,a);
+    svgEl('line',{x1:p1[0].toFixed(2),y1:p1[1].toFixed(2),x2:p2[0].toFixed(2),y2:p2[1].toFixed(2),class:'g-tickMaj'});
+    const pt=polar(120,120,65,a);
+    const tx=svgEl('text',{x:pt[0].toFixed(2),y:(pt[1]+3.5).toFixed(2),class:'g-num'}); tx.textContent=k;
+  }
+  for(let k=10;k<GA_KMAX;k+=20){
+    const a=GA_A0+GA_SW*(k/GA_KMAX);
+    const p1=polar(120,120,86,a), p2=polar(120,120,81,a);
+    svgEl('line',{x1:p1[0].toFixed(2),y1:p1[1].toFixed(2),x2:p2[0].toFixed(2),y2:p2[1].toFixed(2),class:'g-tick'});
+  }
+  GA.needle=svgEl('line',{x1:120,y1:120,x2:120,y2:42,class:'g-needle'});
+  svgEl('circle',{cx:120,cy:120,r:9,class:'g-cap'});
+  GA.kmh=svgEl('text',{x:120,y:148,id:'gKmh'}); GA.kmh.textContent='0';
+  const un=svgEl('text',{x:120,y:163,id:'gUnit'}); un.textContent='KM/JAM';
+  GA.gear=svgEl('text',{x:120,y:198,id:'gGear'}); GA.gear.textContent='N';
+  const gl=svgEl('text',{x:120,y:210,id:'gGearLbl'}); gl.textContent='GIGI';
+})();
+
+function updateCarHUD(){
+  const kmh=car.kmh;
+  const ang=GA_A0+GA_SW*clamp01(kmh/GA_KMAX);
+  GA.needle.setAttribute('transform',`rotate(${ang.toFixed(2)} 120 120)`);
+  GA.kmh.textContent=Math.round(kmh);
+  const span=CAR_CFG.revLimit-CAR_CFG.idleRpm*0.8;
+  const rf=clamp01((car.rpm-CAR_CFG.idleRpm*0.8)/span);
+  GA.tacho.setAttribute('stroke-dashoffset',(GA.tachoLen*(1-rf)).toFixed(2));
+  GA.tacho.setAttribute('stroke', rf>0.86?'#ff4a37':(rf>0.66?'#ffd166':'#5fdcff'));
+  GA.gear.textContent = car.speed<-0.6 ? 'R' : (Math.abs(car.speed)<0.7 && car.throttle<0.05 ? 'N' : String(car.gear));
+  csSpeed.textContent=Math.round(kmh)+' km/j';
+  csRpm.textContent=(car.rpm/1000).toFixed(1);
+  const np=car.nitro/CAR_CFG.nitroMax;
+  nosFill.style.width=(np*100).toFixed(1)+'%';
+  nosPct.textContent=Math.round(np*100)+'%';
+  nosWrap.classList.toggle('hot',car.nitroActive);
+  speedoFlash.style.opacity=(clamp01((kmh-95)/75)*0.85 + (car.nitroActive?0.35:0)).toFixed(3);
+}
+
+/* ---------- input mobil (keyboard + joystick + tombol layar) ---------- */
+function carInput(){
+  let t = ctl.gas || (keys.KeyW?1:0);
+  let b = ctl.brake || (keys.KeyS?1:0);
+  let s = (ctl.right?1:0) - (ctl.left?1:0);
+  if(keys.KeyD) s+=1;
+  if(keys.KeyA) s-=1;
+  if(stick.id!==null) s += clamp01(Math.abs(stick.dx)/MAX_R) * Math.sign(stick.dx);
+  return { throttle:clamp01(t), brake:clamp01(b), steer:s<-1?-1:(s>1?1:s),
+           handbrake:!!(ctl.hand||keys.Space), nitro:!!(ctl.nos||keys.ShiftLeft||keys.ShiftRight) };
+}
+
+/* ---------- ganti mode + sinkronisasi HUD ---------- */
+function setMode(m){
+  mode=m;
+  const inCar=(m==='car');
+  carHUD.classList.toggle('on',inCar);
+  carCtrls.classList.toggle('on',inCar&&isTouch);
+  hudEl.classList.toggle('on', !inCar && state==='playing');
+  touchUIEl.classList.toggle('on', !inCar && isTouch && state==='playing');
+  charRoot.visible=!inCar;
+  if(inCar){ stick.id=null; stick.dx=0; stick.dy=0; stickBase.style.display='none'; }
+  else speedoFlash.style.opacity='0';
+  if(!inCar) carPrompt.classList.remove('on');
+}
+
+function enterCar(){
+  if(mode!=='foot' || !car.spawned || !car.canEnter(player.pos)) return;
+  AUDIO.init(); AUDIO.resume();
+  if(document.pointerLockElement) document.exitPointerLock();   // kursor harus kelihatan buat tombol HUD
+  car.enter();
+  player.vel.set(0,0,0); player.vy=0; player.grounded=true;
+  ATTACK.active=false; ATTACK.timer=0; DASH.timer=0; DASH.trail=0;
+  clearKeys(); for(const k in ctl) ctl[k]=0;
+  setMode('car');
+  AUDIO.door(true);
+}
+function exitCar(){
+  if(mode!=='car') return;
+  if(Math.abs(car.speed)>2.4) return;                 // harus hampir berhenti
+  const p=car.exit();
+  player.pos.set(p.x,0,p.z); player.vel.set(0,0,0); player.vy=0; player.grounded=true;
+  player.yaw=car.yaw; CHAR.turnSmooth=car.yaw; CHAR.phase=0;
+  car.occupied=false;
+  clearKeys(); for(const k in ctl) ctl[k]=0;
+  setMode('foot');
+}
+function toggleCar(){ if(mode==='car') exitCar(); else enterCar(); }
+
+function summonCar(silent){
+  AUDIO.init(); AUDIO.resume();
+  if(mode==='car') return;
+  const fx=Math.sin(player.yaw), fz=Math.cos(player.yaw);
+  car.spawnAt(player.pos.x+fx*5.2, player.pos.z+fz*5.2, player.yaw);
+  if(!silent) AUDIO.uiClick();
+}
+function flipCar(){
+  car.pos.x-=Math.sin(car.yaw)*1.7; car.pos.z-=Math.cos(car.yaw)*1.7;
+  car.pos.y=terrainH(car.pos.x,car.pos.z);
+  car.speed*=-0.30; car.slip=0; car.pitch=0; car.roll=0;
+  AUDIO.impact(0.3);
+}
+
+/* ---------- tombol layar mobil (pointer events: jalan di touch & mouse) ---------- */
+function holdBtn(id,key){
+  const e=document.getElementById(id); if(!e) return;
+  const on=ev=>{ ev.preventDefault(); ctl[key]=1; e.classList.add('hit'); };
+  const off=ev=>{ if(ev&&ev.preventDefault) ev.preventDefault(); ctl[key]=0; e.classList.remove('hit'); };
+  e.addEventListener('pointerdown',on);
+  e.addEventListener('pointerup',off);
+  e.addEventListener('pointercancel',off);
+  e.addEventListener('pointerleave',off);
+  e.addEventListener('contextmenu',ev=>ev.preventDefault());
+}
+holdBtn('gasBtn','gas'); holdBtn('brakeBtn','brake');
+holdBtn('steerL','left'); holdBtn('steerR','right');
+holdBtn('handBtn','hand'); holdBtn('nosBtn','nos');
+document.getElementById('exitCar').addEventListener('click',()=>{ AUDIO.uiClick(); exitCar(); });
+document.getElementById('muteBtn').addEventListener('click',ev=>{
+  AUDIO.init(); AUDIO.setMuted(!AUDIO.muted);
+  ev.currentTarget.textContent=AUDIO.muted?'🔇':'🔊';
+});
+carBtn.addEventListener('click',e=>{ e.stopPropagation(); AUDIO.uiClick();
+  if(mode==='foot'){ if(car.spawned && car.canEnter(player.pos)) enterCar(); else summonCar(); } });
+
+/* ---------- prompt kontekstual ---------- */
+let _promptCache=null;
+function updateCarPrompt(){
+  if(state!=='playing'){ if(_promptCache!==''){carPrompt.classList.remove('on');_promptCache='';} return; }
+  let txt='';
+  if(mode==='foot'){
+    if(car.spawned && car.canEnter(player.pos))
+      txt = isTouch ? 'Ketuk <b>🚗</b> untuk masuk mobil' : 'Tekan <kbd>E</kbd> masuk mobil';
+    else if(!car.spawned)
+      txt = isTouch ? 'Ketuk <b>🚗</b> untuk summon mobil' : 'Tekan <kbd>B</kbd> summon mobil';
+  } else {
+    txt = Math.abs(car.speed)>2.4 ? 'Perlambat dulu untuk keluar'
+        : (isTouch ? 'Ketuk <b>⏻ KELUAR</b>' : 'Tekan <kbd>E</kbd> keluar mobil');
+  }
+  if(txt!==_promptCache){
+    _promptCache=txt;
+    if(txt) carPrompt.innerHTML=txt;
+    carPrompt.classList.toggle('on',!!txt);
+  }
+  const showBtn=isTouch && mode==='foot' && (!car.spawned || car.canEnter(player.pos));
+  carBtn.classList.toggle('hide',!showBtn);
 }
 
 /* ============================================================
@@ -429,10 +732,10 @@ document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === renderer.domElement;
   if (locked){
     if (state === 'ready' || state === 'paused') startGame();
-    hud.classList.add('on');
+    setMode(mode);                       // hormati mode mobil vs jalan kaki
     startOverlay.classList.add('hidden');
-  } else if (state === 'playing' && !isTouch){
-    pauseGame();
+  } else if (state === 'playing' && !isTouch && mode === 'foot'){
+    pauseGame();                         // jangan pause saat keluar pointer lock karena masuk mobil
   }
 });
 document.addEventListener('mousemove', e => {
@@ -451,7 +754,7 @@ const stick = { id:null, bx:0, by:0, dx:0, dy:0 };
 let lookId = null, lastLX = 0, lastLY = 0;
 const MAX_R = 55;
 function onTS(e){
-  if (state !== 'playing') return;
+  if (state !== 'playing' || mode !== 'foot') return;
   e.preventDefault();
   for (const t of e.changedTouches){
     if (t.clientX < innerWidth*0.45 && stick.id === null){
@@ -467,7 +770,7 @@ function onTS(e){
   }
 }
 function onTM(e){
-  if (state !== 'playing') return;
+  if (state !== 'playing' || mode !== 'foot') return;
   e.preventDefault();
   for (const t of e.changedTouches){
     if (t.identifier === stick.id){
@@ -505,14 +808,16 @@ document.getElementById('pauseBtn').addEventListener('click', e => {
 });
 
 function tryDash(){
+  if(mode!=='foot') return;
   if(DASH.timer>0||DASH.cooldown>0||ATTACK.active) return;
   if(DASH.stamina<DASH.cost){ DASH.exhausted=true; return; }
   const moving2=player.vel.lengthSq()>1.5;
   if(moving2) DASH.dir.copy(player.vel).setY(0).normalize(); else DASH.dir.set(Math.sin(CHAR.turnSmooth),0,Math.cos(CHAR.turnSmooth));
   DASH.stamina-=DASH.cost; DASH.timer=DASH.dur; DASH.cooldown=0.34; DASH.sinceUse=0; DASH.trail=1; ghostSpawnTimer=0;
 }
-function tryJump(){ if(!player.grounded||player.jumpCooldown>0||ATTACK.active) return; player.vy=9.8; player.grounded=false; player.jumpCooldown=0.25; }
+function tryJump(){ if(mode!=='foot') return; if(!player.grounded||player.jumpCooldown>0||ATTACK.active) return; player.vy=9.8; player.grounded=false; player.jumpCooldown=0.25; }
 function tryAttack(){
+  if(mode!=='foot') return;
   if(DASH.timer>0) return;
   if(ATTACK.active){ if(ATTACK.t>0.28&&ATTACK.t<0.85) ATTACK.queue=true; return; }
   if(ATTACK.cooldown>0) return;
@@ -525,47 +830,46 @@ document.getElementById('dashBtn').addEventListener('touchstart', e=>{ e.prevent
 document.getElementById('atkBtn').addEventListener('touchstart', e=>{ e.preventDefault(); tryAttack(); }, {passive:false});
 document.getElementById('jumpBtn').addEventListener('touchstart', e=>{ e.preventDefault(); tryJump(); }, {passive:false});
 renderer.domElement.addEventListener('touchend', e=>{
-  if(state!=='playing') return;
+  if(state!=='playing'||mode!=='foot') return;
   for(const t of e.changedTouches){ if(t.clientX>innerWidth*0.55) tryAttack(); }
 });
 addEventListener('keydown', e=>{
-  if((e.code==='ShiftLeft'||e.code==='ShiftRight') && state==='playing') tryDash();
-  if((e.code==='Space') && state==='playing'){ if(keys.ShiftLeft||keys.ShiftRight) tryDash(); else tryJump(); }
-  if((e.code==='KeyJ'||e.code==='KeyF') && state==='playing') tryAttack();
-  if(e.code==='Escape' && state==='playing') pauseGame();
+  if(e.code==='Escape' && state==='playing'){ pauseGame(); return; }
+  if(e.code==='KeyM'){ AUDIO.init(); AUDIO.setMuted(!AUDIO.muted); const mb=document.getElementById('muteBtn'); if(mb) mb.textContent=AUDIO.muted?'🔇':'🔊'; return; }
+  if(state!=='playing') return;
+  if(e.code==='KeyE'){ toggleCar(); return; }
+  if(e.code==='KeyB'){ summonCar(); return; }
+  if(e.code==='KeyR' && mode==='car'){ flipCar(); return; }
+  if(mode!=='car'){
+    if(e.code==='ShiftLeft'||e.code==='ShiftRight') tryDash();
+    if(e.code==='Space'){ if(keys.ShiftLeft||keys.ShiftRight) tryDash(); else tryJump(); }
+    if(e.code==='KeyJ'||e.code==='KeyF') tryAttack();
+  }
 });
-renderer.domElement.addEventListener('mousedown', e=>{ if(e.button===0 && state==='playing' && !isTouch) tryAttack(); });
+renderer.domElement.addEventListener('mousedown', e=>{ if(e.button===0 && state==='playing' && mode==='foot' && !isTouch) tryAttack(); });
 
-let audioCtx = null;
 function chime(){
-  try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    const notes = [660, 880, 1320];
-    notes.forEach((f,i)=>{
-      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-      o.type = 'sine'; o.frequency.value = f;
-      g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.12, audioCtx.currentTime + 0.02 + i*0.06);
-      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.5 + i*0.06);
-      o.connect(g).connect(audioCtx.destination);
-      o.start(); o.stop(audioCtx.currentTime + 0.6 + i*0.06);
-    });
-  } catch(e){}
+  // semua suara sekarang lewat satu AudioEngine (lihat js/audio.js)
+  AUDIO.init(); AUDIO.resume(); AUDIO.pickup(score);
 }
 
 let state = 'ready';
 let score = 0, elapsed = 0;
 function startGame(){
   state = 'playing';
-  hud.classList.add('on');
   startOverlay.classList.add('hidden');
-  console.log('[GAME] playing - character ready?', CHAR.ready);
+  AUDIO.init(); AUDIO.resume();               // context audio HARUS dimulai dari gesture
+  if(!car.spawned) summonCar(true);           // mobil pertama otomatis muncul dekat pemain
+  setMode(mode);                              // sinkronkan HUD (kaki vs mobil)
+  console.log('[GAME] playing - char ready?', CHAR.ready, '| car spawned?', car.spawned);
 }
 function pauseGame(){
   state = 'paused';
   player.vel.set(0,0,0);
   clearKeys();
-  hud.classList.remove('on');
+  for(const k in ctl) ctl[k]=0;
+  document.querySelectorAll('.cBtn.hit').forEach(b=>b.classList.remove('hit'));
+  setMode(mode);
   document.getElementById('ctaText').textContent = isTouch ? '— Ketuk untuk lanjut —' : '— Klik untuk lanjut —';
   startOverlay.classList.remove('hidden');
 }
@@ -576,7 +880,8 @@ function resetGame(){
   player.vel.set(0,0,0); player.vy=0; player.grounded=true;
   CHAR.turnSmooth=Math.PI; CHAR.phase=0;
   DASH.stamina=DASH.max; DASH.timer=0; DASH.cooldown=0; DASH.trail=0;
-  ATTACK.active=false; ATTACK.timer=0;
+  ATTACK.active=false; ATTACK.timer=0; ATTACK.combo=0; DASH.exhausted=false;
+  car.despawn(); mode='foot'; camera.fov=70; camera.updateProjectionMatrix();
   elOrb.textContent = score+' / '+ORB_COUNT;
   winOverlay.classList.add('hidden');
   startGame();
@@ -595,7 +900,6 @@ const tmpV = new THREE.Vector3();
 const UP = new THREE.Vector3(0,1,0);
 const PLAYER_R = 0.45;
 const _camTarget=new THREE.Vector3(), _camDesired=new THREE.Vector3(), _camDir=new THREE.Vector3();
-let cameraShake=0;
 
 function animate(){
   requestAnimationFrame(animate);
@@ -608,7 +912,7 @@ function animate(){
   if (state === 'playing'){
     elapsed += dt;
     const shown = Math.floor(elapsed*10);
-    if (shown !== lastShownTime){ document.getElementById('timeVal').textContent = elapsed.toFixed(1) + 's'; lastShownTime = shown; }
+    if (shown !== lastShownTime){ elTime.textContent = elapsed.toFixed(1) + 's'; lastShownTime = shown; }
   }
 
   const stickMag = Math.min(1, Math.hypot(stick.dx, stick.dy)/MAX_R);
@@ -616,7 +920,7 @@ function animate(){
   const sprinting = wantRun && DASH.stamina>1 && !DASH.exhausted && !ATTACK.active;
   const speed = sprinting ? 13.5 : 6.5;
 
-  if (state === 'playing'){
+  if (state === 'playing' && mode === 'foot'){
     tmpV.set(0,0,0);
     if (keys.KeyW) tmpV.z -= 1;
     if (keys.KeyS) tmpV.z += 1;
@@ -687,6 +991,20 @@ function animate(){
     } else if(ATTACK.cooldown>0) ATTACK.cooldown-=dt;
   }
 
+  /* ---------- MOBIL: fisika, efek, dan "player jadi mobil" ---------- */
+  if(car.spawned){
+    const driving = (state==='playing' && mode==='car');
+    car.update(dt, driving ? carInput() : {throttle:0,brake:0,steer:0,handbrake:true,nitro:false}, driving);
+    car.pushAudio();
+    if(mode==='car'){
+      // semua sistem lama (rumput wrapping, orb, matahari) tetap jalan karena
+      // posisi pemain di-mirror ke posisi mobil
+      player.pos.x=car.pos.x; player.pos.z=car.pos.z; player.pos.y=0;
+      player.vel.set(0,0,0); player.vy=0; player.grounded=true;
+      player.yaw=car.yaw;
+    }
+  }
+
   const gh = terrainH(player.pos.x, player.pos.z);
   const groundY = Math.max(gh, WATER_Y - 0.4) + player.pos.y;
   const eyeY = groundY + 1.75;
@@ -694,7 +1012,7 @@ function animate(){
   const spd=player.vel.length(); const speed01=Math.min(1,spd/13.5);
 
   // CHARACTER POSITION & CAMERA - THIRD PERSON
-  if(CHAR.ready){
+  if(CHAR.ready && mode==='foot'){
     charRoot.position.set(player.pos.x, groundY, player.pos.z);
     if(moving||ATTACK.active){
       const targetYaw=Math.atan2(player.vel.x, player.vel.z);
@@ -704,10 +1022,14 @@ function animate(){
     }
     charRoot.rotation.y=CHAR.turnSmooth;
     const isDashing=DASH.timer>0, isJumping=!player.grounded&&player.vy>0, isFalling=!player.grounded&&player.vy<=0;
-    animateAether(dt, speed01, moving, sprinting, isDashing, isJumping, isFalling, ATTACK);
+    animateCharacter(dt, speed01, moving, sprinting, isDashing, isJumping, isFalling, ATTACK);
   }
 
-  // CAMERA THIRD PERSON (bukan first person lagi)
+  // CAMERA — chase cam (mobil) ATAU third person (jalan kaki)
+  if(mode==='car' && car.spawned){
+    car.updateCamera(camera, dt, 1);
+  } else {
+  if(Math.abs(camera.fov-70)>0.05){ camera.fov+=(70-camera.fov)*Math.min(1,dt*6); camera.updateProjectionMatrix(); }
   _camTarget.set(player.pos.x, groundY+1.92, player.pos.z);
   const cp=Math.cos(player.pitch), sp2=Math.sin(player.pitch);
   _camDir.set(Math.sin(player.yaw)*cp, sp2+0.26, Math.cos(player.yaw)*cp).normalize();
@@ -719,6 +1041,7 @@ function animate(){
   const follow=DASH.timer>0?26:14; camera.position.lerp(_camDesired, Math.min(1,dt*follow));
   const safeY=terrainH(camera.position.x,camera.position.z)+0.55; if(camera.position.y<safeY) camera.position.y=safeY;
   camera.lookAt(_camTarget);
+  }
 
   sun.target.position.set(player.pos.x, 0, player.pos.z);
   sun.position.copy(SUN_DIR).multiplyScalar(150).add(sun.target.position);
@@ -730,7 +1053,7 @@ function animate(){
       o.position.y = o.userData.baseY + Math.sin(t*1.6 + o.position.x)*0.22;
       o.rotation.y += dt*1.2;
       const d = Math.hypot(o.position.x - player.pos.x, o.position.z - player.pos.z);
-      if (d < 2.4 && Math.abs(o.position.y-(groundY+1.0))<3.8){
+      if (d < (mode==='car'?4.0:2.4) && Math.abs(o.position.y-(groundY+1.0))<3.8){
         o.visible = false; score++; chime(); updateHUD();
         if (score === ORB_COUNT) winGame();
       }
@@ -755,6 +1078,13 @@ function animate(){
   for(let i=ghosts.length-1;i>=0;i--){ const g=ghosts[i]; g.life-=dt; const k=g.life/g.max; if(g.life<=0){ scene.remove(g.group); ghosts.splice(i,1); continue; } g.group.traverse(o=>{ if(o.isMesh&&o.material){ if(Array.isArray(o.material)) o.material.forEach(m=>{ m.opacity=k*0.55; }); else o.material.opacity=k*0.55; } }); g.group.scale.setScalar(1+(1-k)*0.08); }
   for(let i=slashPool.length-1;i>=0;i--){ const s=slashPool[i]; s.life-=dt; const k=s.life/s.max; if(s.life<=0){ scene.remove(s.mesh); slashPool.splice(i,1); continue; } s.mesh.material.opacity=k; s.mesh.scale.setScalar(0.9+k*0.25); }
 
+  /* ---------- HUD mobil + audio (ambient fantasy & mesin) ---------- */
+  if(mode==='car' && car.spawned) updateCarHUD();
+  updateCarPrompt();
+  const rpmN = clamp01((car.rpm-CAR_CFG.idleRpm)/(CAR_CFG.revLimit-CAR_CFG.idleRpm));
+  AUDIO.updateAmbient(dt, (mode==='car'&&car.spawned) ? rpmN*(0.45+0.55*car.throttle) : 0);
+  AUDIO.setRush(mode==='car' ? clamp01(Math.abs(car.speed)/CAR_CFG.maxSpeed) : clamp01(player.vel.length()/16));
+
   renderer.render(scene, camera);
 }
 animate();
@@ -763,7 +1093,7 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
 });
-console.log('[INIT] Old stable + Aether - START should work like before!');
+console.log('[INIT] Orb Hunt ready');
 </script>
 </body>
 </html>
