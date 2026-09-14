@@ -36,6 +36,16 @@
 </div>
 <div id="fpsMeter" aria-hidden="true">&ndash; fps</div>
 
+<!-- Panel error runtime. Sengaja markup statis di luar #loadScreen supaya
+     tetap terlihat SETELAH loading selesai. Tanpa ini, error di dalam loop
+     render hanya muncul di konsol: pemain melihat layar hitam dengan UI
+     normal dan tidak tahu apa yang terjadi. -->
+<div id="fatalErr" role="alert" aria-live="assertive">
+  <div id="fatalErrTitle">Terjadi kesalahan</div>
+  <div id="fatalErrMsg"></div>
+  <button id="fatalErrReload" type="button">Muat ulang</button>
+</div>
+
 <div id="app"></div>
 <div id="attackFlash"></div>
 
@@ -149,6 +159,37 @@ import {WorldStream} from './game/world-stream.mjs';
 import {AUDIO} from './js/audio.js';
 import {Car,CAR_CFG} from './js/car.js';
 import {initCarHUD} from './game/car-hud.mjs';
+
+/* ============================================================
+   PENANGAN ERROR GLOBAL — dipasang PALING AWAL, sebelum kode berat
+   apa pun, supaya error saat boot pun tertangkap.
+
+   Kenapa ini penting: animate() memanggil requestAnimationFrame() di
+   baris pertamanya, jadi kalau isinya melempar, loop tetap hidup tapi
+   canvas tidak pernah digambar. Tanpa panel ini pemain hanya melihat
+   layar hitam dengan UI normal dan nol petunjuk — persis bug yang
+   pernah terjadi (postOpts.sunScreen objek polos dipanggil .set()).
+============================================================ */
+let _fatalShown = false;
+function showFatal(err){
+  if (_fatalShown) return;          // satu kali saja; jangan spam tiap frame
+  _fatalShown = true;
+  try {
+    const box = document.getElementById('fatalErr');
+    const msg = document.getElementById('fatalErrMsg');
+    if (!box) return;
+    const text = (err && (err.stack || err.message)) || String(err);
+    if (msg) msg.textContent = text.slice(0, 800);
+    box.classList.add('on');
+    const btn = document.getElementById('fatalErrReload');
+    if (btn) btn.addEventListener('click', () => location.reload());
+  } catch (inner) {
+    /* kalau panelnya sendiri gagal, jangan menutupi error aslinya */
+  }
+  console.error('[FATAL]', err);
+}
+addEventListener('error', ev => showFatal(ev.error || ev.message));
+addEventListener('unhandledrejection', ev => showFatal(ev.reason));
 /* `settings` SENGAJA const. game/hud.mjs menangkap referensi objek ini
    di closure-nya (slider sensitivitas/jarak/suara menulis settings[key]).
    Kalau variabel ini di-rebind ke objek baru, hud.mjs tetap memegang
@@ -1197,6 +1238,11 @@ let cameraShake=0;
 let _lastFrame = 0, _fpsAcc = 0, _fpsFrames = 0, _fpsShown = 0, _frameMsAvg = 16.7, _shadowTick = 0;
 function animate(now){
   requestAnimationFrame(animate);
+  /* Kalau sebuah frame sudah gagal, berhenti mengerjakan isi frame.
+     rAF-nya SENGAJA tetap dipanggil (lihat catatan FPS cap di atas),
+     tapi tanpa ini loop akan melempar 60x/detik dan membanjiri konsol
+     sementara layar tetap hitam. */
+  if (_fatalShown) return;
   if (frameBudget > 0){
     const since = now - _lastFrame;
     if (since < frameBudget - 1) return;
