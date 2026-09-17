@@ -1,3 +1,29 @@
+# Rumput Lebat — Game Bola 3D
+
+Project aktif untuk **Vercel** sekarang ada di `public/`, berdasarkan HTML game yang dikirim pengguna. `vercel.json` menetapkan **Framework: Other**, tanpa install/build, dengan **Output Directory: public**. Aset Orb Hunt di root tidak ikut dideploy ke Vercel dan masih disimpan sebagai kode legacy.
+
+## Menjalankan project baru
+
+```sh
+python -m http.server 8000 --bind 0.0.0.0 --directory public
+node --test tests/rumput.test.cjs
+```
+
+Pilih kualitas 60k, 110k, atau 180k. WASD/panah untuk bergerak, Spasi untuk lompat, drag untuk kamera, scroll untuk zoom. Kontrol sentuh memakai joystick dan tombol lompat.
+
+Three.js r160 disajikan lokal (tidak bergantung CDN). Kredit Three.js ada di `public/licenses/three-LICENSE.txt`; atribusi teknik UnityURP-InfiniteGrass / Youssef Afella dipertahankan di halaman awal. Audio opsional; kegagalan audio tidak menghalangi bermain. `public/sw.js` menggantikan lalu menonaktifkan service worker game lama, bukan menyediakan mode offline baru.
+
+## Deploy Vercel
+
+- Import repository dengan Root Directory root repo, bukan `public` (output diatur lewat `vercel.json`).
+- Push branch sesi `arena/01a0afb7-rpg` untuk preview melalui integrasi Git Vercel jika aktif.
+- Jika Production Branch adalah `main`, merge PR dari branch sesi ke `main` untuk mengganti production. Perubahan lokal saja belum memperbarui Vercel.
+- Konfigurasi GitHub Pages lama dan dokumentasi berikut adalah legacy, bukan deployment game baru.
+
+---
+
+## Arsip dokumentasi project lama (Orb Hunt)
+
 # Orb Hunt — Aurelia: The Seven Realms
 
 Prototipe eksplorasi Three.js: jelajahi tujuh kawasan dunia prosedural seluas 24 × 24 km, susuri jalan kerajaan, kumpulkan 12 orb — dan panggil **mobil balap** untuk menempuh jarak jauh. HUD ringan terinspirasi layout action-RPG: minimap bulat, ikon monokrom, analog sentuh sementara, bar HP di bawah, plus HUD mobil gaya CarX Street. Icon SVG dibuat untuk project ini, bukan aset UI yang diambil dari Genshin.
