@@ -17,6 +17,8 @@ Three.js r160 disajikan lokal (tidak bergantung CDN). Kredit Three.js ada di `pu
 
 Lanjutan sesi sebelumnya pada aset yang benar-benar dipublikasikan Vercel:
 
+- **Gaya kartun / cel-shaded** — pencahayaan dikuantisasi ke pita mid-tone (tidak gelap pekat, tidak terang berlebih), ambient hemisfer seimbang, rim light krem, dan **outline hitam** (inverted hull) di tepi objek. Semua material Lambert/Standard diganti ShaderMaterial toon, namun tetap kena fog supaya cakrawala halus.
+- **Benteng batu dekat spawn** — menara berdrum ganda yang **saling menimpa**, dinding batu antar menara, gerbang, atap kerucut, dan base bersusun tiga tingkat (bukan tiang datar). Bola memantul dari collider lingkaran benteng, dan rumput otomatis dibersihkan di dalamnya.
 - **Resolusi adaptif** — pixel ratio naik/turun mengikuti frame time (langit-langit 1.75 desktop / 1.25 mobile, lantai aman saat FPS < 40), jadi preset 180k tetap mulus di GPU lemah tanpa memangkas jumlah helai.
 - **Daur ulang rumput dihemat** — `recycleGrass` cukup berjalan tiap 0,5 detik dan hanya saat bola bergerak; `instanceCount` tidak berubah.
 - **Tanpa kebocoran VRAM** — geometry bilah sumber di-`dispose` setelah dipakai, geometry instansial lawas ikut dibebaskan saat kualitas diubah; `renderer.renderLists.dispose()` dijalankan berkala (janitor) pada sesi main panjang.

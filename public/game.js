@@ -1,29 +1,22 @@
 /* Rumput Lebat — padang rumput prosedural tak terbatas (Three.js r160).
  *
- * Ronde ini melanjutkan sesi sebelumnya (deploy game baru ke Vercel) dengan:
+ * Gaya baru: KARTUN / cel-shaded — pencahayaan dikuantisasi ke pita mid-tone
+ * (tidak gelap pekat, tidak terang berlebih) + outline hitam di tepi objek.
  *
- * OPTIMALISASI
- *  1. Resolusi adaptif: pixel ratio mengikuti frame time — naik saat longgar
- *     (maks. 1.75 desktop / 1.25 mobile) dan turun bertahap saat FPS < 40,
- *     jadi rumput paling lebat (180k helai) tetap mulus di GPU lemah tanpa
- *     memangkas jumlah helai.
- *  2. Daur ulang rumput (recycle) dihemat: cukup berjalan tiap 0.5 detik, dan
- *     hanya menyentuh bilah yang benar-benar keluar radius.
- *  3. Geometry dasar bilah di-dispose saat restart (tidak ada kebocoran VRAM
- *     meski tombol kualitas ditekan berulang).
- *  4. renderLists Three.js dibersihkan berkala (janitor) supaya alokasi per
- *     objek tidak menumpuk pada sesi main panjang.
- *  5. Fade jejak (trail) dan interaksi bola tetap dijalankan tiap frame —
- *     itulah inti visualnya — sementara kerja pengurasan besar disebar.
+ * RONDE INI
+ *  + Toon shading: material Lambert/Standard diganti ShaderMaterial cel —
+ *    band NdotL 3-4 tingkat, ambient hemisfer seimbang, rim light krem,
+ *    silhouette menggelap sebagai outline, lalu diffuse tetap kena fog agar
+ *    cakrawala halus.
+ *  + Outline sungguhan (inverted hull hitam) untuk bola & semua bangunan.
+ *  + Benteng batu dekat spawn: menara berdrum ganda yang SALING MENIMPA,
+ *    dinding batu antar menara, gerbang, atap kerucut, base bersusun tiga
+ *    tingkat — bukan tiang datar. Rumput dibersihkan di dalam benteng dan
+ *    bola memantul dari collider lingkaran benteng.
  *
- * VISUAL
- *  + Matahari nyata: piringan + halo senja yang menyala di cakrawala.
- *  + Awan prosedural yang hanyut pelan.
- *  + Burung melayang-layang di langit.
- *  + Kupu-kupu di dekat rumput yang menghindar saat bola mendekat.
- *
- * Semua kontrol, tombol kualitas, perilaku fisika, dan atribusi yang dijamin
- * tes sesi sebelumnya DIJAGA PERSIS.
+ * Optimasi & visual ronde sebelumnya (resolusi adaptif, matahari, awan,
+ * burung, kupu-kupu) tetap dipertahankan. Semua kontrol, tombol kualitas,
+ * fisika, dan atribusi yang dijamin tes DIJAGA PERSIS.
  */
 import * as THREE from './three.module.js';
 
@@ -43,15 +36,83 @@ let prCurrent = Math.min(devicePixelRatio || 1, PR_MAX);
 renderer.setPixelRatio(prCurrent);
 renderer.setSize(innerWidth, innerHeight);
 
+const FOG_COLOR = new THREE.Color(0xbcd9ee);
+const FOG_DENSITY = 0.017;
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0xbcd9ee, 0.017);
-scene.background = new THREE.Color(0xbcd9ee);
+scene.fog = new THREE.FogExp2(FOG_COLOR.getHex(), FOG_DENSITY);
+scene.background = new THREE.Color(FOG_COLOR.getHex());
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 500);
 
+/* lampu klasik dijaga (tidak terpakai shader toon, tapi jaga kompatibilitas) */
 scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x3a5f2a, 1));
 const sun = new THREE.DirectionalLight(0xfff1cf, 1.4);
 sun.position.set(60, 90, 30);
 scene.add(sun);
+
+/* ------------------------------------------------------------------ toon
+ * Cel-shading: warna dibentuk dari pita NdotL (mid-tone, tak pernah hitam
+ * pekat / putih penuh) + rim light + outline gelap di silhouette.          */
+const TOON_LIGHTS = {
+  uSunDir: { value: new THREE.Vector3(0.5, 0.8, 0.35).normalize() },
+  uColorSun: { value: new THREE.Color(0xfff2d0) },
+  uHemiSky: { value: new THREE.Color(0xbfe3f5) },
+  uHemiGround: { value: new THREE.Color(0x3a5f2a) },
+};
+const TOON_VERT = `
+varying vec3 vN; varying vec3 vV; varying float vDist;
+void main(){
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vec4 mv = viewMatrix * w;
+  vN = normalize(mat3(modelMatrix) * normal);
+  vV = mv.xyz;
+  vDist = -mv.z;
+  gl_Position = projectionMatrix * mv;
+}`;
+const TOON_FRAG = `
+uniform vec3 uBase; uniform vec3 uSunDir; uniform vec3 uColorSun;
+uniform vec3 uHemiSky; uniform vec3 uHemiGround; uniform vec3 uOutline;
+uniform float uSteps; uniform vec3 uFogColor; uniform float uFogDensity;
+varying vec3 vN; varying vec3 vV; varying float vDist;
+void main(){
+  vec3 N = normalize(vN);
+  vec3 V = normalize(-vV);
+  float ndl = dot(N, normalize(uSunDir));
+  float shade = clamp(ndl * 0.5 + 0.5, 0.0, 1.0);
+  float band = floor(shade * uSteps) / max(uSteps - 1.0, 1.0);
+  float tone = 0.45 + 0.55 * band;                          /* mid..terang  */
+  float hemi = N.y * 0.5 + 0.5;
+  vec3 amb = mix(uHemiGround, uHemiSky, hemi);
+  vec3 col = uBase * amb * tone;
+  col += uColorSun * band * 0.12;
+  float ndv = abs(dot(N, V));
+  float fres = pow(1.0 - ndv, 3.0);
+  col += uColorSun * fres * 0.5;                            /* rim light    */
+  float outline = smoothstep(0.18, 0.45, ndv);              /* 0=silhouette */
+  col *= mix(0.40, 1.0, outline);                           /* outline gelap*/
+  float f = 1.0 - exp(-uFogDensity * uFogDensity * vDist * vDist);
+  col = mix(col, uFogColor, clamp(f, 0.0, 1.0));
+  gl_FragColor = vec4(col, 1.0);
+}`;
+/* outline inverted-hull: BackSide hitam, sedikit lebih besar dari objeknya */
+const hullMat = new THREE.MeshBasicMaterial({ color: 0x1d232b, side: THREE.BackSide });
+function toonMat(base, o = {}) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uBase: { value: new THREE.Color(base) },
+      uSunDir: { value: TOON_LIGHTS.uSunDir.value },
+      uColorSun: { value: TOON_LIGHTS.uColorSun.value },
+      uHemiSky: { value: TOON_LIGHTS.uHemiSky.value },
+      uHemiGround: { value: TOON_LIGHTS.uHemiGround.value },
+      uOutline: { value: new THREE.Color(0x1d232b) },
+      uSteps: { value: o.steps || 4 },
+      uFogColor: { value: FOG_COLOR },
+      uFogDensity: { value: FOG_DENSITY },
+    },
+    vertexShader: TOON_VERT,
+    fragmentShader: TOON_FRAG,
+    side: o.side || THREE.FrontSide,
+  });
+}
 
 /* ---- kubah langit (gradien asli dipertahankan) ---- */
 const sky = new THREE.Mesh(
@@ -94,7 +155,7 @@ const cloudDefs = [];
 
 /* ---- tanah ---- */
 const groundGeo = new THREE.PlaneGeometry(130, 130, 42, 42);
-const ground = new THREE.Mesh(groundGeo, new THREE.MeshLambertMaterial({ color: 0x274a1b }));
+const ground = new THREE.Mesh(groundGeo, toonMat(0x4a9a34));
 ground.rotation.x = -Math.PI / 2;
 ground.frustumCulled = false;
 scene.add(ground);
@@ -111,7 +172,7 @@ function updateGroundHeights(cx, cz) {
 updateGroundHeights(0, 0);
 
 /* ---- rumput: garis bilah + shader instansial (dari sesi sebelumnya) ---- */
-const TRAIL_N = 24, SEG = 4;
+const TRAIL_N = 24, SEG = 4, MAXC = 6;
 function buildBlade() {
   const p = [], uv = [], idx = [];
   for (let s = 0; s < SEG; s++) {
@@ -138,20 +199,25 @@ const grassUniforms = {
   uBallPos: { value: new THREE.Vector2() },
   uBallVel: { value: new THREE.Vector2() },
   uTrail: { value: Array.from({ length: TRAIL_N }, () => new THREE.Vector4()) },
-  uFogColor: { value: new THREE.Color(0xbcd9ee) },
-  uFogDensity: { value: 0.017 },
+  uColliders: { value: Array.from({ length: MAXC }, () => new THREE.Vector4(0, 0, 0, 0)) },
+  uFogColor: { value: FOG_COLOR },
+  uFogDensity: { value: FOG_DENSITY },
 };
 
 const grassVert = `
 #define TRAIL_N ${TRAIL_N}
+#define MAXC ${MAXC}
 attribute vec2 aOffset;attribute vec4 aData;
-uniform float uTime;uniform vec2 uBallPos,uBallVel;uniform vec4 uTrail[TRAIL_N];varying vec3 vColor;varying float vDepth;
+uniform float uTime;uniform vec2 uBallPos,uBallVel;uniform vec4 uTrail[TRAIL_N];uniform vec4 uColliders[MAXC];varying vec3 vColor;varying float vDepth;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float terrainH(vec2 p){return 0.7*sin(p.x*0.045)*cos(p.y*0.05)+0.35*sin(p.x*0.11+1.7)*cos(p.y*0.13+2.3);}
 void main(){
 vec3 p=position;float t=uv.y;float ca=cos(aData.x),sa=sin(aData.x);p=vec3(p.x*ca,p.y,p.x*sa);p.xz*=mix(0.8,1.3,hash(aOffset+7.0));p.y*=aData.y;
-vec2 world=aOffset,dBall=world-uBallPos;float dBallL=length(dBall);float lod=mix(1.0,0.55,smoothstep(18.0,40.0,dBallL));p.y*=lod;vec2 bend=vec2(0.0);float flat_=0.0;
+vec2 world=aOffset,dBall=world-uBallPos;float dBallL=length(dBall);
+float cull=0.0;for(int i=0;i<MAXC;i++){vec4 cc=uColliders[i];if(cc.w>0.001){float dl2=dot(world-cc.xy,world-cc.xy);if(dl2<cc.z*cc.z)cull=1.0;}}
+if(cull>0.5){gl_Position=vec4(0.0,0.0,2.0,1.0);vColor=vec3(0.0);vDepth=0.0;return;}
+float lod=mix(1.0,0.55,smoothstep(18.0,40.0,dBallL));p.y*=lod;vec2 bend=vec2(0.0);float flat_=0.0;
 float n=noise(world*0.35+vec2(uTime*0.9,uTime*0.7)+aData.w*6.28);float gust=noise(world*0.06+vec2(uTime*0.25,uTime*0.18));bend+=normalize(vec2(0.8,0.55))*(0.05+0.30*gust)*n;
 float vlen=length(uBallVel);vec2 vdir=vlen>0.001?uBallVel/vlen:vec2(1.0,0.0);float infl=1.0-smoothstep(0.0,1.35,dBallL);
 if(infl>0.001){vec2 dir=dBallL>0.001?dBall/dBallL:vec2(1.0,0.0);float front=clamp(dot(dir,vdir),0.0,1.0)*clamp(vlen/9.0,0.0,1.0);bend+=dir*infl*(0.55+0.65*front);flat_=max(flat_,infl*0.85);}
@@ -163,7 +229,8 @@ vec4 mv=modelViewMatrix*vec4(p+vec3(world.x,0.0,world.y),1.0);vDepth=-mv.z;vColo
 const grassMat = new THREE.ShaderMaterial({
   uniforms: grassUniforms,
   vertexShader: grassVert,
-  fragmentShader: 'uniform vec3 uFogColor;uniform float uFogDensity;varying vec3 vColor;varying float vDepth;void main(){float f=1.0-exp(-uFogDensity*uFogDensity*vDepth*vDepth);gl_FragColor=vec4(mix(vColor,uFogColor,clamp(f,0.0,1.0)),1.0);}',
+  /* posterize halus agar rumput ikut bergaya kartun */
+  fragmentShader: 'uniform vec3 uFogColor;uniform float uFogDensity;varying vec3 vColor;varying float vDepth;void main(){vec3 q=floor(vColor*4.0+0.5)/4.0;float f=1.0-exp(-uFogDensity*uFogDensity*vDepth*vDepth);gl_FragColor=vec4(mix(q,uFogColor,clamp(f,0.0,1.0)),1.0);}',
   side: THREE.DoubleSide,
 });
 
@@ -229,11 +296,14 @@ function recycleGrass(bx, bz) {
   if (changed) offAttr.needsUpdate = true;
 }
 
-/* ---- bola + bayangan blob ---- */
+/* ---- bola + outline kartun + bayangan blob ---- */
 const ball = new THREE.Mesh(
   new THREE.SphereGeometry(0.5, 32, 24),
-  new THREE.MeshStandardMaterial({ color: 0xff5a3c, roughness: 0.35, metalness: 0.1 })
+  toonMat(0xff7043)
 );
+const ballOutline = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 16), hullMat);
+ballOutline.scale.setScalar(1.16);
+ball.add(ballOutline);
 scene.add(ball);
 
 const blob = new THREE.Mesh(
@@ -244,7 +314,7 @@ blob.rotation.x = -Math.PI / 2;
 scene.add(blob);
 
 /* ---- orbs ---- */
-const orbMat = new THREE.MeshStandardMaterial({ color: 0xffd54a, emissive: 0xffb300, emissiveIntensity: 0.8, roughness: 0.3 });
+const orbMat = toonMat(0xffd54a, { steps: 3 });
 const orbGeo = new THREE.SphereGeometry(0.26, 16, 12);
 const orbs = [];
 for (let i = 0; i < 30; i++) {
@@ -320,6 +390,105 @@ for (let i = 0; i < 8; i++) {
   cloudsGroup.add(g);
   cloudDefs.push(g);
 }
+
+/* ============================================================ benteng batu
+ * Menara berdrum ganda saling menimpa + dinding batu antar menara + gerbang,
+ * berdiri di base bersusun tiga tingkat. Bukan tiang datar.                 */
+const FORT_X = 12, FORT_Z = 13;
+const FORT_Y = terrainH(FORT_X, FORT_Z);
+const fortress = new THREE.Group();
+const fortressCircles = [];
+
+const stoneMat = toonMat(0x9b8f79);
+const stoneDark = toonMat(0x7e7260);
+const roofMat = toonMat(0xc05340);
+const flagMat = toonMat(0xd2362c, { side: THREE.DoubleSide });
+
+function addPart(mesh, o = {}) {
+  fortress.add(mesh);
+  if (o.hull !== false) {
+    const h = new THREE.Mesh(mesh.geometry, hullMat);
+    h.position.copy(mesh.position);
+    h.rotation.copy(mesh.rotation);
+    h.scale.setScalar(o.pad || 1.06);
+    fortress.add(h);
+  }
+  return mesh;
+}
+function cyl(rt, rb, h, mat, x, y, z, o) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, 22), mat);
+  m.position.set(x, y, z);
+  return addPart(m, o);
+}
+function cone(r, h, mat, x, y, z, o) {
+  const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 18), mat);
+  m.position.set(x, y, z);
+  return addPart(m, o);
+}
+function box(w, hh, d, mat, x, y, z, o) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, hh, d), mat);
+  m.position.set(x, y, z);
+  return addPart(m, o);
+}
+
+/* base bersusun tiga tingkat (terraced) */
+cyl(6.6, 6.8, 1.0, stoneDark, 0, 0.5, 0, { pad: 1.03 });
+cyl(5.2, 5.4, 0.9, stoneMat, 0, 1.45, 0, { pad: 1.04 });
+cyl(4.4, 4.5, 0.6, stoneDark, 0, 2.2, 0, { pad: 1.05 });
+
+/* menara pusat (keep) */
+cyl(2.4, 2.6, 5.4, stoneMat, 0, 5.0, 0);
+cone(3.0, 3.2, roofMat, 0, 9.3, 0, { pad: 1.05 });
+cyl(0.5, 0.6, 0.8, roofMat, 0, 10.9, 0, { hull: false });
+
+/* tiang bendera + bendera */
+cyl(0.06, 0.06, 1.8, stoneDark, 0, 11.8, 0, { hull: false });
+const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.85), flagMat);
+flag.position.set(0.76, 12.4, 0);
+fortress.add(flag);
+
+/* empat menara sudut: drum ganda saling menimpa */
+const T = [[-3, -3], [3, -3], [-3, 3], [3, 3]];
+for (const [cx, cz] of T) {
+  cyl(2.0, 2.1, 3.6, stoneMat, cx, 2.8, cz);     /* drum bawah */
+  cyl(1.4, 1.55, 2.6, stoneDark, cx, 5.6, cz);   /* drum atas menimpa */
+  cone(2.2, 2.6, roofMat, cx, 8.2, cz, { pad: 1.06 });
+  cyl(0.22, 0.22, 0.7, roofMat, cx, 9.6, cz, { hull: false });
+}
+
+/* dinding batu antar menara (menimpa kedua ujung menara) */
+const WY = 3.0, WH = 2.6, WT = 1.4;
+box(6.6, WH, WT, stoneMat, 0, WY, -3);
+box(6.6, WH, WT, stoneMat, 0, WY, 3);
+box(WT, WH, 7.4, stoneMat, -3, WY, 0);
+box(WT, WH, 7.4, stoneMat, 3, WY, 0);
+/* bubungan (cap) di atas dinding */
+box(6.9, 0.5, 1.7, stoneDark, 0, WY + WH / 2 + 0.3, -3, { hull: false });
+box(6.9, 0.5, 1.7, stoneDark, 0, WY + WH / 2 + 0.3, 3, { hull: false });
+box(1.7, 0.5, 7.7, stoneDark, -3, WY + WH / 2 + 0.3, 0, { hull: false });
+box(1.7, 0.5, 7.7, stoneDark, 3, WY + WH / 2 + 0.3, 0, { hull: false });
+
+/* gerbang (sisi menghadap spawn) */
+box(1.1, 3.4, 1.1, stoneDark, -1.1, 3.7, -3.3);
+box(1.1, 3.4, 1.1, stoneDark, 1.1, 3.7, -3.3);
+box(3.4, 0.9, 1.1, stoneDark, 0, 5.5, -3.3);
+/* obor kecil di gerbang */
+cyl(0.09, 0.09, 1.8, stoneDark, -2.1, 4.6, -3.5, { hull: false });
+cyl(0.09, 0.09, 1.8, stoneDark, 2.1, 4.6, -3.5, { hull: false });
+const flameMat = new THREE.MeshBasicMaterial({ color: 0xffb03a, fog: false });
+for (const sx of [-2.1, 2.1]) {
+  const flame = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), flameMat);
+  flame.position.set(sx, 5.6, -3.5);
+  fortress.add(flame);
+}
+
+fortress.position.set(FORT_X, FORT_Y, FORT_Z);
+scene.add(fortress);
+
+/* collider lingkaran benteng (bola memantul & rumput dibersihkan di dalam) */
+fortressCircles.push({ x: FORT_X, z: FORT_Z, r: 6.9 });
+grassUniforms.uColliders.value[0].set(FORT_X, FORT_Z, 6.9, 1);
+for (let i = 1; i < MAXC; i++) grassUniforms.uColliders.value[i].set(0, 0, 0, 0);
 
 /* ---- input ---- */
 const keys = {};
@@ -453,6 +622,19 @@ function tick() {
     const damp = Math.exp(-FRICTION * dt);
     vel.x *= damp; vel.z *= damp;
     pos.x += vel.x * dt; pos.z += vel.z * dt;
+
+    /* benteng: tabrakan lingkaran sederhana — bola memantul, tak menembus */
+    for (const c of fortressCircles) {
+      const dx = pos.x - c.x, dz = pos.z - c.z;
+      const d2 = dx * dx + dz * dz;
+      const mmin = c.r + 0.5;
+      if (d2 < mmin * mmin && d2 > 1e-6) {
+        const d = Math.sqrt(d2);
+        pos.x = c.x + (dx / d) * mmin;
+        pos.z = c.z + (dz / d) * mmin;
+        vel.x *= 0.32; vel.z *= 0.32;
+      }
+    }
 
     const gY = terrainH(pos.x, pos.z);
     if (grounded && keys.Space) { vy = JUMPV; grounded = false; pop(); }
