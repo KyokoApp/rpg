@@ -161,7 +161,7 @@ const cloudDefs = [];
 
 /* ---- tanah ---- */
 const groundGeo = new THREE.PlaneGeometry(130, 130, 42, 42);
-const ground = new THREE.Mesh(groundGeo, toonMat(0x6fae5a));
+const ground = new THREE.Mesh(groundGeo, toonMat(0x3a6b2f)); /* senada akar rumput */
 ground.rotation.x = -Math.PI / 2;
 ground.frustumCulled = false;
 scene.add(ground);
@@ -224,19 +224,38 @@ vec2 world=aOffset,dBall=world-uBallPos;float dBallL=length(dBall);
 float cull=0.0;for(int i=0;i<MAXC;i++){vec4 cc=uColliders[i];if(cc.w>0.001){float dl2=dot(world-cc.xy,world-cc.xy);if(dl2<cc.z*cc.z)cull=1.0;}}
 if(cull>0.5){gl_Position=vec4(0.0,0.0,2.0,1.0);vColor=vec3(0.0);vDepth=0.0;return;}
 float lod=mix(1.0,0.55,smoothstep(18.0,40.0,dBallL));p.y*=lod;vec2 bend=vec2(0.0);float flat_=0.0;
-float n=noise(world*0.35+vec2(uTime*0.9,uTime*0.7)+aData.w*6.28);float gust=noise(world*0.06+vec2(uTime*0.25,uTime*0.18));bend+=normalize(vec2(0.8,0.55))*(0.05+0.30*gust)*n;
+vec2 windDir=normalize(vec2(0.55,0.35));
+/* sepoi angin: gelombang berjalan yang TERLIHAT + gust + flutter halus */
+float travel=sin(dot(world,windDir*1.4)-uTime*2.2);
+float wave2=sin(dot(world,vec2(0.13,-0.21))-uTime*1.35);
+float gust=noise(world*0.06+vec2(uTime*0.25,uTime*0.18));
+bend+=windDir*((travel*0.36+wave2*0.22)*(0.4+0.5*gust)+sin(uTime*2.6+aData.w*18.0)*0.05);
+/* kemiringan statis tiap bilah: rumput melengkung/miring, tidak tegak kaku */
+vec2 leanDir=normalize(vec2(hash(aOffset*2.0)-0.5,hash(aOffset*5.0+9.0)-0.5)+0.0001);
+bend+=leanDir*(0.18+0.30*aData.w);
 float vlen=length(uBallVel);vec2 vdir=vlen>0.001?uBallVel/vlen:vec2(1.0,0.0);float infl=1.0-smoothstep(0.0,1.35,dBallL);
 if(infl>0.001){vec2 dir=dBallL>0.001?dBall/dBallL:vec2(1.0,0.0);float front=clamp(dot(dir,vdir),0.0,1.0)*clamp(vlen/9.0,0.0,1.0);bend+=dir*infl*(0.55+0.65*front);flat_=max(flat_,infl*0.85);}
 for(int i=0;i<TRAIL_N;i++){vec4 tr=uTrail[i];if(tr.z>0.004){vec2 d=world-tr.xy;float dl=length(d);float ti=(1.0-smoothstep(0.0,1.05,dl))*tr.z;if(ti>0.004){flat_=max(flat_,ti);bend+=(dl>0.001?d/dl:vec2(1.0,0.0))*ti*0.4;}}}
 p.xz+=bend*t*t*lod;p.y*=1.0-0.8*flat_;p.x*=1.0+0.5*flat_;p.y+=terrainH(world);
-vec3 base=vec3(0.045,0.105,0.022);vec3 tip=mix(vec3(0.30,0.55,0.10),vec3(0.52,0.66,0.17),aData.z);float flower=step(0.982,hash(aOffset*3.1));vec3 col=mix(base,tip,pow(t,0.75));col*=mix(0.5,1.0,smoothstep(0.0,0.32,t));col*=0.88+0.24*hash(aOffset);col+=vec3(0.06,0.10,0.015)*n*smoothstep(0.55,1.0,t);col=mix(col,vec3(0.93,0.92,0.80),flower*smoothstep(0.72,1.0,t));
+/* warna: GRADIEN MULUS akar hijau gelap -> ujung hijau terang (bukan banding) */
+vec3 rootCol=vec3(0.11,0.30,0.10);   /* bawah senada dengan tanah gelap    */
+vec3 tipCol=vec3(0.45,0.72,0.28);    /* ujung terang senada tanah           */
+vec3 sunny=vec3(0.58,0.84,0.34);     /* bilah kena matahari penuh           */
+vec3 col=mix(rootCol,tipCol,t*t*(3.0-2.0*t));
+col=mix(col,sunny,aData.z*0.5);
+float perBlade=0.92+0.08*hash(aOffset*1.7);   /* kehalusan per helai, 8% saja */
+col*=perBlade;
+col+=tipCol*0.10*smoothstep(0.55,1.0,t);      /* sorotan lembut di ujung      */
+float flower=step(0.985,hash(aOffset*3.1));
+col=mix(col,vec3(0.96,0.95,0.85),flower*smoothstep(0.72,1.0,t));
+col=mix(col,col*vec3(0.72,0.84,0.96),smoothstep(22.0,44.0,dBallL)); /* sejuk jauh */
 vec4 mv=modelViewMatrix*vec4(p+vec3(world.x,0.0,world.y),1.0);vDepth=-mv.z;vColor=col;gl_Position=projectionMatrix*mv;}`;
 
 const grassMat = new THREE.ShaderMaterial({
   uniforms: grassUniforms,
   vertexShader: grassVert,
-  /* posterize halus agar rumput ikut bergaya kartun */
-  fragmentShader: 'uniform vec3 uFogColor;uniform float uFogDensity;varying vec3 vColor;varying float vDepth;void main(){vec3 q=floor(vColor*3.0+0.5)/3.0;float f=1.0-exp(-uFogDensity*uFogDensity*vDepth*vDepth);gl_FragColor=vec4(mix(q,uFogColor,clamp(f,0.0,1.0)),1.0);}',
+  /* warna mulus apa adanya (tanpa posterize) + fog — gradien tak terpatah */
+  fragmentShader: 'uniform vec3 uFogColor;uniform float uFogDensity;varying vec3 vColor;varying float vDepth;void main(){float f=1.0-exp(-uFogDensity*uFogDensity*vDepth*vDepth);gl_FragColor=vec4(mix(vColor,uFogColor,clamp(f,0.0,1.0)),1.0);}',
   side: THREE.DoubleSide,
 });
 
