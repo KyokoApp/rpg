@@ -13,6 +13,17 @@ Pilih kualitas 60k, 110k, atau 180k. WASD/panah untuk bergerak, Spasi untuk lomp
 
 Three.js r160 disajikan lokal (tidak bergantung CDN). Kredit Three.js ada di `public/licenses/three-LICENSE.txt`; atribusi teknik UnityURP-InfiniteGrass / Youssef Afella dipertahankan di halaman awal. Audio opsional; kegagalan audio tidak menghalangi bermain. `public/sw.js` menggantikan lalu menonaktifkan service worker game lama, bukan menyediakan mode offline baru.
 
+## Ronde optimasi + visual (rumput lebat, `public/game.js`)
+
+Lanjutan sesi sebelumnya pada aset yang benar-benar dipublikasikan Vercel:
+
+- **Resolusi adaptif** — pixel ratio naik/turun mengikuti frame time (langit-langit 1.75 desktop / 1.25 mobile, lantai aman saat FPS < 40), jadi preset 180k tetap mulus di GPU lemah tanpa memangkas jumlah helai.
+- **Daur ulang rumput dihemat** — `recycleGrass` cukup berjalan tiap 0,5 detik dan hanya saat bola bergerak; `instanceCount` tidak berubah.
+- **Tanpa kebocoran VRAM** — geometry bilah sumber di-`dispose` setelah dipakai, geometry instansial lawas ikut dibebaskan saat kualitas diubah; `renderer.renderLists.dispose()` dijalankan berkala (janitor) pada sesi main panjang.
+- **Visual baru** — matahari nyata (piringan + halo senja), awan prosedural yang hanyut, burung melayang di langit, dan kupu-kupu di dekat rumput yang menghindar saat bola mendekat.
+
+Semua tombol kualitas (60k/110k/180k), kontrol, fisika, dan atribusi dijaga persis dan tetap dikunci oleh `tests/rumput.test.cjs`.
+
 ## Deploy Vercel
 
 - Import repository dengan Root Directory root repo, bukan `public` (output diatur lewat `vercel.json`).
