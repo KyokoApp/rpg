@@ -75,75 +75,31 @@ scene.add(sun);
 scene.add(sun.target);
 
 /* ------------------------------------------------------------------ toon
- * Cel-shading: warna dibentuk dari pita NdotL (mid-tone, tak pernah hitam
- * pekat / putih penuh) + rim light + outline gelap di silhouette.          */
-const TOON_LIGHTS = {
-  uColorSun: { value: new THREE.Color(0xfff2d0) },
-  uHemiSky: { value: new THREE.Color(0xbfe3f5) },
-  uHemiGround: { value: new THREE.Color(0x3a5f2a) },
-};
-const TOON_VERT = `
-varying vec3 vN; varying vec3 vV; varying float vDist; varying float vShade;
-uniform vec3 uSunDir;
-void main(){
-  vec4 mv = modelViewMatrix * vec4(position, 1.0);
-  vec3 wn = normalize(mat3(modelMatrix) * normal);
-  vN = wn;
-  vV = mv.xyz;
-  /* shade difus dihitung sekali di sini dari arah matahari yang sama */
-  vShade = clamp(dot(wn, normalize(uSunDir)) * 0.5 + 0.5, 0.0, 1.0);
-  vDist = -mv.z;
-  gl_Position = projectionMatrix * mv;
-}`;
-const TOON_FRAG = `
-uniform vec3 uBase; uniform vec3 uSunDir; uniform vec3 uColorSun;
-uniform vec3 uHemiSky; uniform vec3 uHemiGround;
-uniform vec3 uFogColor; uniform float uFogDensity;
-uniform float uOpacity; uniform float uFogAmt;
-varying vec3 vN; varying vec3 vV; varying float vDist; varying float vShade;
-void main(){
-  vec3 N = normalize(vN);
-  vec3 V = normalize(-vV);
-  /* shade difus yang sama seperti vertex — gradien LEMBUT, mid-tone     */
-  float shade = vShade;
-  shade = shade * shade * (3.0 - 2.0 * shade);          /* smoothstep     */
-  float tone = 0.62 + 0.38 * shade;                     /* 0.62 .. 1.0    */
-  float hemi = N.y * 0.5 + 0.5;
-  /* abu-abu netral menjaga HUE dasar tetap utuh (tidak kebiruan)      */
-  vec3 col = uBase * (0.74 + 0.26 * hemi) * tone;
-  col += uHemiSky * hemi * 0.05 * tone;                 /* pantul langit halus */
-  col += uColorSun * smoothstep(0.6, 1.0, shade) * 0.12;
-  float ndv = abs(dot(N, V));
-  float fres = pow(1.0 - ndv, 3.5);
-  col += uColorSun * fres * 0.14;                       /* rim lembut tipis */
-  float edge = smoothstep(0.20, 0.48, ndv);
-  col *= mix(0.85, 1.0, edge);                          /* gelap ujung halus */
-  float f = 1.0 - exp(-uFogDensity * uFogDensity * vDist * vDist);
-  col = mix(col, uFogColor, clamp(f, 0.0, 1.0) * uFogAmt);
-  gl_FragColor = vec4(col, uOpacity);
-}`;
+ * Material toon asli Three.js (MeshToonMaterial + gradient map lembut).
+ * Alasan penting: ShaderMaterial KUSTOM tidak menerima shadow map, jadi
+ * bayangan tidak pernah muncul. MeshToonMaterial bawaan MENERIMA & melempar
+ * bayangan, dan gradient map 4 tingkat memberi tampilan cel yang lembut.    */
+const TOON_GRAD = (() => {
+  const stops = [0.55, 0.76, 0.90, 1.0];
+  const data = new Uint8Array(stops.length * 4);
+  for (let i = 0; i < stops.length; i++) {
+    const v = Math.round(stops[i] * 255);
+    data[i * 4] = v; data[i * 4 + 1] = v; data[i * 4 + 2] = v; data[i * 4 + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(data, stops.length, 1, THREE.RGBAFormat);
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
+})();
+function toonMat(color, o = {}) {
+  const m = new THREE.MeshToonMaterial({ color, gradientMap: TOON_GRAD });
+  if (o.side) m.side = o.side;
+  return m;
+}
 /* outline inverted-hull: brown gelap hangat & tipis, bukan hitam pekat */
 const hullMat = new THREE.MeshBasicMaterial({ color: 0x4a3b2a, side: THREE.BackSide });
-function toonMat(base, o = {}) {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      uBase: { value: new THREE.Color(base) },
-      uSunDir: { value: SUN_DIR },
-      uColorSun: { value: TOON_LIGHTS.uColorSun.value },
-      uHemiSky: { value: TOON_LIGHTS.uHemiSky.value },
-      uHemiGround: { value: TOON_LIGHTS.uHemiGround.value },
-      uFogColor: { value: FOG_COLOR },
-      uFogDensity: { value: FOG_DENSITY },
-      uOpacity: { value: o.opacity !== undefined ? o.opacity : 1.0 },
-      uFogAmt: { value: o.fogAmount !== undefined ? o.fogAmount : 1.0 },
-    },
-    vertexShader: TOON_VERT,
-    fragmentShader: TOON_FRAG,
-    side: o.side || THREE.FrontSide,
-    transparent: !!o.transparent,
-    depthWrite: o.depthWrite !== undefined ? o.depthWrite : true,
-  });
-}
 
 /* ---- kubah langit (gradien asli dipertahankan) ---- */
 const sky = new THREE.Mesh(
@@ -179,39 +135,74 @@ sunGroup.add(sunDisc);
 sunGroup.add(sunHalo);
 scene.add(sunGroup);
 
-/* ---- awan anime toon (gumpal karton + rim gelap, billboard arah kamera) --- */
+/* ---- awan 2D "digambar lembut" (sprite kanvas dengan tepi blur) ---- */
 const cloudsGroup = new THREE.Group();
 scene.add(cloudsGroup);
 const cloudDefs = [];
 
-/* gumpal oval pipih pembentuk siluet awan anime (geometri dibagikan) */
-const CLOUD_PARTS = [
-  { r: 8.2, s: 1.15, sy: 0.72, sz: 0.9, x: -2.6, y: 0.0, z: 0.0, c: 0xffffff },
-  { r: 10.0, s: 1.0, sy: 0.78, sz: 0.9, x: 2.2, y: 0.4, z: 0.0, c: 0xffffff },
-  { r: 7.0, s: 1.0, sy: 0.62, sz: 0.85, x: 5.2, y: -0.4, z: 0.3, c: 0xeff4fb },
-  { r: 5.6, s: 1.0, sy: 0.6, sz: 0.75, x: 4.8, y: 2.6, z: -0.2, c: 0xf6f9fd },
-  { r: 6.2, s: 1.0, sy: 0.6, sz: 0.75, x: -1.2, y: 2.9, z: -0.1, c: 0xf6f9fd },
-];
-const CLOUD_GEOS = CLOUD_PARTS.map((pt) => new THREE.SphereGeometry(pt.r, 16, 12));
+function makeCloudTexture() {
+  const S = 256;
+  const cv = document.createElement('canvas');
+  cv.width = S; cv.height = S;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, S, S);
+  const puff = (cx, cy, r, a) => {
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, `rgba(255,255,255,${a})`);
+    g.addColorStop(0.6, `rgba(255,255,255,${a * 0.85})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  /* siluet awan anime: gumpal besar + bawah datar */
+  puff(70, 96, 54, 0.95);
+  puff(170, 88, 66, 0.95);
+  puff(120, 70, 58, 1.0);
+  puff(210, 110, 40, 0.9);
+  puff(40, 120, 36, 0.85);
+  /* pertegas dasar putih supaya terlihat "digambar" dengan batas lembut */
+  const base = ctx.createLinearGradient(0, 120, 0, 168);
+  base.addColorStop(0, 'rgba(255,255,255,0.9)');
+  base.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = base;
+  ctx.fillRect(24, 120, 208, 48);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  return tex;
+}
+const cloudTex = makeCloudTexture();
+const cloudSpriteMat = new THREE.SpriteMaterial({
+  map: cloudTex,
+  transparent: true,
+  opacity: 0.95,
+  depthWrite: false,
+  fog: false,
+});
 
-function buildCloudModel(rim) {
-  const g = new THREE.Group();
-  for (let i = 0; i < CLOUD_PARTS.length; i++) {
-    const pt = CLOUD_PARTS[i];
-    let mat;
-    if (rim) {
-      /* siluet kontur: warna gelap flat, tanpa pencahayaan */
-      mat = new THREE.MeshBasicMaterial({ color: 0x9fb0c0, transparent: true, opacity: 1.0, fog: false });
-    } else {
-      mat = toonMat(pt.c, { transparent: true, opacity: 1 });
-      mat.uniforms.uFogAmt.value = 0;   /* awan putih bersih, tidak tercampur fog */
-    }
-    const m = new THREE.Mesh(CLOUD_GEOS[i], mat);
-    m.scale.set(pt.s, pt.sy, pt.sz);
-    m.position.set(pt.x, pt.y, pt.z);
-    g.add(m);
-  }
-  return g;
+/* ---- sebar awan 2D ---- */
+for (let i = 0; i < 9; i++) {
+  const s = new THREE.Sprite(cloudSpriteMat);
+  const w = 90 + Math.random() * 110;
+  s.scale.set(w, w * (0.32 + Math.random() * 0.12), 1);
+  s.material = cloudSpriteMat.clone();
+  s.material.opacity = 0.82 + Math.random() * 0.15;
+  const u = {
+    x: (Math.random() - 0.5) * 420,
+    y: 46 + Math.random() * 48,
+    z: (Math.random() - 0.5) * 420,
+    s: 0.5 + Math.random() * 1.2,
+    ph: Math.random() * Math.PI * 2,
+    w,
+  };
+  s.userData = u;
+  s.position.set(u.x, u.y, u.z);
+  cloudsGroup.add(s);
+  cloudDefs.push(s);
 }
 
 /* ---- tanah ---- */
@@ -382,21 +373,97 @@ function recycleGrass(bx, bz) {
   if (changed) offAttr.needsUpdate = true;
 }
 
-/* ---- bola + outline kartun + bayangan blob ---- */
-const ball = new THREE.Mesh(
-  new THREE.SphereGeometry(0.5, 32, 24),
-  toonMat(0xff7043)
-);
-ball.castShadow = true;
-ball.receiveShadow = true;
-const ballOutline = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 16), hullMat);
-ballOutline.scale.setScalar(1.07);   /* tipis: outline halus, bukan tepi tebal */
-ball.add(ballOutline);
-scene.add(ball);
+/* ---- karakter toon beranimasi (pengganti bola) ---- */
+const char = new THREE.Group();
+char.userData = { yaw: 0, stepT: 0, lastBob: 0 };
+const CAP = new THREE.CapsuleGeometry(0.11, 0.42, 4, 10);
+const LEG = new THREE.CapsuleGeometry(0.13, 0.34, 4, 12);
+const SHOE = new THREE.BoxGeometry(0.28, 0.16, 0.46);
 
+function limb(geo, mat, x, y, z) {
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  m.position.set(x, y, z);
+  return m;
+}
+function hullOf(mesh, pad, yBoost) {
+  const h = new THREE.Mesh(mesh.geometry, hullMat);
+  h.position.copy(mesh.position);
+  h.scale.setScalar(pad);
+  if (yBoost) h.scale.y *= yBoost;
+  return h;
+}
+
+/* palet karakter */
+const skinMat = toonMat(0xffd9b0);
+const shirtMat = toonMat(0xff6a3d);
+const pantsMat = toonMat(0x3b4d90);
+const hairMat = toonMat(0x5a3a1e);
+const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1c1e22, fog: false });
+
+/* torso (kaos oranye) */
+const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 0.5, 6, 14), shirtMat);
+torso.castShadow = true; torso.receiveShadow = true;
+torso.position.set(0, 0.85, 0);
+char.add(torso);
+char.add(hullOf(torso, 1.05));
+
+/* kepala */
+const headG = new THREE.Group();
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 18), skinMat);
+head.castShadow = true; head.receiveShadow = true;
+headG.add(head);
+headG.add(hullOf(head, 1.06));
+/* rambut + poni */
+const hair = new THREE.Mesh(new THREE.SphereGeometry(0.355, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat);
+hair.position.y = 0.06;
+hair.castShadow = true;
+headG.add(hair);
+/* mata kartun */
+for (const sx of [-0.13, 0.13]) {
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 10), eyeMat);
+  eye.position.set(sx, 0.07, 0.29);
+  headG.add(eye);
+}
+headG.position.set(0, 1.52, 0);
+char.add(headG);
+
+/* lengan (pivot di bahu, mengayun saat berlari) */
+const armL = new THREE.Group(); armL.position.set(-0.44, 1.08, 0);
+const armLm = limb(CAP, shirtMat, 0, -0.32, 0);
+const handL = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), skinMat);
+handL.position.set(0, -0.58, 0); handL.castShadow = true;
+armL.add(armLm); armL.add(handL);
+const armR = new THREE.Group(); armR.position.set(0.44, 1.08, 0);
+const armRm = limb(CAP, shirtMat, 0, -0.32, 0);
+const handR = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), skinMat);
+handR.position.set(0, -0.58, 0); handR.castShadow = true;
+armR.add(armRm); armR.add(handR);
+char.add(armL); char.add(armR);
+
+/* kaki (pivot di pinggul, melangkah) + sepatu */
+const legL = new THREE.Group(); legL.position.set(-0.17, 0.5, 0);
+const legLm = limb(LEG, pantsMat, 0, -0.28, 0);
+const shoeL = limb(SHOE, hairMat, 0, -0.5, 0.06);
+legL.add(legLm); legL.add(shoeL);
+const legR = new THREE.Group(); legR.position.set(0.17, 0.5, 0);
+const legRm = limb(LEG, pantsMat, 0, -0.28, 0);
+const shoeR = limb(SHOE, hairMat, 0, -0.5, 0.06);
+legR.add(legRm); legR.add(shoeR);
+char.add(legL); char.add(legR);
+
+char.userData.head = headG;
+char.userData.armL = armL;
+char.userData.armR = armR;
+char.userData.legL = legL;
+char.userData.legR = legR;
+scene.add(char);
+
+/* blob bayangan jatuh (dipakai saat karakter melompat) */
 const blob = new THREE.Mesh(
   new THREE.CircleGeometry(0.62, 24),
-  new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.28, depthWrite: false })
+  new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.26, depthWrite: false })
 );
 blob.rotation.x = -Math.PI / 2;
 scene.add(blob);
@@ -457,22 +524,6 @@ for (let i = 0; i < 10; i++) {
   };
   scene.add(g);
   butterflies.push(g);
-}
-
-/* ---- awan anime toon: gumpal karton putih + rim gelap, billboard kamera --- */
-for (let i = 0; i < 8; i++) {
-  const front = buildCloudModel(false);
-  const rim = buildCloudModel(true);
-  rim.position.z = -1.0;                 /* kontur gelap di belakang gumpal */
-  rim.scale.set(1.08, 1.08, 1.0);
-  const model = new THREE.Group();
-  model.add(front);
-  model.add(rim);
-  const u = { x: (Math.random() - 0.5) * 400, y: 40 + Math.random() * 42, z: (Math.random() - 0.5) * 400, s: 0.5 + Math.random() * 1.2, ph: Math.random() * Math.PI * 2 };
-  model.userData = u;
-  model.position.set(u.x, u.y, u.z);
-  cloudsGroup.add(model);
-  cloudDefs.push(model);
 }
 
 /* ============================================================ benteng batu
@@ -666,6 +717,7 @@ document.querySelectorAll('#start .btn').forEach((b) => b.addEventListener('clic
       if (Audio) { audioCtx = new Audio(); audioCtx.resume().catch(console.warn); }
     } catch (e) { console.warn('Audio tidak tersedia', e); }
     document.getElementById('start').style.display = 'none';
+    enterImmersive();
     running = true;
   } catch (err) {
     document.getElementById('error').textContent = 'Gagal memulai: ' + err.message;
@@ -673,17 +725,64 @@ document.querySelectorAll('#start .btn').forEach((b) => b.addEventListener('clic
   }
 }));
 
+/* ---- auto fullscreen + landscape (dalam gesture tombol mulai) ---- */
+function enterImmersive() {
+  const el = document.documentElement;
+  try {
+    if (el.requestFullscreen) {
+      el.requestFullscreen().catch(() => {});
+    } else if (el.webkitRequestFullscreen) {
+      el.webkitRequestFullscreen();
+    }
+  } catch (e) { /* fullscreen opsional */ }
+  /* kunci landscape bila browser mengizinkan (diabaikan aman bila ditolak) */
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(() => {});
+    }
+  } catch (e) { /* lock orientation opsional */ }
+}
+
 const GRAV = 22, ACCEL = 34, FRICTION = 5.5, MAXV = 9, JUMPV = 8.2;
 const clock = new THREE.Clock();
 let trailTimer = 0, recycleTimer = 0;
 const lastTrail = new THREE.Vector2(1e9, 1e9);
-const axis = new THREE.Vector3(), target = new THREE.Vector3();
-ball.position.copy(pos);
+const target = new THREE.Vector3();
+char.position.set(pos.x, pos.y - 0.5, pos.z);
 camera.position.set(4, 5, 7);
 camera.lookAt(pos);
 
 /* ---- governor resolusi adaptif ---- */
 let fpsSmooth = 60, prTimer = 0;
+
+/* ---- helper animasi karakter ---- */
+function updateCharacter(dt, sp, velX, velZ, moving, groundedFlag, airH) {
+  const u = char.userData;
+  const walk = Math.min(1, sp / MAXV);
+  u.stepT += dt * (6 + 14 * walk);
+  const step = moving && groundedFlag ? Math.sin(u.stepT) * (0.35 + 0.6 * walk) : 0;
+  /* langkah kaki + ayun lengan berlawanan */
+  u.legL.rotation.x = step;
+  u.legR.rotation.x = -step;
+  u.armL.rotation.x = -step * 1.1;
+  u.armR.rotation.x = step * 1.1;
+  if (!groundedFlag) {
+    u.legL.rotation.x = -0.45;
+    u.legR.rotation.x = 0.3;
+  }
+  u.lastBob += dt;
+  const bob = groundedFlag ? Math.sin(u.stepT * 0.5) * 0.03 * walk : 0;
+  char.position.y = pos.y - 0.5 + bob;
+  /* facing: hadap arah gerak, lerp lembut */
+  if (moving) {
+    const targetYaw = Math.atan2(velX, velZ);
+    let d = targetYaw - u.yaw;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    u.yaw += d * Math.min(1, dt * 14);
+  }
+  char.rotation.y = u.yaw;
+}
 
 /* ---- janitor render list ---- */
 let janitorTimer = 0;
@@ -732,8 +831,9 @@ function tick() {
       if (pos.y <= gY + 0.5) { pos.y = gY + 0.5; grounded = true; vy = 0; }
     } else pos.y = gY + 0.5;
 
-    if (sp > 0.05) ball.rotateOnWorldAxis(axis.set(vel.z, 0, -vel.x).normalize(), sp * dt / 0.5);
-    ball.position.copy(pos);
+    const moving = sp > 0.3;
+    char.position.set(pos.x, 0, pos.z);
+    updateCharacter(dt, sp, vel.x, vel.z, moving, grounded, pos.y - (gY + 0.5));
     blob.position.set(pos.x, gY + 0.03, pos.z);
     const airH = pos.y - (gY + 0.5);
     blob.material.opacity = Math.max(0.05, 0.28 - airH * 0.06);
