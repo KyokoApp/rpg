@@ -35,6 +35,9 @@ const canvas = document.getElementById('c');
 const isTouch = matchMedia('(pointer: coarse)').matches;
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+/* bayangan lembut real-time mengikuti arah matahari */
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 /* resolusi adaptif: langit-langit per jenis perangkat, lantai saat FPS turun */
 const PR_MAX = isTouch ? 1.25 : 1.75;
 const PR_MIN = isTouch ? 0.6 : 0.9;
@@ -51,39 +54,58 @@ const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 50
 
 /* lampu klasik dijaga (tidak terpakai shader toon, tapi jaga kompatibilitas) */
 scene.add(new THREE.HemisphereLight(0xcfe4ff, 0x3a5f2a, 1));
-const sun = new THREE.DirectionalLight(0xfff1cf, 1.4);
-sun.position.set(60, 90, 30);
+/* Satu arah matahari = sumber kebenaran: cahaya, piringan visibel, dan arah
+ * bayangan semuanya diturunkan dari SUN_DIR — bayangan jatuh berlawanan. */
+const SUN_DIR = new THREE.Vector3(0.52, 0.42, -0.4).normalize();
+const SUN_LIGHT_DIST = 200;
+const SUN_VIS_DIST = 262;
+const sun = new THREE.DirectionalLight(0xfff1cf, 1.15);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -70;
+sun.shadow.camera.right = 70;
+sun.shadow.camera.top = 70;
+sun.shadow.camera.bottom = -70;
+sun.shadow.camera.near = 20;
+sun.shadow.camera.far = 420;
+sun.shadow.bias = -0.00045;
+sun.shadow.normalBias = 0.02;
+sun.shadow.camera.updateProjectionMatrix();
 scene.add(sun);
+scene.add(sun.target);
 
 /* ------------------------------------------------------------------ toon
  * Cel-shading: warna dibentuk dari pita NdotL (mid-tone, tak pernah hitam
  * pekat / putih penuh) + rim light + outline gelap di silhouette.          */
 const TOON_LIGHTS = {
-  uSunDir: { value: new THREE.Vector3(0.5, 0.8, 0.35).normalize() },
   uColorSun: { value: new THREE.Color(0xfff2d0) },
   uHemiSky: { value: new THREE.Color(0xbfe3f5) },
   uHemiGround: { value: new THREE.Color(0x3a5f2a) },
 };
 const TOON_VERT = `
-varying vec3 vN; varying vec3 vV; varying float vDist;
+varying vec3 vN; varying vec3 vV; varying float vDist; varying float vShade;
+uniform vec3 uSunDir;
 void main(){
-  vec4 w = modelMatrix * vec4(position, 1.0);
-  vec4 mv = viewMatrix * w;
-  vN = normalize(mat3(modelMatrix) * normal);
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vec3 wn = normalize(mat3(modelMatrix) * normal);
+  vN = wn;
   vV = mv.xyz;
+  /* shade difus dihitung sekali di sini dari arah matahari yang sama */
+  vShade = clamp(dot(wn, normalize(uSunDir)) * 0.5 + 0.5, 0.0, 1.0);
   vDist = -mv.z;
   gl_Position = projectionMatrix * mv;
 }`;
 const TOON_FRAG = `
 uniform vec3 uBase; uniform vec3 uSunDir; uniform vec3 uColorSun;
 uniform vec3 uHemiSky; uniform vec3 uHemiGround;
-uniform float uSteps; uniform vec3 uFogColor; uniform float uFogDensity;
-varying vec3 vN; varying vec3 vV; varying float vDist;
+uniform vec3 uFogColor; uniform float uFogDensity;
+uniform float uOpacity; uniform float uFogAmt;
+varying vec3 vN; varying vec3 vV; varying float vDist; varying float vShade;
 void main(){
   vec3 N = normalize(vN);
   vec3 V = normalize(-vV);
-  /* gradien LEMBUT: mid-tone, tidak pernah gelap pekat / putih penuh */
-  float shade = clamp(dot(N, normalize(uSunDir)) * 0.5 + 0.5, 0.0, 1.0);
+  /* shade difus yang sama seperti vertex — gradien LEMBUT, mid-tone     */
+  float shade = vShade;
   shade = shade * shade * (3.0 - 2.0 * shade);          /* smoothstep     */
   float tone = 0.62 + 0.38 * shade;                     /* 0.62 .. 1.0    */
   float hemi = N.y * 0.5 + 0.5;
@@ -97,8 +119,8 @@ void main(){
   float edge = smoothstep(0.20, 0.48, ndv);
   col *= mix(0.85, 1.0, edge);                          /* gelap ujung halus */
   float f = 1.0 - exp(-uFogDensity * uFogDensity * vDist * vDist);
-  col = mix(col, uFogColor, clamp(f, 0.0, 1.0));
-  gl_FragColor = vec4(col, 1.0);
+  col = mix(col, uFogColor, clamp(f, 0.0, 1.0) * uFogAmt);
+  gl_FragColor = vec4(col, uOpacity);
 }`;
 /* outline inverted-hull: brown gelap hangat & tipis, bukan hitam pekat */
 const hullMat = new THREE.MeshBasicMaterial({ color: 0x4a3b2a, side: THREE.BackSide });
@@ -106,17 +128,20 @@ function toonMat(base, o = {}) {
   return new THREE.ShaderMaterial({
     uniforms: {
       uBase: { value: new THREE.Color(base) },
-      uSunDir: { value: TOON_LIGHTS.uSunDir.value },
+      uSunDir: { value: SUN_DIR },
       uColorSun: { value: TOON_LIGHTS.uColorSun.value },
       uHemiSky: { value: TOON_LIGHTS.uHemiSky.value },
       uHemiGround: { value: TOON_LIGHTS.uHemiGround.value },
-      uSteps: { value: o.steps || 4 },
       uFogColor: { value: FOG_COLOR },
       uFogDensity: { value: FOG_DENSITY },
+      uOpacity: { value: o.opacity !== undefined ? o.opacity : 1.0 },
+      uFogAmt: { value: o.fogAmount !== undefined ? o.fogAmount : 1.0 },
     },
     vertexShader: TOON_VERT,
     fragmentShader: TOON_FRAG,
     side: o.side || THREE.FrontSide,
+    transparent: !!o.transparent,
+    depthWrite: o.depthWrite !== undefined ? o.depthWrite : true,
   });
 }
 
@@ -154,16 +179,47 @@ sunGroup.add(sunDisc);
 sunGroup.add(sunHalo);
 scene.add(sunGroup);
 
-/* ---- awan prosedural ---- */
+/* ---- awan anime toon (gumpal karton + rim gelap, billboard arah kamera) --- */
 const cloudsGroup = new THREE.Group();
 scene.add(cloudsGroup);
 const cloudDefs = [];
+
+/* gumpal oval pipih pembentuk siluet awan anime (geometri dibagikan) */
+const CLOUD_PARTS = [
+  { r: 8.2, s: 1.15, sy: 0.72, sz: 0.9, x: -2.6, y: 0.0, z: 0.0, c: 0xffffff },
+  { r: 10.0, s: 1.0, sy: 0.78, sz: 0.9, x: 2.2, y: 0.4, z: 0.0, c: 0xffffff },
+  { r: 7.0, s: 1.0, sy: 0.62, sz: 0.85, x: 5.2, y: -0.4, z: 0.3, c: 0xeff4fb },
+  { r: 5.6, s: 1.0, sy: 0.6, sz: 0.75, x: 4.8, y: 2.6, z: -0.2, c: 0xf6f9fd },
+  { r: 6.2, s: 1.0, sy: 0.6, sz: 0.75, x: -1.2, y: 2.9, z: -0.1, c: 0xf6f9fd },
+];
+const CLOUD_GEOS = CLOUD_PARTS.map((pt) => new THREE.SphereGeometry(pt.r, 16, 12));
+
+function buildCloudModel(rim) {
+  const g = new THREE.Group();
+  for (let i = 0; i < CLOUD_PARTS.length; i++) {
+    const pt = CLOUD_PARTS[i];
+    let mat;
+    if (rim) {
+      /* siluet kontur: warna gelap flat, tanpa pencahayaan */
+      mat = new THREE.MeshBasicMaterial({ color: 0x9fb0c0, transparent: true, opacity: 1.0, fog: false });
+    } else {
+      mat = toonMat(pt.c, { transparent: true, opacity: 1 });
+      mat.uniforms.uFogAmt.value = 0;   /* awan putih bersih, tidak tercampur fog */
+    }
+    const m = new THREE.Mesh(CLOUD_GEOS[i], mat);
+    m.scale.set(pt.s, pt.sy, pt.sz);
+    m.position.set(pt.x, pt.y, pt.z);
+    g.add(m);
+  }
+  return g;
+}
 
 /* ---- tanah ---- */
 const groundGeo = new THREE.PlaneGeometry(130, 130, 42, 42);
 const ground = new THREE.Mesh(groundGeo, toonMat(0x3a6b2f)); /* senada akar rumput */
 ground.rotation.x = -Math.PI / 2;
 ground.frustumCulled = false;
+ground.receiveShadow = true;
 scene.add(ground);
 
 let gCX = 0, gCZ = 0;
@@ -208,13 +264,14 @@ const grassUniforms = {
   uColliders: { value: Array.from({ length: MAXC }, () => new THREE.Vector4(0, 0, 0, 0)) },
   uFogColor: { value: FOG_COLOR },
   uFogDensity: { value: FOG_DENSITY },
+  uSunDir: { value: SUN_DIR },
 };
 
 const grassVert = `
 #define TRAIL_N ${TRAIL_N}
 #define MAXC ${MAXC}
 attribute vec2 aOffset;attribute vec4 aData;
-uniform float uTime;uniform vec2 uBallPos,uBallVel;uniform vec4 uTrail[TRAIL_N];uniform vec4 uColliders[MAXC];varying vec3 vColor;varying float vDepth;
+uniform float uTime;uniform vec2 uBallPos,uBallVel;uniform vec3 uSunDir;uniform vec4 uTrail[TRAIL_N];uniform vec4 uColliders[MAXC];varying vec3 vColor;varying float vDepth;
 float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
 float terrainH(vec2 p){return 0.7*sin(p.x*0.045)*cos(p.y*0.05)+0.35*sin(p.x*0.11+1.7)*cos(p.y*0.13+2.3);}
@@ -243,7 +300,11 @@ vec3 tipCol=vec3(0.45,0.72,0.28);    /* ujung terang senada tanah           */
 vec3 sunny=vec3(0.58,0.84,0.34);     /* bilah kena matahari penuh           */
 vec3 col=mix(rootCol,tipCol,t*t*(3.0-2.0*t));
 col=mix(col,sunny,aData.z*0.5);
-float perBlade=0.92+0.08*hash(aOffset*1.7);   /* kehalusan per helai, 8% saja */
+/* pencahayaan matahari nyata: sisi menghadap arah matahari lebih terang */
+float sunSide=abs(dot(vec2(sin(ca),cos(ca)),normalize(uSunDir.xz)));
+col*=0.78+0.46*sunSide;
+col=mix(col,sunny,sunSide*0.22);
+float perBlade=0.94+0.06*hash(aOffset*1.7);   /* kehalusan per helai, 6% saja */
 col*=perBlade;
 col+=tipCol*0.10*smoothstep(0.55,1.0,t);      /* sorotan lembut di ujung      */
 float flower=step(0.985,hash(aOffset*3.1));
@@ -326,6 +387,8 @@ const ball = new THREE.Mesh(
   new THREE.SphereGeometry(0.5, 32, 24),
   toonMat(0xff7043)
 );
+ball.castShadow = true;
+ball.receiveShadow = true;
 const ballOutline = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 16), hullMat);
 ballOutline.scale.setScalar(1.07);   /* tipis: outline halus, bukan tepi tebal */
 ball.add(ballOutline);
@@ -396,24 +459,20 @@ for (let i = 0; i < 10; i++) {
   butterflies.push(g);
 }
 
-/* ---- awan (gumpal bola melayang, dibuat sekali lalu digeser) ---- */
+/* ---- awan anime toon: gumpal karton putih + rim gelap, billboard kamera --- */
 for (let i = 0; i < 8; i++) {
-  const g = new THREE.Group();
-  const n = 3 + ((Math.random() * 3) | 0);
-  for (let j = 0; j < n; j++) {
-    const s = new THREE.Mesh(
-      new THREE.SphereGeometry(6 + Math.random() * 12, 10, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, fog: false, depthWrite: false })
-    );
-    s.position.set(j * 9 - n * 4, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 6);
-    s.scale.y = 0.45 + Math.random() * 0.2;
-    g.add(s);
-  }
-  const u = { x: (Math.random() - 0.5) * 400, y: 40 + Math.random() * 40, z: (Math.random() - 0.5) * 400, s: 0.5 + Math.random() * 1.2 };
-  g.userData = u;
-  g.position.set(u.x, u.y, u.z);
-  cloudsGroup.add(g);
-  cloudDefs.push(g);
+  const front = buildCloudModel(false);
+  const rim = buildCloudModel(true);
+  rim.position.z = -1.0;                 /* kontur gelap di belakang gumpal */
+  rim.scale.set(1.08, 1.08, 1.0);
+  const model = new THREE.Group();
+  model.add(front);
+  model.add(rim);
+  const u = { x: (Math.random() - 0.5) * 400, y: 40 + Math.random() * 42, z: (Math.random() - 0.5) * 400, s: 0.5 + Math.random() * 1.2, ph: Math.random() * Math.PI * 2 };
+  model.userData = u;
+  model.position.set(u.x, u.y, u.z);
+  cloudsGroup.add(model);
+  cloudDefs.push(model);
 }
 
 /* ============================================================ benteng batu
@@ -509,6 +568,12 @@ for (const sx of [-2.1, 2.1]) {
 
 fortress.position.set(FORT_X, FORT_Y, FORT_Z);
 scene.add(fortress);
+/* bangunan melempar bayangan lunak ke tanah (hull outline tidak ikut) */
+fortress.traverse((o) => {
+  if (o.isMesh) {
+    o.castShadow = o.material !== hullMat;
+  }
+});
 
 /* collider lingkaran benteng (bola memantul & rumput dibersihkan di dalam) */
 fortressCircles.push({ x: FORT_X, z: FORT_Z, r: 6.6 });
@@ -622,7 +687,6 @@ let fpsSmooth = 60, prTimer = 0;
 
 /* ---- janitor render list ---- */
 let janitorTimer = 0;
-const SUN_OFFSET = new THREE.Vector3(240, 150, -80);
 
 function tick() {
   requestAnimationFrame(tick);
@@ -775,17 +839,23 @@ function tick() {
     u.l.rotation.z = flap; u.r.rotation.z = -flap;
   }
 
-  /* awan: hanyut pelan */
+  /* awan anime: hanyut pelan, selalu menghadap kamera (gumpal karton) */
   for (let i = 0; i < cloudDefs.length; i++) {
     const g = cloudDefs[i];
     const u = g.userData;
     u.x += u.s * dt;
-    if (u.x > 320) u.x = -320;
-    g.position.x = u.x;
+    if (u.x > 420) u.x = -420;
+    u.y += Math.sin(time * 0.12 + u.ph) * 0.004;   /* naik-turun halus */
+    g.position.set(u.x, u.y, u.z);
+    g.lookAt(camera.position);
   }
 
-  /* matahari, awan, dan kubah langit menempel pada posisi kamera */
-  sunGroup.position.copy(camera.position).add(SUN_OFFSET);
+  /* matahari: cahaya & piringan sama-sama mengikuti SATU arah matahari.
+   * Piringan ditaruh jauh di langit SEARAH cahaya; bayangan otomatis jatuh
+   * berlawanan karena posisi light = target + SUN_DIR * jarak.            */
+  sun.target.position.copy(camera.position);
+  sun.position.copy(camera.position).addScaledVector(SUN_DIR, SUN_LIGHT_DIST);
+  sunGroup.position.copy(camera.position).addScaledVector(SUN_DIR, SUN_VIS_DIST);
   cloudsGroup.position.copy(camera.position);
   sky.position.copy(camera.position);
 
