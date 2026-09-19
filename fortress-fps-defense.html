@@ -236,8 +236,8 @@
 <div class="ov" id="startOv">
   <div class="panel">
     <h1>🏰 BENTENG PERTAHANAN 3D</h1>
-    <p style="color:#c0a070;font-size:11px;letter-spacing:3px;text-transform:uppercase">First-Person Tower Defense</p>
-    <p style="margin-top:12px">Benteng dengan <span class="hl">16 pondasi menara</span> mengelilingi lingkarannya. Empat jenis pertahanan: <span class="hl">Meriam</span>, <span class="hl">Menara Panah</span>, <span class="hl">Meteor</span>, dan <span class="hl">Menara Petir</span>.</p>
+    <p style="color:#c0a070;font-size:11px;letter-spacing:3px;text-transform:uppercase">First-Person Tower Defense • Benteng Setengah Lingkaran</p>
+    <p style="margin-top:12px">Bentengmu kini berbentuk <span class="hl">setengah lingkaran</span> menghadap satu arah ke depan. Gerombolan monster datang dari depan — pertahankan gerbang! Di belakangmu, <span class="hl">Istana Agunga</span> berdiri megah: <span class="hl">balista istana</span> menembak otomatis tanpa biaya, dan punggungmu aman oleh deretan <span class="hl">gunung bersalju</span>.</p>
     <button class="big" id="startBtn">MULAI PERTAHANAN</button>
     <div class="keys" id="startKeys">
       <kbd>W A S D</kbd> gerak &nbsp;•&nbsp; <kbd>MOUSE</kbd> lihat &nbsp;•&nbsp; <kbd>1</kbd>–<kbd>4</kbd> pilih senjata<br>
@@ -254,6 +254,8 @@
       <div class="tip"><b>🏹 Menara Panah</b>Panah cepat dengan ekor cahaya, akurat untuk musuh ringan.</div>
       <div class="tip"><b>☄️ Meteor</b>Kumpulkan energi → luncurkan ke langit → jatuh sebagai meteor yang menyisakan <span class="hl">zona api besar</span> di tanah.</div>
       <div class="tip"><b>⚡ Menara Petir</b>Setruman gelombang listrik kontinu yang mengalir ke target.</div>
+      <div class="tip"><b>🏰 Istana Agunga</b>2 <span class="hl">balista istana</span> menembak otomatis ke musuh terberat dari belakang. Gratis — koinmu fokus upgrade senjata!</div>
+      <div class="tip"><b>🧭 Sisi Depan Saja</b>Musuh hanya muncul dari <span class="hl">setengah lingkaran depan</span>. Sisi belakang aman: istana + gunung menutupnya.</div>
     </div>
     <button class="big" id="tutBtn">SIAP BERTEMPUR</button>
   </div>
@@ -289,13 +291,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* ============================================================
-   BENTENG PERTAHANAN 3D v11
-   + Muzzle smoke fix (bola putih bug DIBUANG)
-   + API → METEOR (charge → langit → jatuh → zona bakar besar)
-   + Bendera dihapus
-   + Pohon prosedural realistis (branching rekursif + daun berlapis)
-   + Rumput liar + bunga kecil + detail lingkungan
-   + Visual upgrade: langit lebih lembut, kontras lebih tinggi
+   BENTENG PERTAHANAN 3D v13 — "SANG PENJAGA"
+   + Benteng SETENGAH LINGKARAN, satu arah ke depan (gerbang + menara ujung)
+   + Istana Agunga di belakang: menara, keep, spire, jendela menyala,
+     bendera berkibar, jembatan tarikan, 2 BALISTA ISTANA (auto-fire)
+   + Gunung bersalju berlapis di belakang istana (menutup area belakang)
+   + Musuh spawn HANYA dari depan (logika sesuai bentuk benteng)
+   + Audio: ambience angin + kicau burung, suara balista, dentum gerbang,
+     kompresor dinamis, horn gelombang
+   + Screen shake (meteor, titan, boss), radar diperbarui
    ============================================================ */
 window.onerror=function(msg,src,line){
   var e=document.getElementById('errBox');
@@ -312,7 +316,9 @@ const isMobile=isTouch&&Math.min(innerWidth,innerHeight)<1000;
 const CFG={
   towerHeight:4.0, floorTop:4.3, walkwayR:10.5, walkOuter:9.6, walkInner:5.5,
   eye:5.65, parapetH:0.34, attackR:17.0, baseHP:120, waveBonus:60, prepTime:15,
-  mountRadius:9.4
+  mountRadius:9.4,
+  arcHalf:Math.PI/2,      // benteng membentang azimut [-90°, +90°] (depan = +Z)
+  walkAzMax:1.60          // clamp azimut pemain (~92°)
 };
 let BASE_FOV=isMobile?80:78;
 function fitFov(){
@@ -324,7 +330,7 @@ function fitFov(){
 fitFov();
 const G=20;
 
-/* ===== WEAPONS — FIRE jadi METEOR ===== */
+/* ===== WEAPONS ===== */
 const WEAPONS=[
   { id:'cannon', name:'Meriam',       icon:'💣', projColor:0xff9a4a, dmg:14, rate:1.35, range:80, splash:2.8, cost:0,    bDmg:7,  bRate:0.12, type:'ball',
     spd:32, needsAim:true },
@@ -352,7 +358,7 @@ const S={ running:false, over:false, paused:false, coins:60, kills:0, totalCoins
 const owned={ cannon:1, archer:0, fire:0, storm:0 };
 const lvl={ cannon:{d:1,r:1}, archer:{d:1,r:1}, fire:{d:1,r:1}, storm:{d:1,r:1} };
 
-let volleyCd=0, started=false, dispCoins=-1, zoom=1, zoomTarget=1, dmgPops=0;
+let volleyCd=0, started=false, dispCoins=-1, zoom=1, zoomTarget=1, dmgPops=0, shakeMag=0;
 
 const $=id=>document.getElementById(id);
 const coinVal=$('coinVal'), waveVal=$('waveVal'), hpVal=$('hpVal'), hpFill=$('hpFill'), killVal=$('killVal');
@@ -368,17 +374,23 @@ function toast(msg,color){
   while(toastEl.children.length>3) toastEl.firstChild.remove();
 }
 function banner(t){ bannerEl.textContent=t; bannerEl.style.opacity='1'; setTimeout(()=>bannerEl.style.opacity='0',1700); }
+function addShake(v){ shakeMag=Math.min(1.6,shakeMag+v); }
 
 /* ============================================================
    AUDIO
    ============================================================ */
 const A={
-  ctx:null, master:null, muted:false, last:{},
+  ctx:null, master:null, muted:false, last:{}, amb:{on:false, wind:null, timer:0},
   init(){
     if(this.ctx) return;
     const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
-    try{ this.ctx=new AC(); this.master=this.ctx.createGain();
-      this.master.gain.value=this.muted?0:0.5; this.master.connect(this.ctx.destination);
+    try{
+      this.ctx=new AC();
+      this.master=this.ctx.createGain();
+      this.master.gain.value=this.muted?0:0.5;
+      const comp=this.ctx.createDynamicsCompressor();
+      comp.threshold.value=-18; comp.knee.value=22; comp.ratio.value=8;
+      this.master.connect(comp); comp.connect(this.ctx.destination);
     }catch(e){ this.ctx=null; }
   },
   resume(){ if(this.ctx&&this.ctx.state==='suspended') this.ctx.resume(); },
@@ -408,7 +420,36 @@ const A={
     g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
     src.connect(f); f.connect(g); g.connect(this.master); src.start(t); src.stop(t+dur+0.04);
   },
-  setMute(m){ this.muted=m; if(this.master) this.master.gain.value=m?0:0.5; }
+  setMute(m){ this.muted=m; if(this.master) this.master.gain.value=m?0:0.5; },
+  startAmbience(){
+    if(!this.ctx||this.amb.on) return; this.amb.on=true;
+    const c=this.ctx;
+    /* Angin: noise looped + lowpass + LFO pelan */
+    const buf=c.createBuffer(1,c.sampleRate*3,c.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+    const src=c.createBufferSource(); src.buffer=buf; src.loop=true;
+    const f=c.createBiquadFilter(); f.type='lowpass'; f.frequency.value=320; f.Q.value=0.7;
+    const g=c.createGain(); g.gain.value=0.0;
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start();
+    g.gain.linearRampToValueAtTime(0.055, c.currentTime+4);
+    const lfo=c.createOscillator(); lfo.frequency.value=0.07;
+    const lg=c.createGain(); lg.gain.value=0.028;
+    lfo.connect(lg); lg.connect(g.gain); lfo.start();
+    this.amb.wind={src,lfo,g};
+    /* Kicau burung sesekali */
+    const bird=()=>{
+      this.amb.timer=setTimeout(()=>{
+        if(this.ctx&&!this.muted){
+          const n=2+Math.floor(Math.random()*3);
+          for(let i=0;i<n;i++) this.tone('sine',2400+Math.random()*1400,1800+Math.random()*900,0.08,0.032,i*0.13);
+        }
+        bird();
+      }, 7000+Math.random()*13000);
+    };
+    bird();
+  }
 };
 const SFX={
   cannon(){ if(!A.ok()||!A.gate('cannon',45)) return;
@@ -434,8 +475,11 @@ const SFX={
   hit(){ if(!A.ok()||!A.gate('hit',45)) return; A.tone('triangle',700,220,0.08,0.09); },
   death(){ if(!A.ok()||!A.gate('death',80)) return; A.tone('sawtooth',340,80,0.3,0.15); A.nburst(900,200,0.25,0.15,'lowpass'); },
   coin(){ if(!A.ok()||!A.gate('coin',90)) return; A.tone('sine',900,900,0.07,0.11); A.tone('sine',1340,1340,0.1,0.09,0.06); },
-  towerHit(){ if(!A.ok()||!A.gate('towerHit',180)) return; A.tone('sine',80,40,0.4,0.38); A.nburst(300,90,0.35,0.33,'lowpass'); },
-  wave(){ if(!A.ok()) return; A.tone('sawtooth',196,196,0.55,0.13); A.tone('sawtooth',294,294,0.55,0.1,0.02); A.tone('sawtooth',392,392,0.7,0.09,0.05); },
+  towerHit(){ if(!A.ok()||!A.gate('towerHit',180)) return;
+    A.tone('sine',72,28,0.28,0.42); A.nburst(380,90,0.2,0.30,'lowpass'); A.tone('triangle',180,60,0.12,0.12,0.02); },
+  wave(){ if(!A.ok()) return;
+    A.tone('sawtooth',155,155,0.55,0.12); A.tone('sawtooth',157,157,0.55,0.09);
+    A.tone('sawtooth',196,196,0.9,0.11,0.40); A.tone('sawtooth',198,196,0.9,0.09,0.40); },
   upgrade(){ if(!A.ok()) return; A.tone('sine',520,1180,0.22,0.19); A.tone('triangle',880,1760,0.18,0.1,0.05); },
   buy(){ if(!A.ok()) return; A.tone('triangle',440,880,0.16,0.15); A.tone('triangle',660,1320,0.2,0.12,0.1); },
   heal(){ if(!A.ok()) return; A.tone('sine',660,990,0.3,0.15); A.tone('sine',990,1320,0.35,0.12,0.08); },
@@ -445,6 +489,12 @@ const SFX={
     A.tone('square',180,45,1.1,0.14,0.2); A.nburst(650,70,1.6,0.28,'lowpass'); },
   titanStep(){ if(!A.ok()||!A.gate('tstep',380)) return;
     A.tone('sine',70,28,0.42,0.32); A.nburst(220,60,0.42,0.24,'lowpass'); },
+  castleBolt(){ if(!A.ok()||!A.gate('cb',120)) return;
+    A.tone('sine',130,38,0.3,0.40); A.nburst(900,120,0.18,0.30,'lowpass');
+    A.tone('triangle',300,90,0.22,0.12,0.02); },
+  castleBoltHit(){ if(!A.ok()||!A.gate('cbh',60)) return;
+    A.tone('sine',90,30,0.3,0.5); A.nburst(700,80,0.3,0.45,'lowpass');
+    A.tone('triangle',700,150,0.12,0.2,0.01); },
   over(){ if(!A.ok()) return; A.tone('sawtooth',220,110,1.1,0.17); A.tone('sawtooth',174,87,1.2,0.14,0.12); A.tone('sawtooth',130,65,1.4,0.13,0.24); }
 };
 
@@ -533,7 +583,6 @@ function texGround(repX,repY){
     g.lineWidth=0.8+Math.random()*0.8;
     g.beginPath(); g.moveTo(x,y); g.lineTo(x+(Math.random()-0.5)*3,y-2-Math.random()*5); g.stroke();
   }
-  /* Bintik bunga */
   for(let i=0;i<40;i++){
     const x=Math.random()*256,y=Math.random()*256;
     g.fillStyle=['rgba(255,220,120,.6)','rgba(255,150,180,.5)','rgba(200,180,255,.5)','rgba(255,240,200,.5)'][Math.floor(Math.random()*4)];
@@ -615,6 +664,74 @@ function texAnimeCloud(variant){
   if(THREE.sRGBEncoding!==undefined) t.encoding=THREE.sRGBEncoding;
   return t;
 }
+function makeStar(g,cx,cy,rO,rI,fill){
+  g.fillStyle=fill;
+  g.beginPath();
+  for(let i=0;i<5;i++){
+    const a=-Math.PI/2+i*Math.PI*2/5, a2=a+Math.PI/5;
+    g.lineTo(cx+Math.cos(a)*rO, cy+Math.sin(a)*rO);
+    g.lineTo(cx+Math.cos(a2)*rI, cy+Math.sin(a2)*rI);
+  }
+  g.closePath(); g.fill();
+}
+function texFlag(){
+  const c=document.createElement('canvas'); c.width=128; c.height=84;
+  const g=c.getContext('2d');
+  g.fillStyle='#a02230'; g.fillRect(0,0,128,84);
+  g.strokeStyle='#e8b84a'; g.lineWidth=5; g.strokeRect(3,3,122,78);
+  g.fillStyle='#e8b84a';
+  g.beginPath(); g.arc(64,42,20,0,Math.PI*2); g.fill();
+  g.fillStyle='#a02230';
+  g.beginPath(); g.arc(64,42,13,0,Math.PI*2); g.fill();
+  makeStar(g,64,42,12,5,'#f5e8c8');
+  const t=new THREE.CanvasTexture(c);
+  if(THREE.sRGBEncoding!==undefined) t.encoding=THREE.sRGBEncoding;
+  return t;
+}
+function texBannerV(){
+  const c=document.createElement('canvas'); c.width=96; c.height=256;
+  const g=c.getContext('2d');
+  g.fillStyle='#8f1f2e'; g.fillRect(0,0,96,256);
+  g.strokeStyle='#e8b84a'; g.lineWidth=4; g.strokeRect(3,3,90,250);
+  g.fillStyle='#e8b84a';
+  g.beginPath(); g.arc(48,64,26,0,Math.PI*2); g.fill();
+  g.fillStyle='#8f1f2e';
+  g.beginPath(); g.arc(48,64,18,0,Math.PI*2); g.fill();
+  makeStar(g,48,64,16,6.5,'#f5e8c8');
+  g.fillStyle='#e8b84a';
+  for(let i=0;i<3;i++){ g.fillRect(20,130+i*40,56,14); }
+  const t=new THREE.CanvasTexture(c);
+  if(THREE.sRGBEncoding!==undefined) t.encoding=THREE.sRGBEncoding;
+  return t;
+}
+function texBannerH(){
+  const c=document.createElement('canvas'); c.width=256; c.height=64;
+  const g=c.getContext('2d');
+  g.fillStyle='#8f1f2e'; g.fillRect(0,0,256,64);
+  g.strokeStyle='#e8b84a'; g.lineWidth=4; g.strokeRect(3,3,250,58);
+  g.fillStyle='#e8b84a';
+  g.beginPath(); g.arc(128,32,18,0,Math.PI*2); g.fill();
+  g.fillStyle='#8f1f2e';
+  g.beginPath(); g.arc(128,32,12,0,Math.PI*2); g.fill();
+  makeStar(g,128,32,10,4,'#f5e8c8');
+  g.fillStyle='rgba(232,184,74,.9)';
+  g.fillRect(14,20,58,24); g.fillRect(184,20,58,24);
+  const t=new THREE.CanvasTexture(c);
+  if(THREE.sRGBEncoding!==undefined) t.encoding=THREE.sRGBEncoding;
+  return t;
+}
+function texSunDisc(){
+  const c=makeCanvas(256);
+  const g=c.getContext('2d');
+  const gr=g.createRadialGradient(128,128,0,128,128,128);
+  gr.addColorStop(0,'rgba(255,250,235,1)');
+  gr.addColorStop(0.25,'rgba(255,230,170,0.95)');
+  gr.addColorStop(0.5,'rgba(255,170,90,0.35)');
+  gr.addColorStop(1,'rgba(255,140,60,0)');
+  g.fillStyle=gr; g.fillRect(0,0,256,256);
+  const t=new THREE.CanvasTexture(c);
+  return t;
+}
 function makeToonGradient(){
   const c=document.createElement('canvas'); c.width=4; c.height=1;
   const g=c.getContext('2d');
@@ -662,26 +779,26 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.08;
 
 const scene=new THREE.Scene();
-scene.fog=new THREE.FogExp2(0xd18a5a,0.0055);
+scene.fog=new THREE.FogExp2(0xd18a5a,0.0042);
 const camera=new THREE.PerspectiveCamera(BASE_FOV,innerWidth/innerHeight,0.1,600);
 
 scene.add(new THREE.HemisphereLight(0xffb980,0x5a2a4a,0.55));
 const sun=new THREE.DirectionalLight(0xff9a4a,1.9);
-sun.position.set(52,22,-38);
+sun.position.set(52,24,74);
 sun.castShadow=!isMobile;
 sun.shadow.mapSize.set(isMobile?1024:2048);
-sun.shadow.camera.near=5; sun.shadow.camera.far=250;
-sun.shadow.camera.left=-90; sun.shadow.camera.right=90; sun.shadow.camera.top=90; sun.shadow.camera.bottom=-90;
+sun.shadow.camera.near=1; sun.shadow.camera.far=320;
+sun.shadow.camera.left=-120; sun.shadow.camera.right=120; sun.shadow.camera.top=120; sun.shadow.camera.bottom=-120;
 sun.shadow.bias=-0.0006; scene.add(sun);
 const fillL=new THREE.DirectionalLight(0xff7a55,0.35); fillL.position.set(-30,18,30); scene.add(fillL);
 scene.add(new THREE.AmbientLight(0x6a3a6a,0.42));
 
-/* Sky — matahari kecil, langit gradasi halus */
+/* Sky — gradasi sunset + piringan matahari */
 (function(){
-  const sunDir=new THREE.Vector3(52,22,-38).normalize();
+  const sunDir=new THREE.Vector3(52,24,74).normalize();
   const skyMat=new THREE.ShaderMaterial({
     side:THREE.BackSide, depthWrite:false,
-    uniforms:{ top:{value:new THREE.Color(0x1a1440)}, mid:{value:new THREE.Color(0x8a3a72)},
+    uniforms:{ top:{value:new THREE.Color(0x191243)}, mid:{value:new THREE.Color(0x8a3a72)},
       hor:{value:new THREE.Color(0xff8a4a)}, sunDir:{value:sunDir}, sunColor:{value:new THREE.Color(0xfff0c0)} },
     vertexShader:'varying vec3 vP; void main(){ vP=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
     fragmentShader:['varying vec3 vP;','uniform vec3 top,mid,hor,sunColor,sunDir;',
@@ -694,6 +811,15 @@ scene.add(new THREE.AmbientLight(0x6a3a6a,0.42));
       ' gl_FragColor=vec4(c,1.0);','}'].join('\n')
   });
   scene.add(new THREE.Mesh(new THREE.SphereGeometry(300,24,16), skyMat));
+  const sunTex=texSunDisc();
+  const sunSp=new THREE.Sprite(new THREE.SpriteMaterial({map:sunTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,fog:false}));
+  sunSp.position.copy(sunDir.clone().multiplyScalar(282));
+  sunSp.scale.set(42,42,1);
+  scene.add(sunSp);
+  const glowSp=new THREE.Sprite(new THREE.SpriteMaterial({map:sunTex,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:0.35,fog:false}));
+  glowSp.position.copy(sunDir.clone().multiplyScalar(280));
+  glowSp.scale.set(120,120,1);
+  scene.add(glowSp);
 })();
 (function(){
   const sg=new THREE.BufferGeometry(), arr=[], n=isMobile?120:280;
@@ -729,89 +855,568 @@ const ground=new THREE.Mesh(new THREE.PlaneGeometry(700,700,isMobile?24:40,isMob
   new THREE.MeshStandardMaterial({map:groundTex,color:0xffffff,roughness:1,metalness:0}));
 ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
 { const p=ground.geometry.attributes.position;
-  for(let i=0;i<p.count;i++){ const x=p.getX(i),y=p.getY(i);
-    p.setZ(i,Math.sin(x*0.13)*Math.cos(y*0.11)*0.55+Math.sin(x*0.41+y*0.3)*0.18); }
+  for(let i=0;i<p.count;i++){
+    const x=p.getX(i),y=p.getY(i); /* y lokal = -z dunia */
+    let hgt=Math.sin(x*0.13)*Math.cos(y*0.11)*0.55+Math.sin(x*0.41+y*0.3)*0.18;
+    /* Ratakan area halaman + istana (z dunia -1..-48) biar tidak tembus bangunan */
+    if(y>0.5&&y<50&&Math.abs(x)<18){
+      const fx=1-Math.min(1,Math.abs(x)/18);
+      const fy=1-Math.min(1,Math.max((0.5-y)/4,(y-50)/4,0));
+      hgt*=(1-Math.min(fx,fy));
+    }
+    p.setZ(i,hgt);
+  }
   ground.geometry.computeVertexNormals(); }
 
-const attackRing=new THREE.Mesh(new THREE.RingGeometry(CFG.attackR-0.4,CFG.attackR+0.4,120,1),
+/* Cincin serangan — SETENGAH lingkaran (depan) */
+const attackRing=new THREE.Mesh(new THREE.RingGeometry(CFG.attackR-0.4,CFG.attackR+0.4,64,1,Math.PI-0.18,Math.PI+0.36),
   new THREE.MeshBasicMaterial({color:0xff5533,side:THREE.DoubleSide,transparent:true,opacity:.4}));
 attackRing.rotation.x=-Math.PI/2; attackRing.position.y=0.06; scene.add(attackRing);
 
+const flags=[]; // bendera animasi (isi: {geo, base, phase})
+
 /* ============================================================
-   BENTENG
+   BENTENG — SETENGAH LINGKARAN (depan = +Z)
    ============================================================ */
 const tower=new THREE.Group(); scene.add(tower);
 const stoneMat=new THREE.MeshStandardMaterial({map:texStone(8,5),color:0xa8a0b0,roughness:.95,metalness:.02});
 const darkStoneMat=new THREE.MeshStandardMaterial({map:texDarkStone(10,10),color:0x8a8494,roughness:.95});
 const woodMat=new THREE.MeshStandardMaterial({map:texWood(2,2),color:0xc0a080,roughness:.85});
+const woodDarkMat=new THREE.MeshStandardMaterial({map:texWood(1,1),color:0x6a4828,roughness:.95});
 const brassMat=new THREE.MeshStandardMaterial({map:texBrass(2,2),color:0xffd090,roughness:.4,metalness:.75});
+const roofRedMat=new THREE.MeshStandardMaterial({map:texWood(2,2),color:0x8a2c2c,roughness:.8});
+const roofTealMat=new THREE.MeshStandardMaterial({color:0x1f5f68,roughness:.8});
+const castleStoneMat=new THREE.MeshStandardMaterial({map:texStone(6,6),color:0xcfc4b0,roughness:.95});
+const castleDarkMat=new THREE.MeshStandardMaterial({map:texDarkStone(6,6),color:0xa49a88,roughness:.95});
+const ironMat=new THREE.MeshStandardMaterial({map:texMetal(1,1),color:0x9a9eb0,roughness:.55,metalness:.75});
+function winMat(){ return new THREE.MeshStandardMaterial({color:0x120d08,emissive:0xffc875,emissiveIntensity:1.25,roughness:.7}); }
+const winA=winMat(), winB=winMat(), winC=winMat();
+const winMats=[winA,winB,winC];
+const flagMat=new THREE.MeshStandardMaterial({map:texFlag(),side:THREE.DoubleSide,roughness:1});
+const bannerVMat=new THREE.MeshStandardMaterial({map:texBannerV(),side:THREE.DoubleSide,roughness:1});
+const bannerHMat=new THREE.MeshStandardMaterial({map:texBannerH(),side:THREE.DoubleSide,roughness:1});
 
-const TH=CFG.towerHeight, L=CFG.floorTop;
-const shaft=new THREE.Mesh(new THREE.CylinderGeometry(9.8,11.5,TH,28),stoneMat);
+const TH=CFG.towerHeight, L=CFG.floorTop, A0=CFG.arcHalf;
+
+/* Dinding utama — setengah silinder terbuka, menghadap +Z */
+const shaft=new THREE.Mesh(new THREE.CylinderGeometry(9.8,11.5,TH,32,1,true,-A0,Math.PI),stoneMat);
 shaft.position.y=TH/2; shaft.castShadow=true; shaft.receiveShadow=true; tower.add(shaft);
-const band=new THREE.Mesh(new THREE.CylinderGeometry(10.1,10.1,0.55,28),darkStoneMat); band.position.y=TH*0.55; tower.add(band);
-const floor=new THREE.Mesh(new THREE.CylinderGeometry(CFG.walkwayR,9.9,0.55,40),darkStoneMat);
+const band=new THREE.Mesh(new THREE.CylinderGeometry(10.1,10.1,0.55,32,1,true,-A0,Math.PI),darkStoneMat);
+band.position.y=TH*0.55; tower.add(band);
+/* Dinding belakang (menutup sisi datar) */
+const backWall=new THREE.Mesh(new THREE.BoxGeometry(23.6,TH,1.3),stoneMat);
+backWall.position.set(0,TH/2,-0.62); backWall.castShadow=true; backWall.receiveShadow=true; tower.add(backWall);
+const backBand=new THREE.Mesh(new THREE.BoxGeometry(23.9,0.55,0.9),darkStoneMat);
+backBand.position.set(0,TH*0.55,-0.72); tower.add(backBand);
+/* Lantai dermaga — potongan pai setengah lingkaran */
+const floor=new THREE.Mesh(new THREE.CylinderGeometry(CFG.walkwayR,9.9,0.55,40,1,false,-A0,Math.PI),darkStoneMat);
 floor.position.y=TH; floor.castShadow=true; floor.receiveShadow=true; tower.add(floor);
-const parapet=new THREE.Mesh(new THREE.CylinderGeometry(CFG.walkwayR,CFG.walkwayR,CFG.parapetH,48,1,true),
-  new THREE.MeshStandardMaterial({map:texStone(12,1),color:0x9a94a4,roughness:.9,side:THREE.DoubleSide}));
+/* Parapet depan (lengkung) + belakang */
+const parapet=new THREE.Mesh(new THREE.CylinderGeometry(CFG.walkwayR,CFG.walkwayR,CFG.parapetH,48,1,true,-A0,Math.PI),
+  new THREE.MeshStandardMaterial({map:texStone(10,1),color:0x9a94a4,roughness:.9,side:THREE.DoubleSide}));
 parapet.position.y=L+CFG.parapetH/2; parapet.castShadow=true; tower.add(parapet);
-for(let i=0;i<28;i++){
-  const a=(i/28)*Math.PI*2;
+const backParapet=new THREE.Mesh(new THREE.BoxGeometry(21.5,CFG.parapetH,0.5),stoneMat);
+backParapet.position.set(0,L+CFG.parapetH/2,-0.15); backParapet.castShadow=true; tower.add(backParapet);
+/* Crenellation (gerigi) lengkung + belakang */
+for(let i=0;i<13;i++){
+  const a=-A0+0.12 + i*(Math.PI-0.24)/12;
   const b=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.10,0.4),stoneMat);
-  b.position.set(Math.cos(a)*(CFG.walkwayR-0.05),L+CFG.parapetH+0.05,Math.sin(a)*(CFG.walkwayR-0.05));
-  b.rotation.y=-a; tower.add(b);
+  b.position.set(Math.sin(a)*(CFG.walkwayR-0.05),L+CFG.parapetH+0.05,Math.cos(a)*(CFG.walkwayR-0.05));
+  b.rotation.y=a; tower.add(b);
 }
+for(let i=0;i<11;i++){
+  const b=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.10,0.4),stoneMat);
+  b.position.set(-10+i*2, L+CFG.parapetH+0.05, -0.15);
+  tower.add(b);
+}
+/* Menara gerbang di kedua ujung lengkung */
+function buildGateTurret(x){
+  const g=new THREE.Group();
+  const base=new THREE.Mesh(new THREE.CylinderGeometry(2.6,3.0,1.2,14),stoneMat);
+  base.position.y=0.6; base.castShadow=true; g.add(base);
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(2.0,2.3,TH+2.2,14),stoneMat);
+  body.position.y=1.2+(TH+2.2)/2; body.castShadow=true; g.add(body);
+  const bnd=new THREE.Mesh(new THREE.CylinderGeometry(2.15,2.15,0.5,14),darkStoneMat);
+  bnd.position.y=TH+0.8; g.add(bnd);
+  const top=new THREE.Mesh(new THREE.CylinderGeometry(2.5,2.0,0.7,14),stoneMat);
+  top.position.y=TH+2.2+0.35; top.castShadow=true; g.add(top);
+  const roof=new THREE.Mesh(new THREE.ConeGeometry(2.9,2.6,14),roofRedMat);
+  roof.position.y=TH+2.2+0.7+1.3; roof.castShadow=true; g.add(roof);
+  const fin=new THREE.Mesh(new THREE.SphereGeometry(0.16,8,8),brassMat);
+  fin.position.y=TH+2.2+0.7+2.62; g.add(fin);
+  const slit=new THREE.Mesh(new THREE.BoxGeometry(0.35,1.1,0.4),slitMat);
+  slit.position.set(1.95,TH*0.6,0); g.add(slit);
+  const torch=new THREE.Mesh(new THREE.SphereGeometry(0.14,7,7),
+    new THREE.MeshBasicMaterial({color:0xffd070}));
+  torch.position.set(2.35,TH+1.4,0); torch.userData.noOutline=true; g.add(torch);
+  g.position.set(x,0,0);
+  if(x<0) g.rotation.y=Math.PI;
+  tower.add(g);
+  applyOutline(g,0.035);
+  const fl=makeFlag(0.9); fl.position.set(0,TH+2.2+0.7+2.6,0); g.add(fl);
+  return g;
+}
+const slitMat=new THREE.MeshStandardMaterial({color:0x0a0a14,emissive:0xff8a3a,emissiveIntensity:.9});
+buildGateTurret(11.2); buildGateTurret(-11.2);
+/* Jendela celah menyala di dinding lengkung */
+for(let i=0;i<12;i++){
+  const a=-A0+0.18 + i*(Math.PI-0.36)/11;
+  const w=new THREE.Mesh(new THREE.BoxGeometry(0.4,1.0,0.4),slitMat);
+  w.position.set(Math.sin(a)*10.2,TH*0.55,Math.cos(a)*10.2);
+  w.rotation.y=-a; tower.add(w);
+}
+/* Jembatan kayu pusat (keep) */
 const keep=new THREE.Mesh(new THREE.CylinderGeometry(1.6,1.85,1.9,14),woodMat);
 keep.position.y=L+0.95; keep.castShadow=true; tower.add(keep);
-const keepRoof=new THREE.Mesh(new THREE.ConeGeometry(2.3,1.6,14),new THREE.MeshStandardMaterial({color:0x8a2c2c,roughness:.8}));
+const keepRoof=new THREE.Mesh(new THREE.ConeGeometry(2.3,1.6,14),roofRedMat);
 keepRoof.position.y=L+2.65; keepRoof.castShadow=true; tower.add(keepRoof);
-const slitMat=new THREE.MeshStandardMaterial({color:0x0a0a14,emissive:0xff8a3a,emissiveIntensity:.9});
-for(let i=0;i<14;i++){
-  const a=(i/14)*Math.PI*2;
-  const w=new THREE.Mesh(new THREE.BoxGeometry(0.4,1.0,0.4),slitMat);
-  w.position.set(Math.cos(a)*10.2,TH*0.55,Math.sin(a)*10.2); tower.add(w);
-}
-/* Bendera DIHAPUS sesuai permintaan */
-const rockMat=new THREE.MeshStandardMaterial({map:texDarkStone(2,2),color:0x7a7468,roughness:1,flatShading:true});
-for(let i=0;i<(isMobile?14:24);i++){
-  const a=Math.random()*Math.PI*2, r=12.5+Math.random()*5, s=0.6+Math.random()*1.4;
-  const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),rockMat);
-  rock.position.set(Math.cos(a)*r,s*0.4,Math.sin(a)*r);
-  rock.rotation.set(Math.random(),Math.random(),Math.random());
-  rock.castShadow=true; rock.receiveShadow=true; scene.add(rock);
-  applyOutline(rock,0.05);
-}
+
+/* pagar duri — lengkung depan saja */
 (function(){
   const fenceMat=new THREE.MeshStandardMaterial({map:texWood(1,2),color:0xb08858,roughness:.9});
   const fenceGroup=new THREE.Group();
   const R=CFG.attackR+0.4;
-  const N=isMobile?32:48;
+  const N=isMobile?22:36;
   for(let i=0;i<N;i++){
-    const a=(i/N)*Math.PI*2;
-    const x=Math.cos(a)*R, z=Math.sin(a)*R;
+    const a=-A0-0.05 + (i/(N-1))*(Math.PI+0.10);
+    const x=Math.sin(a)*R, z=Math.cos(a)*R;
     const post=new THREE.Mesh(new THREE.CylinderGeometry(0.10,0.13,1.7,6),fenceMat);
     post.position.set(x, 0.85, z); post.castShadow=true; fenceGroup.add(post);
     const spike=new THREE.Mesh(new THREE.ConeGeometry(0.13,0.3,6),fenceMat);
     spike.position.set(x,1.85,z); fenceGroup.add(spike);
   }
   for(const y of [0.45, 1.15]){
-    const ring=new THREE.Mesh(new THREE.TorusGeometry(R,0.07,6,isMobile?32:56),fenceMat);
-    ring.rotation.x=Math.PI/2; ring.position.y=y; ring.castShadow=true; fenceGroup.add(ring);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(R,0.07,6,isMobile?28:52,Math.PI+0.10),fenceMat);
+    ring.rotation.x=-Math.PI/2; ring.rotation.z=Math.PI-0.05; ring.position.y=y; ring.castShadow=true; fenceGroup.add(ring);
   }
   scene.add(fenceGroup);
-  applyOutline(fenceGroup, 0.06);
+  applyOutline(fenceGroup, 0.05);
 })();
 
-/* Materials */
+/* Gerbang kayu di tengah pagar (pintu pemain) + spanduk */
+(function(){
+  const g=new THREE.Group();
+  const postMat=new THREE.MeshStandardMaterial({map:texWood(1,2),color:0x8a6438,roughness:.9});
+  for(const s of [-1,1]){
+    const p=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.21,2.9,8),postMat);
+    p.position.set(s*2.5,1.45,17.4); p.castShadow=true; g.add(p);
+    const cap=new THREE.Mesh(new THREE.ConeGeometry(0.24,0.4,8),brassMat);
+    cap.position.set(s*2.5,3.05,17.4); g.add(cap);
+  }
+  const lintel=new THREE.Mesh(new THREE.BoxGeometry(5.9,0.42,0.6),postMat);
+  lintel.position.set(0,3.0,17.4); lintel.castShadow=true; g.add(lintel);
+  const banner=new THREE.Mesh(new THREE.PlaneGeometry(4.9,1.15),bannerHMat);
+  banner.position.set(0,2.32,17.44); banner.userData.noOutline=true; g.add(banner);
+  for(const s of [-1,1]){
+    const orb=new THREE.Mesh(new THREE.SphereGeometry(0.13,8,8),
+      new THREE.MeshBasicMaterial({color:0xffd070}));
+    orb.position.set(s*2.5,3.35,17.4); orb.userData.noOutline=true; g.add(orb);
+  }
+  scene.add(g);
+  applyOutline(g,0.04);
+})();
+
+/* Batu karang — depan & sisi (di luar pagar) */
+const rockMat=new THREE.MeshStandardMaterial({map:texDarkStone(2,2),color:0x7a7468,roughness:1,flatShading:true});
+(function(){
+  const n=isMobile?10:18;
+  for(let i=0;i<n;i++){
+    const a=(Math.random()*2-1)*1.95, r=19.5+Math.random()*8;
+    const x=Math.sin(a)*r, z=Math.cos(a)*r;
+    if(z<-4&&Math.abs(x)<22) continue;      // jangan di halaman istana
+    if(Math.abs(a)<0.3&&r<26) continue;     // jangan di lorong gerbang
+    const s=0.6+Math.random()*1.4;
+    const rock=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),rockMat);
+    rock.position.set(x,s*0.4,z);
+    rock.rotation.set(Math.random(),Math.random(),Math.random());
+    rock.castShadow=true; rock.receiveShadow=true; scene.add(rock);
+    applyOutline(rock,0.05);
+  }
+})();
+
+/* ============================================================
+   HALAMAN ANTARA BENTENG & ISTANA
+   ============================================================ */
+(function(){
+  const yard=new THREE.Mesh(new THREE.BoxGeometry(21,0.12,14.5),castleDarkMat);
+  yard.position.set(0,0.06,-8.55); yard.receiveShadow=true; scene.add(yard);
+  const path=new THREE.Mesh(new THREE.BoxGeometry(5,0.14,5.2),castleStoneMat);
+  path.position.set(0,0.07,-3.9); path.receiveShadow=true; scene.add(path);
+})();
+const lanternLights=[];
+(function(){
+  const orbMat=new THREE.MeshBasicMaterial({color:0xffd080});
+  for(const s of [-1,1]){
+    const g=new THREE.Group();
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.1,2.4,7),woodDarkMat);
+    pole.position.y=1.2; pole.castShadow=true; g.add(pole);
+    const arm=new THREE.Mesh(new THREE.BoxGeometry(0.55,0.06,0.06),woodDarkMat);
+    arm.position.y=2.3; g.add(arm);
+    const orb=new THREE.Mesh(new THREE.SphereGeometry(0.2,8,8),orbMat);
+    orb.position.set(0.22*s,2.22,0); orb.userData.noOutline=true; g.add(orb);
+    g.position.set(3.4*s,0,-4.0);
+    scene.add(g);
+    applyOutline(g,0.05);
+    if(!isMobile){
+      const li=new THREE.PointLight(0xffb060,0.7,9,2);
+      li.position.set(3.6*s,2.3,-4.0); scene.add(li);
+      lanternLights.push(li);
+    }
+  }
+})();
+
+/* ============================================================
+   ISTANA AGUNGA (di belakang benteng)
+   ============================================================ */
+const castle=new THREE.Group(); scene.add(castle);
+function makeFlag(scale){
+  scale=scale||1;
+  const g=new THREE.Group();
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.05,1.7,6),brassMat);
+  pole.position.y=0.85; g.add(pole);
+  const fg=new THREE.PlaneGeometry(1.4,0.95,6,2);
+  const fm=new THREE.Mesh(fg,flagMat);
+  fm.position.set(0.72,1.30,0);
+  fm.userData.noOutline=true;
+  g.add(fm);
+  g.scale.setScalar(scale);
+  flags.push({geo:fg, base:fg.attributes.position.array.slice(), phase:Math.random()*6});
+  return g;
+}
+const gateLight=new THREE.PointLight(0xffb060,1.5,22,2);
+gateLight.position.set(0,2.4,-12.0); castle.add(gateLight);
+const ballistae=[];
+
+(function buildCastle(){
+  /* ===== Gerbang istana ===== */
+  const gate=new THREE.Mesh(new THREE.BoxGeometry(12,11,3.6),castleStoneMat);
+  gate.position.set(0,5.5,-15.2); gate.castShadow=true; castle.add(gate);
+  for(let i=0;i<8;i++){
+    const b=new THREE.Mesh(new THREE.BoxGeometry(1.0,0.7,0.6),castleDarkMat);
+    b.position.set(-5+i*1.43,11.35,-15.2); castle.add(b);
+  }
+  for(const s of [-1,1]){
+    const t=new THREE.Mesh(new THREE.CylinderGeometry(2.4,2.6,13,14),castleStoneMat);
+    t.position.set(6.3*s,6.5,-15.2); t.castShadow=true; castle.add(t);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(2.45,0.09,6,18),brassMat);
+    ring.rotation.x=Math.PI/2; ring.position.set(6.3*s,13.0,-15.2); castle.add(ring);
+    const roof=new THREE.Mesh(new THREE.ConeGeometry(3.1,3.4,14),roofTealMat);
+    roof.position.set(6.3*s,14.7,-15.2); roof.castShadow=true; castle.add(roof);
+    const fin=new THREE.Mesh(new THREE.SphereGeometry(0.18,8,8),brassMat);
+    fin.position.set(6.3*s,16.45,-15.2); castle.add(fin);
+    const fl=makeFlag(1.0); fl.position.set(6.3*s,16.45,-15.2); castle.add(fl);
+    const sl=new THREE.Mesh(new THREE.BoxGeometry(0.35,1.1,0.4),slitMat);
+    sl.position.set(6.3*s,7.5,-12.78); castle.add(sl);
+  }
+  /* Lubang gerbang + lengkung + portcullis */
+  const gateDark=new THREE.Mesh(new THREE.BoxGeometry(4.2,5.2,0.4),
+    new THREE.MeshStandardMaterial({color:0x0a0705,roughness:1}));
+  gateDark.position.set(0,2.6,-13.35); castle.add(gateDark);
+  const arch=new THREE.Mesh(new THREE.TorusGeometry(1.9,0.24,8,20,Math.PI),castleDarkMat);
+  arch.position.set(0,5.0,-13.3); arch.castShadow=true; castle.add(arch);
+  for(let i=0;i<4;i++){
+    const v=new THREE.Mesh(new THREE.BoxGeometry(0.07,4.8,0.05),ironMat);
+    v.position.set(-1.6+i*1.07,2.6,-13.24); castle.add(v);
+  }
+  for(let i=0;i<4;i++){
+    const h=new THREE.Mesh(new THREE.BoxGeometry(3.3,0.07,0.05),ironMat);
+    h.position.set(0,0.8+i*1.27,-13.24); castle.add(h);
+  }
+  /* (portcullis & gerbang selesai) */
+  /* Jembatan tarikan (drawbridge) */
+  const bridge=new THREE.Mesh(new THREE.BoxGeometry(4.4,0.14,7.0),woodMat);
+  bridge.position.set(0,0.82,-9.95); bridge.rotation.x=0.14; bridge.castShadow=true; castle.add(bridge);
+  for(const s of [-1,1]){
+    const a=new THREE.Vector3(2.0*s,4.0,-13.2), b=new THREE.Vector3(2.0*s,0.55,-7.4);
+    const dir=new THREE.Vector3().subVectors(b,a);
+    const ch=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,dir.length(),6),ironMat);
+    ch.position.copy(a).addScaledVector(dir,0.5);
+    ch.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());
+    castle.add(ch);
+  }
+  /* Spanduk vertikal di gerbang */
+  const ban=new THREE.Mesh(new THREE.PlaneGeometry(1.7,4.0),bannerVMat);
+  ban.position.set(0,8.2,-13.38); ban.userData.noOutline=true; castle.add(ban);
+
+  /* ===== Balista istana (auto-fire) ===== */
+  function buildBallista(x){
+    const g=new THREE.Group();
+    g.position.set(x,11.0,-15.2);
+    const base=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.5,1.4),castleDarkMat);
+    base.position.y=0.25; g.add(base);
+    const turret=new THREE.Group(); turret.position.y=0.5; g.add(turret);
+    const frame=new THREE.Mesh(new THREE.BoxGeometry(1.5,0.3,0.8),woodMat);
+    frame.position.y=0.15; turret.add(frame);
+    for(const s of [-1,1]){
+      const armM=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.16,2.1),woodDarkMat);
+      armM.position.set(s*0.55,0.32,0.4); turret.add(armM);
+    }
+    const axle=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.09,1.3,8),ironMat);
+    axle.rotation.z=Math.PI/2; axle.position.y=0.32; turret.add(axle);
+    const groove=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.1,2.0),woodMat);
+    groove.position.set(0,0.42,0.5); turret.add(groove);
+    const boltM=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.5,6),woodDarkMat);
+    boltM.rotation.x=Math.PI/2; boltM.position.set(0,0.42,1.3); turret.add(boltM);
+    const tip=new THREE.Mesh(new THREE.ConeGeometry(0.12,0.3,6),ironMat);
+    tip.rotation.x=Math.PI/2; tip.position.set(0,0.42,2.15); turret.add(tip);
+    const muzzle=new THREE.Object3D(); muzzle.position.set(0,0.42,2.3); turret.add(muzzle);
+    castle.add(g);
+    return {group:g, turret, muzzle, cd:1.5+Math.random()*2, tgt:null, kick:0, x, z:-15.2};
+  }
+  ballistae.push(buildBallista(-3.2), buildBallista(3.2));
+
+  /* ===== Keep utama ===== */
+  const keepM=new THREE.Mesh(new THREE.BoxGeometry(13,14,11),castleStoneMat);
+  keepM.position.set(0,7,-30); keepM.castShadow=true; castle.add(keepM);
+  const crestGeo=new THREE.BoxGeometry(0.9,0.65,0.55);
+  for(let i=0;i<11;i++){
+    const b=new THREE.Mesh(crestGeo,castleDarkMat);
+    b.position.set(-5.5+i*1.1,14.3,-24.65); castle.add(b);
+    const b2=new THREE.Mesh(crestGeo,castleDarkMat);
+    b2.position.set(-5.5+i*1.1,14.3,-35.35); castle.add(b2);
+  }
+  for(let i=0;i<9;i++){
+    const b=new THREE.Mesh(crestGeo,castleDarkMat);
+    b.rotation.y=Math.PI/2; b.position.set(-6.65,14.3,-34.4+i*1.1); castle.add(b);
+    const b2=new THREE.Mesh(crestGeo,castleDarkMat);
+    b2.rotation.y=Math.PI/2; b2.position.set(6.65,14.3,-34.4+i*1.1); castle.add(b2);
+  }
+  /* Jendela keep menyala */
+  const winGeo=new THREE.PlaneGeometry(0.9,1.4);
+  for(let r=0;r<2;r++) for(let i=0;i<5;i++){
+    const w=new THREE.Mesh(winGeo,winMats[(i+r)%3]);
+    w.position.set(-4.5+i*2.25,4.5+r*4.5,-24.48); castle.add(w);
+  }
+  /* Menara sudut keep */
+  const cornerTowers=[[-5.6,-25.8],[5.6,-25.8],[-5.6,-34.2],[5.6,-34.2]];
+  for(const [x,z] of cornerTowers){
+    const t=new THREE.Mesh(new THREE.CylinderGeometry(1.7,1.8,16,12),castleStoneMat);
+    t.position.set(x,8,z); t.castShadow=true; castle.add(t);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(1.75,0.07,6,16),brassMat);
+    ring.rotation.x=Math.PI/2; ring.position.set(x,16.0,z); castle.add(ring);
+    const roof=new THREE.Mesh(new THREE.ConeGeometry(2.35,3.0,12),roofTealMat);
+    roof.position.set(x,17.5,z); roof.castShadow=true; castle.add(roof);
+    const sl=new THREE.Mesh(new THREE.BoxGeometry(0.4,1.1,0.4),slitMat);
+    sl.position.set(x,8,z+1.72*(z>-30?1:-1)); castle.add(sl);
+    if(z>-30){ const fl=makeFlag(0.85); fl.position.set(x,19.0,z); castle.add(fl); }
+  }
+
+  /* ===== Sayap kiri-kanan ===== */
+  for(const s of [-1,1]){
+    const wing=new THREE.Mesh(new THREE.BoxGeometry(7,9,9.5),castleStoneMat);
+    wing.position.set(11*s,4.5,-29.5); wing.castShadow=true; castle.add(wing);
+    for(let i=0;i<4;i++){
+      const b=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.55,0.5),castleDarkMat);
+      b.position.set(11*s-2.1+i*1.4,9.3,-24.85); castle.add(b);
+    }
+    for(let r=0;r<2;r++) for(let i=0;i<3;i++){
+      const w=new THREE.Mesh(winGeo,winMats[(i+r+1)%3]);
+      w.position.set(11*s-1.5+i*1.5,3.2+r*3.4,-24.72); castle.add(w);
+    }
+  }
+
+  /* ===== Spire istana (menara tertinggi) ===== */
+  const spire=new THREE.Mesh(new THREE.CylinderGeometry(2.1,2.4,20,14),castleStoneMat);
+  spire.position.set(0,10,-40.5); spire.castShadow=true; castle.add(spire);
+  const spireRing=new THREE.Mesh(new THREE.TorusGeometry(2.2,0.1,6,18),brassMat);
+  spireRing.rotation.x=Math.PI/2; spireRing.position.set(0,16.2,-40.5); castle.add(spireRing);
+  const spireBalcony=new THREE.Mesh(new THREE.CylinderGeometry(2.6,2.4,0.35,14),castleDarkMat);
+  spireBalcony.position.set(0,16.0,-40.5); castle.add(spireBalcony);
+  const spireRoof=new THREE.Mesh(new THREE.ConeGeometry(2.75,4.4,14),roofTealMat);
+  spireRoof.position.set(0,22.2,-40.5); spireRoof.castShadow=true; castle.add(spireRoof);
+  const spireFin=new THREE.Mesh(new THREE.SphereGeometry(0.2,8,8),brassMat);
+  spireFin.position.set(0,24.5,-40.5); castle.add(spireFin);
+  const spireFlag=makeFlag(1.1); spireFlag.position.set(0,24.5,-40.5); castle.add(spireFlag);
+  const slGeo=new THREE.PlaneGeometry(0.5,1.5);
+  for(let i=0;i<4;i++){
+    const w=new THREE.Mesh(slGeo,winMats[i%3]);
+    w.position.set(0,4.5+i*4.2,-38.38); castle.add(w);
+  }
+  if(!isMobile){
+    const spLight=new THREE.PointLight(0xffc875,1.0,18,2);
+    spLight.position.set(0,14,-38.5); castle.add(spLight);
+  }
+})();
+
+/* ============================================================
+   GUNUNG BERSALJU (di belakang istana, menutup sisi belakang)
+   ============================================================ */
+(function(){
+  const mtMat=new THREE.MeshPhongMaterial({vertexColors:true,flatShading:true,shininess:0,specular:0x000000});
+  const cB=new THREE.Color(), cR=new THREE.Color(), cS=new THREE.Color(), tmp=new THREE.Color();
+  function makeMountain(x,z,r,h,base,rock,snow){
+    const g=new THREE.ConeGeometry(r,h,7+Math.floor(Math.random()*3),2);
+    const p=g.attributes.position;
+    const col=[];
+    cB.setHex(base); cR.setHex(rock); cS.setHex(snow);
+    for(let i=0;i<p.count;i++){
+      let px=p.getX(i), py=p.getY(i), pz=p.getZ(i);
+      if(Math.abs(py)<h/2-0.5){
+        px+=(Math.random()-0.5)*r*0.5; pz+=(Math.random()-0.5)*r*0.5;
+        p.setXYZ(i,px,py,pz);
+      }
+      const t=(py+h/2)/h;
+      tmp.copy(cB).lerp(cR,Math.min(1,t*1.7));
+      const edge=0.52+Math.random()*0.10;
+      if(t>edge) tmp.lerp(cS,Math.min(1,(t-edge)*5.5));
+      col.push(tmp.r,tmp.g,tmp.b);
+    }
+    g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+    g.computeVertexNormals();
+    const m=new THREE.Mesh(g,mtMat);
+    m.position.set(x,h/2-2,z);
+    m.rotation.y=Math.random()*Math.PI;
+    scene.add(m);
+    return m;
+  }
+  /* Puncak hero tepat di belakang istana */
+  makeMountain(-62,-118,52,88, 0x4a4170,0x5e5588,0xe8edfb);
+  makeMountain(58,-130,58,100,0x4a4170,0x5e5588,0xe8edfb);
+  makeMountain(0,-168,95,135, 0x453c68,0x5a5184,0xecf1fd);
+  if(!isMobile){
+    makeMountain(-118,-155,72,95, 0x4a4170,0x5e5588,0xe8edfb);
+    makeMountain(122,-162,76,105,0x4a4170,0x5e5588,0xe8edfb);
+  }
+  /* Deretan jauh (siluet berkabut) */
+  const nFar=isMobile?5:9;
+  for(let i=0;i<nFar;i++){
+    const x=-270+ (i/(nFar-1))*540 + (Math.random()-0.5)*50;
+    const z=-230-Math.random()*100;
+    const h=65+Math.random()*85, r=60+Math.random()*55;
+    makeMountain(x,z,r,h, 0x5a5184,0x6f66a0,0xd5dcf2);
+  }
+  /* Bukit pengisi sisi & belakang (lembah tertutup) */
+  const sideAz=[1.95,2.35,2.85,3.45,4.05,4.55,5.0,5.4];
+  const nSide=isMobile?4:sideAz.length;
+  for(let i=0;i<nSide;i++){
+    const az=sideAz[i]+(Math.random()-0.5)*0.25;
+    const r=150+Math.random()*80, h=25+Math.random()*35, rr=45+Math.random()*38;
+    makeMountain(Math.sin(az)*r, Math.cos(az)*r, rr, h, 0x443b63,0x574e7c,0xd9dff0);
+  }
+})();
+
+/* ============================================================
+   LINGKUNGAN — pohon, semak, rumput, obor (depan & sisi)
+   ============================================================ */
+const torchLights=[];
+(function(){
+  const barkMat=new THREE.MeshStandardMaterial({map:texBark(2,2),color:0xc0a080,roughness:1});
+  const foliageMats=[
+    new THREE.MeshStandardMaterial({map:texLeaves(2,2),color:0x8fc070,roughness:1,flatShading:true}),
+    new THREE.MeshStandardMaterial({map:texLeaves(2,2),color:0x6fa855,roughness:1,flatShading:true}),
+    new THREE.MeshStandardMaterial({map:texLeaves(2,2),color:0x5a8848,roughness:1,flatShading:true}),
+    new THREE.MeshStandardMaterial({map:texLeaves(2,2),color:0xa8d090,roughness:1,flatShading:true})
+  ];
+  function buildTree(){
+    const tree=new THREE.Group();
+    const trunkH=2.2+Math.random()*0.8;
+    const tilt=0.06+Math.random()*0.10, td=Math.random()*Math.PI*2;
+    const trunk1=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.24,trunkH,8),barkMat);
+    trunk1.position.y=trunkH/2; trunk1.castShadow=true;
+    trunk1.rotation.z=Math.cos(td)*tilt; trunk1.rotation.x=Math.sin(td)*tilt;
+    tree.add(trunk1);
+    const topY=trunkH-0.1;
+    const tx=Math.cos(td)*tilt*trunkH, tz=Math.sin(td)*tilt*trunkH;
+    for(let b=0;b<3;b++){
+      const ang=(b/3)*Math.PI*2+Math.random()*0.5;
+      const len=1.4+Math.random()*0.9, btilt=0.45+Math.random()*0.35;
+      const dirX=Math.cos(ang)*Math.sin(btilt), dirY=Math.cos(btilt), dirZ=Math.sin(ang)*Math.sin(btilt);
+      const br=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.13,len,6),barkMat);
+      br.castShadow=true;
+      br.position.set(tx+dirX*len*0.5, topY+dirY*len*0.5, tz+dirZ*len*0.5);
+      br.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3(dirX,dirY,dirZ).normalize());
+      tree.add(br);
+      const tipX=tx+dirX*len, tipY=topY+dirY*len, tipZ=tz+dirZ*len;
+      for(let l=0;l<3;l++){
+        const ls=0.55+Math.random()*0.5;
+        const leaf=new THREE.Mesh(new THREE.IcosahedronGeometry(ls,0),
+          foliageMats[Math.floor(Math.random()*foliageMats.length)]);
+        leaf.position.set(tipX+(Math.random()-0.5)*1.1, tipY+0.2+Math.random()*0.7, tipZ+(Math.random()-0.5)*1.1);
+        leaf.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
+        leaf.scale.y=0.85;
+        leaf.castShadow=true;
+        tree.add(leaf);
+      }
+    }
+    for(let i=0;i<2;i++){
+      const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(0.9+Math.random()*0.4,0),
+        foliageMats[Math.floor(Math.random()*foliageMats.length)]);
+      crown.position.set(tx+(Math.random()-0.5)*0.8, topY+0.5+Math.random()*0.6, tz+(Math.random()-0.5)*0.8);
+      crown.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
+      crown.castShadow=true;
+      tree.add(crown);
+    }
+    return tree;
+  }
+  function inYard(x,z){ return z<-4&&Math.abs(x)<22; }
+  const nTree=isMobile?10:24;
+  for(let i=0;i<nTree;i++){
+    const a=(Math.random()*2-1)*1.75, r=21+Math.random()*42;
+    const x=Math.sin(a)*r, z=Math.cos(a)*r;
+    if(inYard(x,z)) continue;
+    if(r>CFG.attackR-2.5&&r<CFG.attackR+3) continue;
+    const tp=buildTree();
+    tp.position.set(x,0,z);
+    tp.rotation.y=Math.random()*Math.PI;
+    tp.scale.setScalar(0.85+Math.random()*0.4);
+    scene.add(tp);
+  }
+  const nBush=isMobile?12:26;
+  for(let i=0;i<nBush;i++){
+    const a=(Math.random()*2-1)*1.8, r=19+Math.random()*36;
+    const x=Math.sin(a)*r, z=Math.cos(a)*r;
+    if(inYard(x,z)) continue;
+    if(r>CFG.attackR-1.5&&r<CFG.attackR+2) continue;
+    const s=0.35+Math.random()*0.5;
+    const bush=new THREE.Group();
+    const lobes=2+Math.floor(Math.random()*2);
+    for(let l=0;l<lobes;l++){
+      const lobe=new THREE.Mesh(new THREE.IcosahedronGeometry(s*(0.7+Math.random()*0.5),0),
+        foliageMats[Math.floor(Math.random()*foliageMats.length)]);
+      lobe.position.set((Math.random()-0.5)*0.5, 0.3+Math.random()*0.2, (Math.random()-0.5)*0.5);
+      lobe.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
+      lobe.scale.y=0.75;
+      lobe.castShadow=true;
+      bush.add(lobe);
+    }
+    bush.position.set(x, 0, z);
+    scene.add(bush);
+  }
+  const grassMat=new THREE.MeshStandardMaterial({color:0x6a8845, roughness:1, side:THREE.DoubleSide});
+  const nGrass=isMobile?30:80;
+  for(let i=0;i<nGrass;i++){
+    const a=(Math.random()*2-1)*1.85, r=13+Math.random()*42;
+    const x=Math.sin(a)*r, z=Math.cos(a)*r;
+    if(inYard(x,z)) continue;
+    if(r>CFG.attackR-1.5&&r<CFG.attackR+2) continue;
+    const h=0.4+Math.random()*0.5;
+    const blade=new THREE.Mesh(new THREE.PlaneGeometry(0.15,h), grassMat);
+    blade.position.set(x, h/2, z);
+    blade.rotation.y=Math.random()*Math.PI;
+    blade.rotation.z=(Math.random()-0.5)*0.3;
+    scene.add(blade);
+  }
+  /* Obor di dermaga (mengikuti lengkung) */
+  const nTorch=isMobile?6:8;
+  for(let i=0;i<nTorch;i++){
+    const a=-A0*0.82 + i*(A0*1.64)/Math.max(1,nTorch-1);
+    const px=Math.sin(a)*(CFG.walkwayR-0.45), pz=Math.cos(a)*(CFG.walkwayR-0.45);
+    const li=new THREE.PointLight(0xff8830,1.4,16,2);
+    li.position.set(px,L+0.75,pz); scene.add(li);
+    const fm=new THREE.Mesh(new THREE.SphereGeometry(0.15,7,7),new THREE.MeshBasicMaterial({color:0xffd070}));
+    fm.position.copy(li.position); fm.userData.noOutline=true; scene.add(fm);
+    li.userData.fm=fm; li.userData.ph=i; torchLights.push(li);
+  }
+})();
+
+/* ============================================================
+   BUILDER SENJATA
+   ============================================================ */
 const iron=new THREE.MeshStandardMaterial({map:texMetal(1,1),color:0x9a9eb0,roughness:.55,metalness:.75});
 const brass=new THREE.MeshStandardMaterial({map:texBrass(1,1),color:0xffc880,roughness:.4,metalness:.7});
-const ropeMat=new THREE.MeshStandardMaterial({color:0x8a6a3a,roughness:1});
 const darkStone=new THREE.MeshStandardMaterial({map:texDarkStone(1,1),color:0x8a8494,roughness:.95});
 const bronzeMat=new THREE.MeshStandardMaterial({map:texBrass(2,2),color:0xa06838,roughness:.5,metalness:.7});
 
-/* ============================================================
-   PONDASI
-   ============================================================ */
 function addMountPlinth(g, wid){
   const baseR = 0.95;
   const lvl1=new THREE.Mesh(new THREE.CylinderGeometry(baseR*1.15, baseR*1.32, 0.16, 20), stoneMat);
@@ -832,11 +1437,6 @@ function addMountPlinth(g, wid){
     bolt.position.set(Math.cos(a)*baseR*1.0, 0.06, Math.sin(a)*baseR*1.0); g.add(bolt);
   }
 }
-
-/* ============================================================
-   BUILDER SENJATA
-   ============================================================ */
-const mounts={};
 
 function buildCannon(a){
   const g=new THREE.Group();
@@ -884,8 +1484,7 @@ function buildArcher(a){
   const g=new THREE.Group();
   addMountPlinth(g, 'archer');
   const wood=new THREE.MeshStandardMaterial({map:texWood(1,2),color:0xd0a870,roughness:.9});
-  const woodDark=new THREE.MeshStandardMaterial({map:texWood(1,1),color:0x6a4828,roughness:.95});
-  const platform=new THREE.Mesh(new THREE.BoxGeometry(1.35,0.12,1.0),woodDark);
+  const platform=new THREE.Mesh(new THREE.BoxGeometry(1.35,0.12,1.0),woodDarkMat);
   platform.position.y=0.12; g.add(platform);
   for(const sx of [-0.5,0.5]) for(const sz of [-0.34,0.34]){
     const post=new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.095,1.15,6),wood);
@@ -900,7 +1499,7 @@ function buildArcher(a){
   crossZ1.position.set(-0.5,1.20,0); g.add(crossZ1);
   const crossZ2=crossZ1.clone(); crossZ2.position.x=0.5; g.add(crossZ2);
   const gimbal=new THREE.Group(); gimbal.position.y=0.26; g.add(gimbal);
-  const gimbalBase=new THREE.Mesh(new THREE.CylinderGeometry(0.20,0.23,0.18,10),woodDark); gimbal.add(gimbalBase);
+  const gimbalBase=new THREE.Mesh(new THREE.CylinderGeometry(0.20,0.23,0.18,10),woodDarkMat); gimbal.add(gimbalBase);
   const gimbalRing=new THREE.Mesh(new THREE.TorusGeometry(0.22,0.032,6,14),iron);
   gimbalRing.rotation.x=Math.PI/2; gimbalRing.position.y=0.10; gimbal.add(gimbalRing);
   const pitchG=new THREE.Group(); pitchG.rotation.order='YXZ'; gimbal.add(pitchG);
@@ -926,7 +1525,6 @@ function buildArcher(a){
   return {group:g, gimbal, pitchG, muzzle, basePitch:0.02, aimTol:0.055, aimSpeed:5.5};
 }
 
-/* ===== METEOR — charge orb + peluncur ===== */
 function buildFire(a){
   const g=new THREE.Group();
   addMountPlinth(g, 'fire');
@@ -946,7 +1544,6 @@ function buildFire(a){
   const gimbal=new THREE.Group(); gimbal.position.y=0.72; g.add(gimbal);
   const gimbalCap=new THREE.Mesh(new THREE.CylinderGeometry(0.20,0.24,0.14,10),brass); gimbal.add(gimbalCap);
   const pitchG=new THREE.Group(); pitchG.rotation.order='YXZ'; gimbal.add(pitchG);
-  /* Peluncur (bukan laras) — mangkuk tembaga */
   const launcherBowl=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.18,0.4,16,1,true),bronzeDark);
   launcherBowl.rotation.z=-Math.PI/2; launcherBowl.position.set(0.45,0,0); pitchG.add(launcherBowl);
   const bowlRim=new THREE.Mesh(new THREE.TorusGeometry(0.33,0.045,8,20),brass);
@@ -957,7 +1554,6 @@ function buildFire(a){
     fin.position.set(0.30,Math.cos(ang)*0.26,Math.sin(ang)*0.26);
     fin.rotation.x=ang; pitchG.add(fin);
   }
-  /* Charge orb */
   const chargeMat=new THREE.MeshBasicMaterial({color:0xffaa40, transparent:true, opacity:0.0, blending:THREE.AdditiveBlending, depthWrite:false});
   const chargeOrb=new THREE.Mesh(new THREE.SphereGeometry(0.28,14,12), chargeMat);
   chargeOrb.position.set(0.85,0,0); chargeOrb.visible=false; chargeOrb.userData.noOutline=true;
@@ -998,16 +1594,15 @@ function buildStorm(a){
     new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:1}));
   coreInner.position.y=1.40; coreInner.userData.noOutline=true; g.add(coreInner);
   const halo=new THREE.Mesh(new THREE.SphereGeometry(0.32,12,10),
-    new THREE.MeshBasicMaterial({color:0x7ec8ff,transparent:true,opacity:0.24, blending:THREE.AdditiveBlending, depthWrite:false}));
+    new THREE.MeshBasicMaterial({color:0x7ec8ff,transparent:true,opacity:0.24, blending:THREE.AdditiveBlending,depthWrite:false}));
   halo.position.y=1.40; halo.userData.noOutline=true; g.add(halo);
   const elecRing=new THREE.Mesh(new THREE.TorusGeometry(0.36,0.016,6,24),
-    new THREE.MeshBasicMaterial({color:0xaaddff,transparent:true,opacity:0.75, blending:THREE.AdditiveBlending, depthWrite:false}));
+    new THREE.MeshBasicMaterial({color:0xaaddff,transparent:true,opacity:0.75, blending:THREE.AdditiveBlending,depthWrite:false}));
   elecRing.position.y=1.40; elecRing.userData.noOutline=true; g.add(elecRing);
   const elecRing2=new THREE.Mesh(new THREE.TorusGeometry(0.45,0.012,6,24),
-    new THREE.MeshBasicMaterial({color:0x7ec8ff,transparent:true,opacity:0.5, blending:THREE.AdditiveBlending, depthWrite:false}));
+    new THREE.MeshBasicMaterial({color:0x7ec8ff,transparent:true,opacity:0.5, blending:THREE.AdditiveBlending,depthWrite:false}));
   elecRing2.rotation.x=Math.PI/2; elecRing2.position.y=1.40; elecRing2.userData.noOutline=true; g.add(elecRing2);
   const muzzle=new THREE.Object3D(); muzzle.position.set(0,1.40,0); g.add(muzzle);
-  /* Chain listrik */
   const N=14;
   const chainNodes=[], chainOuter=[];
   const chainGroup=new THREE.Group();
@@ -1023,7 +1618,7 @@ function buildStorm(a){
     seg.userData.noOutline=true; chainGroup.add(seg); chainOuter.push(seg);
   }
   const impactAura=new THREE.Mesh(new THREE.SphereGeometry(0.55,12,10),
-    new THREE.MeshBasicMaterial({color:0xaaddff,transparent:true,opacity:0.55, blending:THREE.AdditiveBlending, depthWrite:false}));
+    new THREE.MeshBasicMaterial({color:0xaaddff,transparent:true,opacity:0.55, blending:THREE.AdditiveBlending,depthWrite:false}));
   impactAura.userData.noOutline=true; chainGroup.add(impactAura);
   chainGroup.visible=false;
   scene.add(chainGroup);
@@ -1032,13 +1627,16 @@ function buildStorm(a){
     chainGroup, chainNodes, chainOuter, impactAura, chainN:N, sparkT:0};
 }
 
+/* 16 pondasi di sepanjang lengkung — simetris kiri-kanan */
+const D=Math.PI/180;
 const mountData={
-  cannon:{ angles:[0, Math.PI*0.5, Math.PI, Math.PI*1.5], y:L+0.30 },
-  archer:{ angles:[Math.PI*0.125, Math.PI*0.625, Math.PI*1.125, Math.PI*1.625], y:L+0.30 },
-  fire:  { angles:[Math.PI*0.25, Math.PI*0.75, Math.PI*1.25, Math.PI*1.75], y:L+0.30 },
-  storm: { angles:[Math.PI*0.375, Math.PI*0.875, Math.PI*1.375, Math.PI*1.875], y:L+0.30 }
+  cannon:{ angles:[-80*D, -5.33*D, 5.33*D, 80*D], y:L+0.30 },
+  archer:{ angles:[-69.33*D, -16*D, 16*D, 69.33*D], y:L+0.30 },
+  fire:  { angles:[-58.67*D, -26.67*D, 26.67*D, 58.67*D], y:L+0.30 },
+  storm: { angles:[-48*D, -37.33*D, 37.33*D, 48*D], y:L+0.30 }
 };
 
+const mounts={};
 function buildMount(wid,a,y){
   let M;
   if(wid==='cannon') M=buildCannon(a);
@@ -1046,12 +1644,12 @@ function buildMount(wid,a,y){
   else if(wid==='fire') M=buildFire(a);
   else M=buildStorm(a);
   const r=CFG.mountRadius;
-  M.group.position.set(Math.cos(a)*r, y, Math.sin(a)*r);
-  M.group.rotation.y=-a;
+  M.group.position.set(Math.sin(a)*r, y, Math.cos(a)*r);
+  M.group.rotation.y=a-Math.PI/2;
   applyOutline(M.group,0.04);
   tower.add(M.group);
   M.angle=a;
-  M.wx=M.group.position.x; M.wz=M.group.position.z; M.ca=Math.cos(a); M.sa=Math.sin(a);
+  M.wx=M.group.position.x; M.wz=M.group.position.z; M.ca=Math.sin(a); M.sa=Math.cos(a);
   M.aimYaw=0; M.aimPitch=M.basePitch||0;
   if(M.pitchG!==M.group) M.pitchG.rotation.z=M.aimPitch;
   M.tgt=null; M.rt=0; M.idle=0; M.cd=0;
@@ -1063,180 +1661,12 @@ for(const wid in mountData){
   const spec=mountData[wid];
   spec.angles.forEach(a=>mounts[wid].push(buildMount(wid,a,spec.y)));
   mounts[wid].forEach(mt=>{
-    mt.wedge = Math.PI*0.25 + 0.06;
-    mt.yawLim = 1.55;
+    /* wedge 0.39 rad (22°) ≈ 2x jarak antar-mount → tiap monster bisa
+       ditembak 2-3 mount sekaligus, mencegah overload satu busur */
+    mt.wedge = 0.39;
+    mt.yawLim = 1.35;
   });
 }
-
-/* ============================================================
-   LINGKUNGAN — pohon realistis
-   ============================================================ */
-const torchLights=[];
-(function(){
-  const nMount=isMobile?14:22;
-  for(let i=0;i<nMount;i++){
-    const a=(i/nMount)*Math.PI*2+Math.random()*0.1, r=160+Math.random()*50, h=16+Math.random()*32;
-    const cone=new THREE.Mesh(new THREE.ConeGeometry(20+Math.random()*16,h,5),
-      new THREE.MeshStandardMaterial({color:0x3a2a44,roughness:1,flatShading:true}));
-    cone.position.set(Math.cos(a)*r,h/2-3,Math.sin(a)*r); scene.add(cone);
-  }
-  const barkMat=new THREE.MeshStandardMaterial({map:texBark(2,2),color:0xc0a080,roughness:1});
-  const foliageMats=[
-    new THREE.MeshStandardMaterial({map:texLeaves(2,2),color:0x8fc070,roughness:1,flatShading:true}),
-    new THREE.MeshStandardMaterial({map:texLeaves(2,2),color:0x6fa855,roughness:1,flatShading:true}),
-    new THREE.MeshStandardMaterial({map:texLeaves(2,2),color:0x5a8848,roughness:1,flatShading:true}),
-    new THREE.MeshStandardMaterial({map:texLeaves(2,2),color:0xa8d090,roughness:1,flatShading:true})
-  ];
-
-  /* Pohon dengan branching rekursif (depth 2) — realistic look */
-  function buildTree(){
-    const tree=new THREE.Group();
-    /* Batang utama (2 segmen dengan sedikit bengkok) */
-    const trunkH=2.2+Math.random()*0.8;
-    const trunkTilt=0.06+Math.random()*0.10;
-    const trunkTiltDir=Math.random()*Math.PI*2;
-    const trunk1=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.24,trunkH,8),barkMat);
-    trunk1.position.y=trunkH/2; trunk1.castShadow=true;
-    trunk1.rotation.z=Math.cos(trunkTiltDir)*trunkTilt;
-    trunk1.rotation.x=Math.sin(trunkTiltDir)*trunkTilt;
-    tree.add(trunk1);
-    /* Ujung batang atas (posisi cabang) */
-    const topY=trunkH-0.1;
-    const topOffset=new THREE.Vector3(Math.cos(trunkTiltDir)*trunkTilt*trunkH, topY, Math.sin(trunkTiltDir)*trunkTilt*trunkH);
-    /* 3 cabang utama */
-    const branches=3;
-    for(let b=0;b<branches;b++){
-      const ang=(b/branches)*Math.PI*2 + Math.random()*0.5;
-      const len=1.4+Math.random()*0.9;
-      const tilt=0.45+Math.random()*0.35;
-      const br=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.13,len,6),barkMat);
-      br.castShadow=true;
-      const dirX=Math.cos(ang)*Math.sin(tilt);
-      const dirY=Math.cos(tilt);
-      const dirZ=Math.sin(ang)*Math.sin(tilt);
-      const midX=topOffset.x + dirX*len*0.5;
-      const midY=topOffset.y + dirY*len*0.5;
-      const midZ=topOffset.z + dirZ*len*0.5;
-      br.position.set(midX,midY,midZ);
-      br.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3(dirX,dirY,dirZ).normalize());
-      tree.add(br);
-      /* Ujung cabang */
-      const tipX=topOffset.x + dirX*len;
-      const tipY=topOffset.y + dirY*len;
-      const tipZ=topOffset.z + dirZ*len;
-      /* Sub-cabang */
-      const subBranches=2+Math.floor(Math.random()*2);
-      for(let s=0;s<subBranches;s++){
-        const sAng=ang+(s/subBranches)*Math.PI*0.8+(Math.random()-0.5)*0.8;
-        const sLen=0.7+Math.random()*0.5;
-        const sTilt=tilt*0.4+Math.random()*0.3;
-        const sDirX=Math.cos(sAng)*Math.sin(sTilt);
-        const sDirY=Math.cos(sTilt);
-        const sDirZ=Math.sin(sAng)*Math.sin(sTilt);
-        const sub=new THREE.Mesh(new THREE.CylinderGeometry(0.035,0.06,sLen,5),barkMat);
-        const subMidX=tipX + sDirX*sLen*0.5;
-        const subMidY=tipY + sDirY*sLen*0.5;
-        const subMidZ=tipZ + sDirZ*sLen*0.5;
-        sub.position.set(subMidX,subMidY,subMidZ);
-        sub.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3(sDirX,sDirY,sDirZ).normalize());
-        tree.add(sub);
-        /* Daun di ujung sub-cabang */
-        const leafTipX=tipX + sDirX*sLen;
-        const leafTipY=tipY + sDirY*sLen;
-        const leafTipZ=tipZ + sDirZ*sLen;
-        const leafCount=4+Math.floor(Math.random()*3);
-        for(let l=0;l<leafCount;l++){
-          const leafSize=0.5+Math.random()*0.5;
-          const leaf=new THREE.Mesh(new THREE.IcosahedronGeometry(leafSize,0),
-            foliageMats[Math.floor(Math.random()*foliageMats.length)]);
-          leaf.position.set(
-            leafTipX + (Math.random()-0.5)*1.1,
-            leafTipY + (Math.random()-0.3)*0.9,
-            leafTipZ + (Math.random()-0.5)*1.1
-          );
-          leaf.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
-          leaf.scale.set(1, 0.8+Math.random()*0.3, 1);
-          leaf.castShadow=true;
-          tree.add(leaf);
-        }
-      }
-    }
-    /* Mahkota atas */
-    for(let i=0;i<3;i++){
-      const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(0.9+Math.random()*0.4,0),
-        foliageMats[Math.floor(Math.random()*foliageMats.length)]);
-      crown.position.set(
-        topOffset.x + (Math.random()-0.5)*0.8,
-        topOffset.y + 0.5 + Math.random()*0.6,
-        topOffset.z + (Math.random()-0.5)*0.8
-      );
-      crown.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
-      crown.castShadow=true;
-      tree.add(crown);
-    }
-    return tree;
-  }
-
-  const nTree=isMobile?14:32;
-  for(let i=0;i<nTree;i++){
-    const a=Math.random()*Math.PI*2, r=21+Math.random()*42;
-    if(r>CFG.attackR-2.5&&r<CFG.attackR+3) continue;
-    const tp=buildTree();
-    tp.position.set(Math.cos(a)*r,0,Math.sin(a)*r);
-    tp.rotation.y=Math.random()*Math.PI;
-    tp.scale.setScalar(0.85+Math.random()*0.4);
-    scene.add(tp);
-    applyOutline(tp,0.045);
-  }
-
-  /* Semak rendah */
-  const nBush=isMobile?18:40;
-  for(let i=0;i<nBush;i++){
-    const a=Math.random()*Math.PI*2, r=19+Math.random()*36;
-    if(r>CFG.attackR-1.5&&r<CFG.attackR+2) continue;
-    const s=0.35+Math.random()*0.5;
-    const bush=new THREE.Group();
-    const lobes=2+Math.floor(Math.random()*2);
-    for(let l=0;l<lobes;l++){
-      const lobe=new THREE.Mesh(new THREE.IcosahedronGeometry(s*(0.7+Math.random()*0.5),0),
-        foliageMats[Math.floor(Math.random()*foliageMats.length)]);
-      lobe.position.set((Math.random()-0.5)*0.5, 0.3+Math.random()*0.2, (Math.random()-0.5)*0.5);
-      lobe.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
-      lobe.scale.y=0.75;
-      lobe.castShadow=true;
-      bush.add(lobe);
-    }
-    bush.position.set(Math.cos(a)*r, 0, Math.sin(a)*r);
-    scene.add(bush);
-    applyOutline(bush,0.05);
-  }
-
-  /* Rumput tinggi tersebar */
-  const grassMat=new THREE.MeshStandardMaterial({color:0x6a8845, roughness:1, side:THREE.DoubleSide});
-  const nGrass=isMobile?40:100;
-  for(let i=0;i<nGrass;i++){
-    const a=Math.random()*Math.PI*2, r=13+Math.random()*42;
-    if(r>CFG.attackR-1.5&&r<CFG.attackR+2) continue;
-    const h=0.4+Math.random()*0.5;
-    const blade=new THREE.Mesh(new THREE.PlaneGeometry(0.15,h), grassMat);
-    blade.position.set(Math.cos(a)*r, h/2, Math.sin(a)*r);
-    blade.rotation.y=Math.random()*Math.PI;
-    blade.rotation.z=(Math.random()-0.5)*0.3;
-    scene.add(blade);
-  }
-
-  /* Obor */
-  const nTorch=isMobile?6:8;
-  for(let i=0;i<nTorch;i++){
-    const a=(i/nTorch)*Math.PI*2+0.2;
-    const px=Math.cos(a)*(CFG.walkwayR-0.45), pz=Math.sin(a)*(CFG.walkwayR-0.45);
-    const li=new THREE.PointLight(0xff8830,1.4,16,2);
-    li.position.set(px,L+0.75,pz); scene.add(li);
-    const fm=new THREE.Mesh(new THREE.SphereGeometry(0.15,7,7),new THREE.MeshBasicMaterial({color:0xffd070}));
-    fm.position.copy(li.position); fm.userData.noOutline=true; scene.add(fm);
-    li.userData.fm=fm; li.userData.ph=i; torchLights.push(li);
-  }
-})();
 
 /* ============================================================
    MONSTER / FX
@@ -1270,7 +1700,7 @@ function makeBallMesh(){
   const cap=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,0.1,6),brassMat);
   cap.position.y=0.29; g.add(cap);
   const halo=new THREE.Mesh(new THREE.SphereGeometry(0.4,10,10),
-    new THREE.MeshBasicMaterial({color:0xffaa40,transparent:true,opacity:0.35, blending:THREE.AdditiveBlending, depthWrite:false}));
+    new THREE.MeshBasicMaterial({color:0xffaa40,transparent:true,opacity:0.35, blending:THREE.AdditiveBlending,depthWrite:false}));
   halo.userData.noOutline=true; g.add(halo); g.userData.halo=halo;
   return g;
 }
@@ -1283,6 +1713,11 @@ function makeArrowMesh(){
   const f1=new THREE.Mesh(new THREE.PlaneGeometry(0.11,0.22),new THREE.MeshStandardMaterial({color:0xd8d0b8,side:THREE.DoubleSide,roughness:1}));
   f1.position.x=-0.42; g.add(f1);
   const f2=f1.clone(); f2.rotation.x=Math.PI/2; g.add(f2);
+  return g;
+}
+function makeBigBoltMesh(){
+  const g=makeArrowMesh();
+  g.scale.setScalar(1.7);
   return g;
 }
 
@@ -1407,10 +1842,13 @@ function buildWave(n){
 }
 function spawnMonster(spec){
   const def=spec.def;
-  const ang=Math.random()*Math.PI*2;
-  const R = spec.far ? (80+Math.random()*18) : (35+Math.random()*10);
+  /* Spawn HANYA dari setengah lingkaran DEPAN (azimut ±76° sekitar +Z) —
+     tetap di dalam busur benteng agar tidak menyelip dari ujung tembok */
+  const half = spec.far ? (Math.PI/2-0.60) : (Math.PI/2-0.42);
+  const ang=(Math.random()*2-1)*half;
+  const R = spec.far ? (80+Math.random()*18) : (35+Math.random()*12);
   const mesh=makeMonsterMesh(def,!!spec.boss||!!spec.titan);
-  mesh.position.set(Math.cos(ang)*R,0,Math.sin(ang)*R);
+  mesh.position.set(Math.sin(ang)*R,0,Math.cos(ang)*R);
   mesh.add(makeFootRing(def,!!spec.boss||!!spec.titan));
   if(spec.boss||spec.titan){ const li=new THREE.PointLight(0xff3322,1.0,12,2); li.position.y=1.6; mesh.add(li); }
   world.add(mesh);
@@ -1443,7 +1881,6 @@ function addFlash(pos,color,size,life){
   m.position.copy(pos); m.userData.noOutline=true;
   world.add(m); fxList.push({mesh:m,life,max:life,grow:2.2,fade:true});
 }
-/* Ledakan meriam — BUKAN ring, tapi burst serpihan api + asap */
 function addCannonExplosion(pos,size){
   const fire=new THREE.Mesh(new THREE.SphereGeometry(size*0.7,12,10),
     new THREE.MeshBasicMaterial({color:0xffcc66, transparent:true, opacity:0.95, blending:THREE.AdditiveBlending, depthWrite:false}));
@@ -1527,7 +1964,8 @@ function killMonster(m){
     fxList.push({mesh:p,life:.9,max:.9,vel:new THREE.Vector3((Math.random()-0.5)*(m.titan?16:7),3+Math.random()*(m.titan?12:5),(Math.random()-0.5)*(m.titan?16:7)),grav:true,spin:true});
   }
   addCannonExplosion(m.mesh.position.clone().setY(m.titan?6:1), m.titan?3:m.boss?1.6:0.8);
-  if(m.titan){ banner('💀 TITAN TUMBANG!'); toast('💀 TITAN KOLOSAL berhasil dijatuhkan!','#9dff9d'); }
+  if(m.titan){ banner('💀 TITAN TUMBANG!'); toast('💀 TITAN KOLOSAL berhasil dijatuhkan!','#9dff9d'); addShake(1.1); }
+  else if(m.boss){ addShake(0.5); }
   world.remove(m.mesh);
   if(m.bar) world.remove(m.bar);
   const i=monsters.indexOf(m); if(i>=0) monsters.splice(i,1);
@@ -1537,7 +1975,6 @@ function killMonster(m){
 /* ============================================================
    METEOR SYSTEM
    ============================================================ */
-/* Bezier cubic */
 function bezier3(p0,p1,p2,p3,t){
   const it=1-t;
   const a=it*it*it, b=3*it*it*t, c=3*it*t*t, d=t*t*t;
@@ -1558,10 +1995,10 @@ function spawnMeteor(startPos, targetPos, dmg, wdef){
     new THREE.MeshBasicMaterial({color:0xffeeaa}));
   core.userData.noOutline=true; group.add(core);
   const fire1=new THREE.Mesh(new THREE.SphereGeometry(0.85,12,10),
-    new THREE.MeshBasicMaterial({color:0xff8a30, transparent:true, opacity:0.75, blending:THREE.AdditiveBlending, depthWrite:false}));
+    new THREE.MeshBasicMaterial({color:0xff8a30, transparent:true, opacity:0.75, blending:THREE.AdditiveBlending,depthWrite:false}));
   fire1.userData.noOutline=true; group.add(fire1);
   const fire2=new THREE.Mesh(new THREE.SphereGeometry(1.2,12,10),
-    new THREE.MeshBasicMaterial({color:0xff5a10, transparent:true, opacity:0.40, blending:THREE.AdditiveBlending, depthWrite:false}));
+    new THREE.MeshBasicMaterial({color:0xff5a10, transparent:true, opacity:0.40, blending:THREE.AdditiveBlending,depthWrite:false}));
   fire2.userData.noOutline=true; group.add(fire2);
   group.position.copy(p0);
   scene.add(group);
@@ -1589,29 +2026,24 @@ function updateMeteors(dt){
     const mt=meteors[i];
     mt.t += dt;
     const prog = Math.min(1, mt.t / mt.dur);
-    /* Ease in-out untuk feel lebih smooth */
     const tEased = prog*prog*(3-2*prog);
     const pos = bezier3(mt.p0, mt.p1, mt.p2, mt.p3, tEased);
     mt.mesh.position.copy(pos);
-    /* Rotasi meteor */
     mt.core.rotation.x += dt*3; mt.core.rotation.z += dt*2;
-    /* Pulse */
     const pulse = 1 + Math.sin(S.elapsed*20)*0.15;
     mt.fire1.scale.setScalar(pulse);
     mt.fire2.scale.setScalar(1 + Math.sin(S.elapsed*15)*0.2);
-    /* Trail partikel api */
     mt.trailT -= dt;
     if(mt.trailT <= 0){
       mt.trailT = 0.02;
       const sp = new THREE.Mesh(new THREE.SphereGeometry(0.14+Math.random()*0.14,6,6),
-        new THREE.MeshBasicMaterial({color: Math.random()<0.5?0xff8a20:0xffcc44, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false}));
+        new THREE.MeshBasicMaterial({color: Math.random()<0.5?0xff8a20:0xffcc44, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending,depthWrite:false}));
       sp.position.copy(pos);
       sp.userData.noOutline=true;
       scene.add(sp);
       fxList.push({mesh:sp, life:0.5+Math.random()*0.3, max:0.8, fade:true, grow:2.0});
     }
     if(prog >= 1){
-      /* IMPACT */
       onMeteorImpact(mt);
       scene.remove(mt.mesh);
       meteors.splice(i, 1);
@@ -1620,22 +2052,19 @@ function updateMeteors(dt){
 }
 function onMeteorImpact(mt){
   const pos = mt.targetPos.clone();
-  /* Big explosion */
   addCannonExplosion(pos.clone().setY(0.6), 2.4);
-  /* Fire pillar */
   for(let i=0;i<24;i++){
     const ang=Math.random()*Math.PI*2;
     const r=Math.random()*3;
     const p=new THREE.Mesh(new THREE.SphereGeometry(0.4+Math.random()*0.5,8,7),
-      new THREE.MeshBasicMaterial({color: Math.random()<0.5?0xff6a20:0xffaa40, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false}));
+      new THREE.MeshBasicMaterial({color: Math.random()<0.5?0xff6a20:0xffaa40, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending,depthWrite:false}));
     p.position.set(pos.x+Math.cos(ang)*r, 0.4+Math.random()*1.0, pos.z+Math.sin(ang)*r);
     p.userData.noOutline=true;
     scene.add(p);
     fxList.push({mesh:p, life:0.7+Math.random()*0.5, max:1.2,
       vel:new THREE.Vector3((Math.random()-0.5)*4, 4+Math.random()*5, (Math.random()-0.5)*4), grav:true, fade:true, grow:1.6});
   }
-  /* Screen shake via FOV */
-  /* AOE damage + burn all monsters in radius */
+  addShake(0.55);
   const wdef = mt.wdef;
   const zoneR = wdef.zoneR || 8;
   for(const m of monsters){
@@ -1644,13 +2073,11 @@ function onMeteorImpact(mt){
     const dz=m.mesh.position.z - pos.z;
     const d2 = dx*dx + dz*dz;
     if(d2 < zoneR*zoneR){
-      /* Full damage di inti, setengah di tepi */
       const falloff = 1 - Math.sqrt(d2)/zoneR;
       damageMonster(m, mt.dmg * (0.5 + falloff*0.7), m.mesh.position.clone().setY(m.mesh.position.y+1.2), true);
       applyBurn(m, wdef.burnDps || 18, wdef.burnDur || 6);
     }
   }
-  /* Buat zona bakar di tanah */
   addBurnZone(pos.x, pos.z, zoneR * 0.85, wdef.burnDps || 18, wdef.zoneLife || 5.5);
   SFX.meteorImpact();
   toast('☄️ METEOR MENGIMPACT!','#ffaa40');
@@ -1659,7 +2086,6 @@ function updateBurnZones(dt){
   for(let i=burnZones.length-1;i>=0;i--){
     const bz=burnZones[i];
     bz.life -= dt;
-    /* Damage monster di dalam zona */
     for(const m of monsters){
       if(m.dead) continue;
       const dx=m.mesh.position.x - bz.x;
@@ -1669,14 +2095,13 @@ function updateBurnZones(dt){
         damageMonster(m, bz.dps * dt, m.mesh.position.clone().setY(m.mesh.position.y+1.2), true);
       }
     }
-    /* Spawn api di dalam zona */
     bz.spawnT -= dt;
     if(bz.spawnT <= 0){
       bz.spawnT = 0.06;
       const ang=Math.random()*Math.PI*2;
       const r=Math.random()*bz.radius*0.9;
       const fx=new THREE.Mesh(new THREE.SphereGeometry(0.20+Math.random()*0.18,6,6),
-        new THREE.MeshBasicMaterial({color: Math.random()<0.5?0xff6a20:0xffaa40, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false}));
+        new THREE.MeshBasicMaterial({color: Math.random()<0.5?0xff6a20:0xffaa40, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending,depthWrite:false}));
       fx.position.set(bz.x + Math.cos(ang)*r, 0.3, bz.z + Math.sin(ang)*r);
       fx.userData.noOutline=true;
       scene.add(fx);
@@ -1684,7 +2109,6 @@ function updateBurnZones(dt){
         vel:new THREE.Vector3((Math.random()-0.5)*0.8, 2.0+Math.random()*2.0, (Math.random()-0.5)*0.8),
         fade:true});
     }
-    /* Pulse visual */
     const lf = bz.life / bz.max;
     const pulse = 0.45 + Math.sin(S.elapsed * 8 + bz.x) * 0.15;
     bz.ring.material.opacity = pulse * lf;
@@ -1743,6 +2167,7 @@ function damageTower(amount){
   dmgVig.style.boxShadow='inset 0 0 160px rgba(255,20,20,'+Math.min(.75,amount/45+0.25)+')';
   setTimeout(()=>dmgVig.style.boxShadow='inset 0 0 140px rgba(255,20,20,0)',180);
   SFX.towerHit();
+  addShake(0.07);
   if(S.hp<=0){ S.hp=0; gameOver(); }
   updateHUDText();
   if(S.panelOpen) refreshUI();
@@ -1890,7 +2315,7 @@ function updateWaveBtn(){ $('btnWave').classList.toggle('off',S.waveActive); }
    KONTROL
    ============================================================ */
 const keys={};
-let yaw=Math.PI*0.5, pitch=-0.30;
+let yaw=Math.PI, pitch=-0.28;
 let pointerLocked=false, dragLook=false, lastMX=0, lastMY=0, bobT=0;
 const pos={x:0,z:5};
 const PITCH_MIN=-1.45, PITCH_MAX=0.62;
@@ -2008,9 +2433,13 @@ function updatePlayer(dt){
     const cy=Math.cos(yaw), sy=Math.sin(yaw);
     const wx=mx*cy-mz*sy, wz=mx*sy+mz*cy;
     pos.x+=wx*spd; pos.z+=wz*spd;
-    const d=Math.hypot(pos.x,pos.z);
+    let d=Math.hypot(pos.x,pos.z);
     if(d>CFG.walkOuter){ pos.x*=CFG.walkOuter/d; pos.z*=CFG.walkOuter/d; }
     else if(d<CFG.walkInner&&d>0.001){ pos.x*=CFG.walkInner/d; pos.z*=CFG.walkInner/d; }
+    d=Math.hypot(pos.x,pos.z)||0.001;
+    const az=Math.atan2(pos.x,pos.z);
+    if(az>CFG.walkAzMax){ pos.x=Math.sin(CFG.walkAzMax)*d; pos.z=Math.cos(CFG.walkAzMax)*d; }
+    else if(az<-CFG.walkAzMax){ pos.x=Math.sin(-CFG.walkAzMax)*d; pos.z=Math.cos(-CFG.walkAzMax)*d; }
     bobT+=dt*(9+Math.min(mag,1)*3);
   }
   const moving=mag>0.06;
@@ -2028,7 +2457,7 @@ function mountYaw(mt,X,Z){
 }
 function inArea(mt,X,Z){
   if(mt.wedge>=Math.PI) return true;
-  if(Math.abs(angDiff(Math.atan2(Z,X),mt.angle))>mt.wedge) return false;
+  if(Math.abs(angDiff(Math.atan2(X,Z),mt.angle))>mt.wedge) return false;
   return Math.abs(mountYaw(mt,X,Z))<=mt.yawLim;
 }
 function targetOK(mt,m,range){
@@ -2043,8 +2472,10 @@ function pickTarget(mt,range){
     if(!targetOK(mt,m,range)) continue;
     const dx=m.mesh.position.x, dz=m.mesh.position.z;
     let score=dx*dx+dz*dz;
-    if(m.boss) score-=260;
-    if(m.titan) score+=400;
+    /* prioritas kuat: semua turret fokus ke boss/titan dulu agar tidak
+       tersebar ke slime — bonus jarak tidak boleh menyaingi prioritas ini */
+    if(m.boss) score*=0.12;
+    if(m.titan) score*=0.30;
     if(m.burnT>0) score-=50;
     if(score<bestScore){ bestScore=score; best=m; }
   }
@@ -2085,7 +2516,6 @@ function aimMount(mt,target,w){
     }
     mt.aimPitch = Math.max(-0.5, Math.min(0.9, pitch));
   } else if(w.type==='meteor'){
-    /* Meteor: arahkan ke langit (fixed high pitch) */
     mt.aimPitch = 0.95;
   } else {
     const horiz=Math.hypot(X-mt.wx,Z-mt.wz)||0.001;
@@ -2154,6 +2584,50 @@ function fireProjectile(mount,target,wdef,dmg){
   } else {
     addFlash(start.clone(), 0xfff0a0, 0.30, 0.12);
     SFX.arrow();
+  }
+}
+
+/* ============================================================
+   BALISTA ISTANA (auto-fire dari belakang)
+   ============================================================ */
+function updateCastleBallsista(dt){
+  for(const bt of ballistae){
+    bt.cd-=dt;
+    const tx=bt.x, tz=bt.z;
+    let best=null, bs=-Infinity;
+    for(const m of monsters){
+      if(m.dead) continue;
+      const dx=m.mesh.position.x-tx, dz=m.mesh.position.z-tz;
+      const d2=dx*dx+dz*dz;
+      if(d2>85*85) continue;
+      if(m.mesh.position.z<-5) continue;
+      let sc=-d2;
+      if(m.titan) sc+=900; else if(m.boss) sc+=400;
+      sc+=m.hp*0.5;
+      if(sc>bs){ bs=sc; best=m; }
+    }
+    bt.tgt=best;
+    if(best){
+      const wantY=Math.atan2(best.mesh.position.x-tx, best.mesh.position.z-tz);
+      bt.turret.rotation.y+=angDiff(wantY,bt.turret.rotation.y)*Math.min(1,dt*3.2);
+      const isAimed=Math.abs(angDiff(wantY,bt.turret.rotation.y))<0.08;
+      if(isAimed&&bt.cd<=0){
+        const dmg=55*(1+0.25*(lvl.cannon.d-1));
+        const mw=bt.muzzle.getWorldPosition(new THREE.Vector3());
+        const aim=new THREE.Vector3(best.mesh.position.x, monsterAimY(best), best.mesh.position.z);
+        const vel=solveBallistic(mw,aim,42);
+        const mesh=makeBigBoltMesh();
+        mesh.position.copy(mw); world.add(mesh);
+        projectiles.push({mesh,vel:vel||new THREE.Vector3().subVectors(aim,mw).normalize().multiplyScalar(42),
+          dmg,wdef:{splash:0.9},life:5,def:'arrow',goal:aim.clone(),heavy:true,trailT:0,castle:true});
+        bt.cd=3.6+Math.random()*0.8;
+        bt.kick=0.3;
+        addFlash(mw,0xffd070,0.4,0.12);
+        SFX.castleBolt();
+      }
+    }
+    bt.kick=Math.max(0,bt.kick-dt*1.2);
+    bt.turret.position.z=bt.kick*0.4;
   }
 }
 
@@ -2257,13 +2731,12 @@ function updateMeteorWeapon(w, dmg, rate, dt){
         mt.chargeHalo.scale.setScalar(0.5 + prog * 1.6);
         mt.chargeHalo.material.opacity = 0.15 + prog * 0.5;
       }
-      /* Partikel mengumpul ke orb */
       if(Math.random()<0.75){
         const mw=mt.muzzle.getWorldPosition(new THREE.Vector3());
         const ang=Math.random()*Math.PI*2;
         const r=0.7+Math.random()*0.9;
         const sp=new THREE.Mesh(new THREE.SphereGeometry(0.07+Math.random()*0.06,5,5),
-          new THREE.MeshBasicMaterial({color:0xffcc66, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false}));
+          new THREE.MeshBasicMaterial({color:0xffcc66, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending,depthWrite:false}));
         sp.position.set(mw.x + Math.cos(ang)*r, mw.y + (Math.random()-0.5)*0.8, mw.z + Math.sin(ang)*r);
         sp.userData.noOutline=true;
         scene.add(sp);
@@ -2277,7 +2750,6 @@ function updateMeteorWeapon(w, dmg, rate, dt){
         });
       }
       if(mt.chargeT >= (w.chargeTime||METEOR_CHARGE_TIME)){
-        /* LAUNCH METEOR */
         const startPos = mt.muzzle.getWorldPosition(new THREE.Vector3());
         const targetPos = t.mesh.position.clone();
         targetPos.x += (Math.random()-0.5)*1.5;
@@ -2316,6 +2788,7 @@ function updateWeapons(dt){
       mount.cd=rate;
     }
   });
+  updateCastleBallsista(dt);
 }
 
 /* ============================================================
@@ -2333,7 +2806,7 @@ function updateProjectiles(dt){
       p.trailT=(p.trailT||0)+dt;
       if(p.trailT>=0.012){
         p.trailT=0;
-        const tm=new THREE.Mesh(new THREE.SphereGeometry(0.09,6,6),
+        const tm=new THREE.Mesh(new THREE.SphereGeometry(p.castle?0.13:0.09,6,6),
           new THREE.MeshBasicMaterial({color:0xffe8a0,transparent:true,opacity:0.85}));
         tm.position.copy(p.mesh.position);
         tm.userData.noOutline=true;
@@ -2344,7 +2817,6 @@ function updateProjectiles(dt){
     if(p.def==='ball'){
       p.mesh.rotation.x+=dt*4; p.mesh.rotation.z+=dt*2.5;
       if(p.mesh.userData.halo) p.mesh.userData.halo.scale.setScalar(1+Math.random()*0.25);
-      /* Trail asap tipis — KECIL, tidak jadi bola putih */
       if(Math.random()<0.35){
         const sm=new THREE.Mesh(new THREE.SphereGeometry(0.06+Math.random()*0.05,5,5),
           new THREE.MeshBasicMaterial({color:0x3a3028, transparent:true, opacity:0.55}));
@@ -2361,7 +2833,8 @@ function updateProjectiles(dt){
       const hitRadius = m.radius + (m.titan?1.8:0.5);
       if(p.mesh.position.distanceTo(mp)<hitRadius){
         damageMonster(m,p.dmg,p.mesh.position.clone(),true);
-        if(p.def==='arrow'){ SFX.arrowImpact(); bloodBurst(p.mesh.position.clone(), m.def.color, 6, 4); }
+        if(p.castle){ SFX.castleBoltHit(); bloodBurst(p.mesh.position.clone(), m.def.color, 14, 6); addShake(0.08); }
+        else if(p.def==='arrow'){ SFX.arrowImpact(); bloodBurst(p.mesh.position.clone(), m.def.color, 6, 4); }
         else if(p.def==='ball'){ SFX.heavyImpact(); bloodBurst(p.mesh.position.clone(), m.def.color, 12, 5.5); }
         if(p.wdef.splash>0) addCannonExplosion(p.mesh.position.clone(), p.wdef.splash);
         else addFlash(p.mesh.position.clone(),0xffee88,0.26,0.12);
@@ -2412,13 +2885,13 @@ function updateMonsters(dt){
     const stopR = m.titan ? CFG.attackR + 4 : CFG.attackR;
     if(dist>stopR){
       mp.x+=(-mp.x/dist)*spd*dt; mp.z+=(-mp.z/dist)*spd*dt;
-      if(m.titan){ m.stepT-=dt; if(m.stepT<=0){ m.stepT=1.4; SFX.titanStep(); } }
+      if(m.titan){ m.stepT-=dt; if(m.stepT<=0){ m.stepT=1.4; SFX.titanStep(); if(dist<70) addShake(0.1); } }
     } else {
       m.attackT+=dt;
       const interval=m.titan?2.6:m.boss?1.4:1.15;
       if(m.attackT>=interval){
         m.attackT=0; damageTower(m.dmg);
-        addFlash(new THREE.Vector3(mp.x/dist*10,2+Math.random()*3,mp.z/dist*10),0xff4422,0.5,0.2);
+        addFlash(new THREE.Vector3(mp.x/dist*11.2,2+Math.random()*3,mp.z/dist*11.2),0xff4422,0.5,0.2);
         if(m.titan){ SFX.heavyImpact(); bloodBurst(new THREE.Vector3(mp.x/dist*9,5,mp.z/dist*9),0x442222,4,3); }
       }
       const punch=Math.max(0,Math.sin(m.attackT*Math.PI*2));
@@ -2466,7 +2939,7 @@ function updateMonsters(dt){
         p.y += 0.4 + Math.random()*1.6;
         p.z += (Math.random()-0.5)*0.6;
         const fire=new THREE.Mesh(new THREE.SphereGeometry(0.10+Math.random()*0.10,6,6),
-          new THREE.MeshBasicMaterial({color: Math.random()<0.5?0xff8a20:0xffcc44, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending, depthWrite:false}));
+          new THREE.MeshBasicMaterial({color: Math.random()<0.5?0xff8a20:0xffcc44, transparent:true, opacity:0.9, blending:THREE.AdditiveBlending,depthWrite:false}));
         fire.position.copy(p); fire.userData.noOutline=true;
         scene.add(fire);
         fxList.push({mesh:fire, life:0.35+Math.random()*0.25, max:0.6,
@@ -2526,6 +2999,11 @@ function drawRadar(){
   rctx.strokeStyle='rgba(200,150,90,.6)'; rctx.lineWidth=2; rctx.stroke();
   rctx.strokeStyle='rgba(255,255,255,.08)'; rctx.lineWidth=1;
   [25,50,75,100].forEach(mm=>{ rctx.beginPath(); rctx.arc(0,0,mm*scale,0,Math.PI*2); rctx.stroke(); });
+  /* Istana (belakang = atas radar) */
+  rctx.fillStyle='rgba(255,215,120,.9)';
+  rctx.fillRect(-4, -30*scale-3, 8, 6);
+  rctx.strokeStyle='rgba(120,80,20,.9)'; rctx.lineWidth=1;
+  rctx.strokeRect(-4, -30*scale-3, 8, 6);
   const wsel=WEAPONS[S.selected];
   if(wsel&&owned[wsel.id]){
     rctx.beginPath(); rctx.arc(0,0,Math.min(R,wsel.range*scale),0,Math.PI*2);
@@ -2533,14 +3011,16 @@ function drawRadar(){
     const ms=mounts[wsel.id];
     rctx.strokeStyle='rgba(126,224,255,.28)'; rctx.lineWidth=1;
     for(const mt of ms){
-      const a1=mt.angle-mt.wedge, a2=mt.angle+mt.wedge;
-      rctx.beginPath(); rctx.moveTo(0,0); rctx.lineTo(Math.cos(a1)*R,Math.sin(a1)*R); rctx.stroke();
-      rctx.beginPath(); rctx.moveTo(0,0); rctx.lineTo(Math.cos(a2)*R,Math.sin(a2)*R); rctx.stroke();
+      for(const sgn of [-1,1]){
+        const thc=Math.PI/2-(mt.angle+sgn*mt.wedge);
+        rctx.beginPath(); rctx.moveTo(0,0); rctx.lineTo(Math.cos(thc)*R,Math.sin(thc)*R); rctx.stroke();
+      }
     }
     rctx.fillStyle='rgba(126,224,255,.9)';
     for(const m of ms){ rctx.beginPath(); rctx.arc(m.wx*scale,m.wz*scale,2.2,0,Math.PI*2); rctx.fill(); }
   }
-  rctx.beginPath(); rctx.arc(0,0,CFG.attackR*scale,0,Math.PI*2);
+  /* Dinding benteng (lengkung depan) */
+  rctx.beginPath(); rctx.arc(0,0,CFG.attackR*scale,0,Math.PI);
   rctx.strokeStyle='rgba(255,90,60,.75)'; rctx.lineWidth=1.5; rctx.stroke();
   rctx.beginPath(); rctx.moveTo(0,0);
   rctx.arc(0,0,15,Math.atan2(-Math.cos(yaw),Math.sin(yaw))-0.45,Math.atan2(-Math.cos(yaw),Math.sin(yaw))+0.45);
@@ -2634,6 +3114,23 @@ function loop(now){
     cl.position.z = Math.sin(cl.userData.ang)*cl.userData.rad;
     cl.position.y += Math.sin(S.elapsed*0.3+cl.userData.rad)*0.008;
   }
+  /* Jendela istana berkedip hangat */
+  winA.emissiveIntensity=1.15+Math.sin(S.elapsed*2.3)*0.3+Math.random()*0.08;
+  winB.emissiveIntensity=1.15+Math.sin(S.elapsed*3.1+2)*0.3+Math.random()*0.08;
+  winC.emissiveIntensity=1.15+Math.sin(S.elapsed*1.7+4)*0.3+Math.random()*0.08;
+  gateLight.intensity=1.5+Math.sin(S.elapsed*7)*0.15+Math.random()*0.12;
+  for(const ll of lanternLights) ll.intensity=0.7+Math.sin(S.elapsed*8+ll.position.x)*0.15+Math.random()*0.08;
+  /* Bendera berkibar */
+  for(const f of flags){
+    const posA=f.geo.attributes.position;
+    for(let i=0;i<posA.count;i++){
+      const x0=f.base[i*3], y0=f.base[i*3+1];
+      const u=(x0+0.7)/1.4;
+      posA.setZ(i, Math.sin(S.elapsed*3.4+u*4.2+f.phase)*0.11*u);
+      posA.setY(i, y0-u*u*0.10);
+    }
+    posA.needsUpdate=true;
+  }
 
   if(volleyCd>0) volleyCd-=dt;
   zoom+=(zoomTarget-zoom)*Math.min(1,dt*9);
@@ -2654,6 +3151,13 @@ function loop(now){
     updateMonsters(dt); updateProjectiles(dt); updateMeteors(dt); updateBurnZones(dt);
   }
   updateFX(dt);
+  /* Screen shake */
+  if(shakeMag>0.002){
+    camera.position.x+=(Math.random()-0.5)*shakeMag*0.6;
+    camera.position.y+=(Math.random()-0.5)*shakeMag*0.35;
+    camera.position.z+=(Math.random()-0.5)*shakeMag*0.6;
+  }
+  shakeMag*=Math.exp(-4.5*dt);
   if((radarFrame++ % 3)===0) drawRadar();
   renderer.render(scene,camera);
 }
@@ -2696,8 +3200,9 @@ $('resumeBtn').onclick=()=>{ goFullscreen(); showPause(); };
 function beginGame(){
   started=true; S.running=true; S.over=false; S.paused=false;
   $('pauseOv').classList.add('hide');
+  A.startAmbience();
   startWave(1); updateHUDText(); refreshUI();
-  toast('🏰 Pertahankan bentengmu!','#ffd966');
+  toast('🏰 Pertahankan gerbangmu!','#ffd966');
   if(!isTouch) tryLock();
 }
 function resetGame(){
@@ -2719,12 +3224,13 @@ function resetGame(){
     if(mt.chargeState) { mt.chargeState='idle'; mt.chargeT=0; }
     if(mt.gimbal!==mt.group){ mt.gimbal.rotation.y=0; mt.pitchG.rotation.z=mt.aimPitch; }
   }
+  for(const bt of ballistae){ bt.tgt=null; bt.cd=1.5+Math.random()*2; bt.kick=0; bt.turret.rotation.y=0; }
   S.coins=60; S.kills=0; S.totalCoins=0; S.wave=0; S.hp=CFG.baseHP; S.maxHP=CFG.baseHP; S.maxHPLv=1;
   S.waveActive=false; S.intermission=false; S.spawnQueue=[]; S.prep=0;
   S.selected=0; S.elapsed=0; S.paused=false; volleyCd=0; dispCoins=-1;
   owned.cannon=1; owned.archer=0; owned.fire=0; owned.storm=0;
   lvl.cannon={d:1,r:1}; lvl.archer={d:1,r:1}; lvl.fire={d:1,r:1}; lvl.storm={d:1,r:1};
-  pos.x=0; pos.z=5; yaw=Math.PI*0.5; pitch=-0.30; zoomTarget=1; zoom=1;
+  pos.x=0; pos.z=5; yaw=Math.PI; pitch=-0.28; zoomTarget=1; zoom=1; shakeMag=0;
   prepInfo.classList.add('hide');
   closePanel();
   updateHUDText(); refreshUI(); updateWaveBtn();
