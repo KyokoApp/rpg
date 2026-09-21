@@ -1,0 +1,25 @@
+// Ditambahkan otomatis oleh scripts/patch_android.py (apply from: 'signing.gradle').
+// APK debug DAN release ditandatangani kunci PERMANEN yang sama, jadi update tidak pernah bentrok.
+def bzKeystore = System.getenv('BZ_KEYSTORE_FILE')
+if (!bzKeystore) {
+    throw new GradleException('BZ_KEYSTORE_FILE belum diset. Build dibatalkan supaya APK tidak pernah ditandatangani kunci acak.')
+}
+android {
+    signingConfigs {
+        blockzone {
+            storeFile file(bzKeystore)
+            storeType 'pkcs12'
+            storePassword System.getenv('BZ_KEYSTORE_PASSWORD')
+            keyAlias System.getenv('BZ_KEY_ALIAS')
+            keyPassword System.getenv('BZ_KEY_PASSWORD')
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.blockzone
+        }
+        release {
+            signingConfig signingConfigs.blockzone
+        }
+    }
+}

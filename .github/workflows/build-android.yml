@@ -3,17 +3,22 @@ name: Build Android
 on:
   push:
     branches: [main, master]
+    # Ubah game.html saja tidak perlu bikin APK baru: game diperbarui lewat internet (lihat Publish Game Update).
+    paths-ignore:
+      - 'www/game.html'
+      - '*.md'
   workflow_dispatch:
 
 env:
-  # ID iklan diambil dari GitHub: Settings > Secrets and variables > Actions > Variables.
-  # Kalau belum diisi, otomatis pakai ID TEST resmi Google.
-  ADMOB_APP_ID: ${{ vars.ADMOB_APP_ID || 'ca-app-pub-3940256099942544~3347511713' }}
-  ADMOB_INTERSTITIAL_ID: ${{ vars.ADMOB_INTERSTITIAL_ID || 'ca-app-pub-3940256099942544/1033173712' }}
-  ADMOB_REWARDED_ID: ${{ vars.ADMOB_REWARDED_ID || 'ca-app-pub-3940256099942544/5224354917' }}
+  # ID AdMob BlockZone sudah tertanam di sini. Mau ganti? Isi Variables di GitHub
+  # (Settings > Secrets and variables > Actions > Variables), itu yang diprioritaskan.
+  # ADMOB_TESTING=true = iklan yang muncul iklan TEST (aman). Ubah ke false HANYA setelah game rilis di Play Store.
+  ADMOB_APP_ID: ${{ vars.ADMOB_APP_ID || 'ca-app-pub-4450635658182691~8568174511' }}
+  ADMOB_INTERSTITIAL_ID: ${{ vars.ADMOB_INTERSTITIAL_ID || 'ca-app-pub-4450635658182691/4383543617' }}
+  ADMOB_REWARDED_ID: ${{ vars.ADMOB_REWARDED_ID || 'ca-app-pub-4450635658182691/3953132928' }}
   ADMOB_TESTING: ${{ vars.ADMOB_TESTING || 'true' }}
-  # true kalau secret keystore sudah diisi -> ikut build APK/AAB release yang ditandatangani
-  HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+  # Alamat server pembaruan game. Kosong = GitHub Pages repo ini (https://USER.github.io/REPO/).
+  UPDATE_BASE_URL: ${{ vars.UPDATE_BASE_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
 
 jobs:
   build:
@@ -34,7 +39,7 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Tulis ads-config.js
+      - name: Tulis ads-config.js dan update-config.js
         run: |
           case "$ADMOB_TESTING" in
             true|false) ;;
@@ -47,13 +52,19 @@ jobs:
             rewardedId: "$ADMOB_REWARDED_ID"
           };
           EOF
-          cat www/ads-config.js
+          cat > www/update-config.js <<EOF
+          window.BZ_UPDATE = { url: "$UPDATE_BASE_URL" };
+          EOF
+          cat www/ads-config.js www/update-config.js
+
+      - name: Versi game bawaan APK
+        run: node scripts/make-update.mjs --baseline
 
       - name: Buat project Android
         run: |
           [ -d android ] || npx cap add android
 
-      - name: Patch Android (AdMob ID, landscape, fullscreen)
+      - name: Patch Android (AdMob ID, landscape, fullscreen, tanda tangan)
         run: python3 scripts/patch_android.py
 
       - name: Icon dan splash
@@ -66,41 +77,64 @@ jobs:
       - name: Sync web assets
         run: npx cap sync android
 
+      - name: Keystore permanen
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Pakai keystore dari GitHub Secrets"
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            {
+              echo "BZ_KEYSTORE_FILE=$RUNNER_TEMP/release.keystore"
+              echo "BZ_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "BZ_KEY_ALIAS=$KEY_ALIAS"
+              echo "BZ_KEY_PASSWORD=$KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+          else
+            echo "Pakai keystore permanen di repo: keystore/blockzone.jks"
+            {
+              echo "BZ_KEYSTORE_FILE=$GITHUB_WORKSPACE/keystore/blockzone.jks"
+              cat keystore/credentials.env
+            } >> "$GITHUB_ENV"
+          fi
+
       - name: Set versi
         run: |
           sed -i "s/versionCode [0-9][0-9]*/versionCode ${{ github.run_number }}/" android/app/build.gradle
           sed -i "s/versionName \"[^\"]*\"/versionName \"1.0.${{ github.run_number }}\"/" android/app/build.gradle
           grep -n "versionCode\|versionName" android/app/build.gradle
 
-      - name: Build APK debug
+      - name: Build APK debug, APK release, AAB release (semua pakai kunci yang sama)
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug assembleRelease bundleRelease --no-daemon --stacktrace
 
-      - name: Build release (belum ditandatangani)
-        if: env.HAS_KEYSTORE == 'true'
-        working-directory: android
-        run: ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
-
-      - name: Tandatangani release
-        if: env.HAS_KEYSTORE == 'true'
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: bash scripts/sign.sh
+      - name: Kumpulkan hasil dan cek tanda tangan
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/*.apk out/BlockZone-debug.apk
+          cp android/app/build/outputs/apk/release/*.apk out/BlockZone-release.apk
+          cp android/app/build/outputs/bundle/release/*.aab out/BlockZone-release.aab
+          BT="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          for f in out/BlockZone-debug.apk out/BlockZone-release.apk; do
+            "$BT/apksigner" verify --print-certs "$f" | grep -i "SHA-256 digest" | sed "s|^|$f  |"
+          done
+          ls -la out
 
       - name: Upload APK debug
         uses: actions/upload-artifact@v4
         with:
           name: BlockZone-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: out/BlockZone-debug.apk
 
       - name: Upload release (APK TapTap + AAB Play Store)
-        if: env.HAS_KEYSTORE == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: BlockZone-release-signed
-          path: out/*
+          path: |
+            out/BlockZone-release.apk
+            out/BlockZone-release.aab

@@ -3,6 +3,7 @@
    - AdMob App ID (AndroidManifest + strings.xml)
    - orientasi landscape
    - MainActivity fullscreen (immersive)
+   - tanda tangan permanen (signing.gradle) untuk debug & release
 Dijalankan dari root repo oleh GitHub Actions."""
 import json
 import os
@@ -47,5 +48,14 @@ if os.path.exists(kt):
     os.remove(kt)
 tpl = open('scripts/MainActivity.java.tpl', encoding='utf-8').read()
 open(pkg_dir + '/MainActivity.java', 'w', encoding='utf-8').write(tpl.replace('__APP_ID__', app_id))
+
+# ---- 4. tanda tangan permanen ----
+import shutil
+shutil.copyfile('scripts/signing.gradle', 'android/app/signing.gradle')
+p = 'android/app/build.gradle'
+s = open(p, encoding='utf-8').read()
+if "apply from: 'signing.gradle'" not in s:
+    s = s.rstrip('\n') + "\n\napply from: 'signing.gradle'\n"
+open(p, 'w', encoding='utf-8').write(s)
 
 print('OK: appId=%s, admob_app_id=%s' % (app_id, admob_app_id))
