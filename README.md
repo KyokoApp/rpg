@@ -55,13 +55,21 @@ Variabel opsional untuk menimpa (Settings > Secrets and variables > Actions > Va
 jangan pernah klik iklan asli milik sendiri (akun AdMob bisa diblokir). ID iklan asli yang baru dibuat
 sering "No fill" berjam-jam.
 
-## Iklan buat unlock skill
+## Iklan (dimatikan)
 
-Skill **Attack Speed** terbuka dengan nonton 3 iklan reward (Laser & Shield pakai koin). Kalau iklan
-gagal, toast menampilkan kode error AdMob, contoh `Iklan belum tersedia (3 No fill)`:
-- `3` No fill → belum ada iklan tersedia / ID iklan asli belum aktif → pakai ID test dulu
-- `2` network error → cek koneksi
-- `0` internal error → cek Google Play Services di HP
+Iklan dimatikan karena TapTap belum didukung AdMob (penghasilan iklan terbatas). Skill **Attack Speed**
+sekarang dibeli dengan **200 koin**, tidak lagi lewat nonton iklan.
+Kodenya tidak dihapus: di `www/game.html` ganti `ADS_ENABLED = false` jadi `true` untuk menyalakan lagi
+(iklan interstitial tiap kalah 3x dan unlock lewat iklan perlu ditambahkan kembali di toko).
+ID AdMob tetap tersimpan di `build-android.yml`.
+
+## Donasi (sukarela)
+
+Di menu ada tombol **♥** (di bawah pengaturan). Tap → panel "Dukung Pengembang" → tombol membuka halaman
+donasi di browser HP. Donasi murni sukarela, tidak ada hadiah/koin, jadi tidak perlu server.
+Link sudah diisi (`https://saweria.co/YukiDesu`). Untuk mengganti, ubah `const DONATE_URL` di `www/game.html`.
+Kalau dikosongkan, tombol ♥ tersembunyi. Karena cuma `game.html` yang berubah, pemain menerimanya lewat update
+otomatis tanpa APK baru.
 
 ## Gameplay (ringkas)
 

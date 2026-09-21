@@ -172,6 +172,9 @@
 
   #btnShop { top: 20px; }
   #btnSettings { top: 86px; } /* 20 + 56 + 10 */
+  #btnDonate { top: 152px; color: #ff8fa3; } /* 86 + 56 + 10 */
+  #btnDonate.off { display: none; }
+  .donate-note { font-size: 13px; line-height: 1.55; color: rgba(255,255,255,0.7); margin: 6px 0 20px; text-align: center; }
 
   @media (max-width: 500px) {
     .corner-btn {
@@ -182,6 +185,7 @@
     }
     #btnShop { top: 14px; }
     #btnSettings { top: 70px; } /* 14 + 48 + 8 */
+    #btnDonate { top: 126px; } /* 70 + 48 + 8 */
   }
 
   /* ================= OVERLAYS ================= */
@@ -202,7 +206,7 @@
     box-shadow: 0 0 40px rgba(255,255,255,0.15);
     max-height: 90vh; overflow-y: auto;
   }
-  .panel h2 { margin: 0 0 20px; font-size: 20px; letter-spacing: 3px; text-align: center; }
+  .panel h2 { margin: 0 0 20px; font-size: 20px; letter-spacing: 3px; text-align: center; color: #fff; }
 
   .opt-row {
     display: flex; align-items: center; justify-content: space-between;
@@ -575,6 +579,8 @@
   <button id="btnShop" class="corner-btn" aria-label="Shop">🛒</button>
   <!-- SETTINGS icon di bawah shop -->
   <button id="btnSettings" class="corner-btn" aria-label="Settings">⚙</button>
+  <!-- DONASI (sukarela) di bawah pengaturan -->
+  <button id="btnDonate" class="corner-btn off" aria-label="Donate">♥</button>
 
   <div class="menu-inner">
     <div class="brand">
@@ -687,6 +693,16 @@
   </div>
 </div>
 
+<!-- DONASI -->
+<div id="donate" class="overlay">
+  <div class="panel">
+    <h2 data-i18n="donate">DUKUNG PENGEMBANG</h2>
+    <div class="donate-note" data-i18n="donate_desc">Suka game ini? Kamu bisa mendukung pengembang lewat donasi. Sepenuhnya sukarela dan tidak mengubah apa pun di dalam game, jadi main gratis tetap seru.</div>
+    <button id="btnDonateOpen" class="ghost close-btn" data-i18n="donate_open">BUKA HALAMAN DONASI</button>
+    <button id="btnDonateClose" class="ghost close-btn" data-i18n="close">TUTUP</button>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 <div id="adLoading" class="overlay ad-loading">
   <div class="ad-loading-text" data-i18n="ad_loading">MEMUAT IKLAN...</div>
@@ -747,7 +763,7 @@
       shield_name: 'SHIELD',
       shield_desc: 'Tap untuk aktifkan shield tak tertembus selama 4 detik. Cooldown 30 detik.',
       atkspd_name: 'ATTACK SPEED',
-      atkspd_desc: 'Tap untuk menembak 2x lebih cepat selama 2 detik. Cooldown 30 detik. Buka dengan nonton 3 iklan.',
+      atkspd_desc: 'Tap untuk menembak 2x lebih cepat selama 2 detik. Cooldown 30 detik.',
       watch_ad: 'TONTON IKLAN',
       ad_label: 'IKLAN',
       ad_loading: 'MEMUAT IKLAN...',
@@ -762,7 +778,10 @@
       update_latest: 'Sudah versi terbaru',
       update_found: 'Pembaruan ditemukan, mengunduh...',
       update_ready: 'Pembaruan siap! Tekan MULAI ULANG',
-      update_failed: 'Gagal memeriksa pembaruan'
+      update_failed: 'Gagal memeriksa pembaruan',
+      donate: 'DUKUNG PENGEMBANG',
+      donate_desc: 'Suka game ini? Kamu bisa mendukung pengembang lewat donasi. Sepenuhnya sukarela dan tidak mengubah apa pun di dalam game, jadi main gratis tetap seru.',
+      donate_open: 'BUKA HALAMAN DONASI'
     },
     en: {
       subtitle: '200 BATTLE ROYALE',
@@ -799,7 +818,7 @@
       shield_name: 'SHIELD',
       shield_desc: 'Tap to activate an impenetrable shield for 4 seconds. 30 second cooldown.',
       atkspd_name: 'ATTACK SPEED',
-      atkspd_desc: 'Tap to fire 2x faster for 2 seconds. 30 second cooldown. Unlock by watching 3 ads.',
+      atkspd_desc: 'Tap to fire 2x faster for 2 seconds. 30 second cooldown.',
       watch_ad: 'WATCH AD',
       ad_label: 'ADS',
       ad_loading: 'LOADING AD...',
@@ -814,7 +833,10 @@
       update_latest: 'You are up to date',
       update_found: 'Update found, downloading...',
       update_ready: 'Update ready! Tap RESTART',
-      update_failed: 'Could not check for updates'
+      update_failed: 'Could not check for updates',
+      donate: 'SUPPORT THE DEVELOPER',
+      donate_desc: 'Enjoying the game? You can support the developer with a donation. It is completely optional and changes nothing in the game, so playing for free is just as fun.',
+      donate_open: 'OPEN DONATION PAGE'
     }
   };
 
@@ -1003,6 +1025,7 @@
     rewardedId: 'ca-app-pub-3940256099942544/5224354917'        // ID test Google
   }, window.SQ_ADS || {});
   const LOSSES_PER_AD = 3;   // iklan muncul tiap kalah 3 kali
+  const ADS_ENABLED = false; // iklan dimatikan. Ganti true kalau mau dinyalakan lagi (butuh toko yang didukung AdMob)
 
   function toast(msg) {
     const el = document.getElementById('toast');
@@ -1210,7 +1233,7 @@
 
     return { init, showInterstitial, showRewarded };
   })();
-  Ads.init();
+  if (ADS_ENABLED) Ads.init();
 
   /* ================= DOM ================= */
   const menuEl = document.getElementById('menu');
@@ -1296,6 +1319,22 @@
   btnShop.addEventListener('click', () => { openShop(); });
   btnShopClose.addEventListener('click', () => shopEl.classList.remove('show'));
 
+  /* ================= DONASI (sukarela, tanpa hadiah) ================= */
+  // Isi dengan link Saweria / Trakteer kamu. Kosong = tombol ♥ disembunyikan.
+  const DONATE_URL = 'https://saweria.co/YukiDesu';
+  const btnDonate = document.getElementById('btnDonate');
+  const donateEl = document.getElementById('donate');
+  if (DONATE_URL) btnDonate.classList.remove('off');
+  btnDonate.addEventListener('click', () => donateEl.classList.add('show'));
+  document.getElementById('btnDonateClose').addEventListener('click', () => donateEl.classList.remove('show'));
+  document.getElementById('btnDonateOpen').addEventListener('click', () => {
+    if (!DONATE_URL) return;
+    // di aplikasi Android, link luar otomatis dibuka di browser HP (game tetap di belakang)
+    if (IS_NATIVE) window.location.href = DONATE_URL;
+    else window.open(DONATE_URL, '_blank', 'noopener');
+    donateEl.classList.remove('show');
+  });
+
   // Apply translations first time
   applyTranslations();
 
@@ -1367,36 +1406,9 @@
       icon: '🔥',
       nameKey: 'atkspd_name',
       descKey: 'atkspd_desc',
-      adUnlock: 3          // dibuka dengan nonton 3 iklan (bukan pakai koin)
+      price: 200
     }
   ];
-
-  async function watchAdForItem(it) {
-    showAdLoading(true);
-    let res;
-    try { res = await Ads.showRewarded(); }
-    catch (e) { res = { ok: false, reason: 'failed' }; }
-    showAdLoading(false);
-
-    if (res.ok) {
-      adProgress[it.id] = (adProgress[it.id] || 0) + 1;
-      if (adProgress[it.id] >= it.adUnlock) {
-        adProgress[it.id] = it.adUnlock;
-        ownedSkills[it.id] = true;
-        equippedSkill = it.id;
-        toast(t('skill_unlocked'));
-        if (settings.sound) { ensureAudio(); playShield(); }
-      } else {
-        toast(t('ad_label') + ' ' + adProgress[it.id] + '/' + it.adUnlock + ' ✓');
-      }
-      saveGameData();
-      renderShop();
-    } else if (res.reason === 'skipped') {
-      toast(t('ad_skipped'));
-    } else if (res.reason !== 'busy') {
-      toast(t('ad_unavailable') + (res.detail ? ' (' + res.detail + ')' : ''));
-    }
-  }
 
   function openShop() {
     renderShop();
@@ -1474,9 +1486,7 @@
 
       const price = document.createElement('div');
       price.className = 'shop-card-price';
-      if (!owned && it.adUnlock) {
-        price.innerHTML = '<span>▶ ' + t('ad_label') + ' ' + (adProgress[it.id] || 0) + '/' + it.adUnlock + '</span>';
-      } else if (!owned) {
+      if (!owned) {
         price.innerHTML = '<span class="coin-icon"></span><span>' + it.price + '</span>';
       } else {
         price.innerHTML = '<span>' + t('owned_short') + '</span>';
@@ -1486,11 +1496,7 @@
       const btn = document.createElement('button');
       btn.className = 'shop-card-btn';
 
-      if (!owned && it.adUnlock) {
-        btn.classList.add('buy');
-        btn.textContent = '▶ ' + t('watch_ad');
-        btn.addEventListener('click', () => watchAdForItem(it));
-      } else if (!owned) {
+      if (!owned) {
         btn.classList.add('buy');
         btn.textContent = t('buy');
         if (coins < it.price) btn.disabled = true;
@@ -2025,6 +2031,7 @@
 
   // Dipanggil tiap pemain kalah (balik ke menu). Tiap LOSSES_PER_AD kali kalah -> 1 iklan interstitial.
   async function onPlayerLost() {
+    if (!ADS_ENABLED) return;
     lossCount++;
     saveGameData();
     if (lossCount < LOSSES_PER_AD) return;
