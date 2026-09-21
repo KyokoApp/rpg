@@ -2258,12 +2258,31 @@
   }
 
   function drawArena() {
+    // Gambar hanya sisi border yang dekat layar (bukan seluruh kotak 30000px tiap frame)
+    const m = 60;
+    const vx0 = camera.x - m, vx1 = camera.x + W + m;
+    const vy0 = camera.y - m, vy1 = camera.y + H + m;
+    const ax0 = arena.x + 2, ax1 = arena.x + arena.w - 2;
+    const ay0 = arena.y + 2, ay1 = arena.y + arena.h - 2;
+    const left   = ax0 >= vx0 && ax0 <= vx1;
+    const right  = ax1 >= vx0 && ax1 <= vx1;
+    const top    = ay0 >= vy0 && ay0 <= vy1;
+    const bottom = ay1 >= vy0 && ay1 <= vy1;
+    if (!left && !right && !top && !bottom) return;
+    const x0 = Math.max(ax0, vx0), x1 = Math.min(ax1, vx1);
+    const y0 = Math.max(ay0, vy0), y1 = Math.min(ay1, vy1);
     ctx.save();
     ctx.shadowColor = 'rgba(255,255,255,0.5)';
     ctx.shadowBlur = 25;
     ctx.strokeStyle = 'rgba(255,255,255,0.85)';
     ctx.lineWidth = 4;
-    ctx.strokeRect(arena.x + 2, arena.y + 2, arena.w - 4, arena.h - 4);
+    ctx.lineCap = 'square';
+    ctx.beginPath();
+    if (left)   { ctx.moveTo(ax0, y0); ctx.lineTo(ax0, y1); }
+    if (right)  { ctx.moveTo(ax1, y0); ctx.lineTo(ax1, y1); }
+    if (top)    { ctx.moveTo(x0, ay0); ctx.lineTo(x1, ay0); }
+    if (bottom) { ctx.moveTo(x0, ay1); ctx.lineTo(x1, ay1); }
+    ctx.stroke();
     ctx.restore();
   }
 
