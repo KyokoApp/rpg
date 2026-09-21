@@ -314,6 +314,35 @@
     box-shadow: none; transform: none;
   }
 
+  .shop-tabs {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    padding: 12px 20px 0;
+    flex-shrink: 0;
+  }
+  .shop-tab {
+    padding: 9px 22px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: rgba(255,255,255,0.5);
+    transition: all 0.15s;
+    user-select: none;
+    border: 1.5px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.05);
+    min-width: 0;
+  }
+  .shop-tab:hover { color: #fff; }
+  .shop-tab.active {
+    background: #ffffff;
+    color: #000;
+    border-color: #fff;
+    box-shadow: 0 0 14px rgba(255,255,255,0.4);
+  }
+
   .shop-scroll-area {
     flex: 1;
     overflow-x: auto;
@@ -683,6 +712,11 @@
       <button id="btnShopClose" class="shop-close-x">✕</button>
     </div>
 
+    <div class="shop-tabs">
+      <button id="shopTabSkill" class="shop-tab active" data-i18n="shop_tab_skill">SKILL</button>
+      <button id="shopTabArrow" class="shop-tab" data-i18n="shop_tab_arrow">ARROW</button>
+    </div>
+
     <div id="shopScroll" class="shop-scroll-area"></div>
 
     <div class="shop-scrollbar">
@@ -763,7 +797,15 @@
       shield_name: 'SHIELD',
       shield_desc: 'Tap untuk aktifkan shield tak tertembus selama 4 detik. Cooldown 30 detik.',
       atkspd_name: 'ATTACK SPEED',
-      atkspd_desc: 'Tap untuk menembak 2x lebih cepat selama 2 detik. Cooldown 30 detik.',
+      atkspd_desc: 'Tap untuk menembak 2x lebih cepat selama 5 detik. Cooldown 30 detik.',
+      together_name: 'TOGETHER',
+      together_desc: 'Tap untuk tembakan shotgun menyebar, 3x otomatis dengan jeda. Cooldown 30 detik.',
+      hook_name: 'HOOK',
+      hook_desc: 'Tap untuk menembakkan tali auto-hook ke musuh terdekat dalam jangkauan. Musuh yang kena akan disedot darahnya 10 tiap 0.5 detik selama 5 detik, darahnya jadi darah kamu. Kalau darah kamu penuh, sisanya jadi koin. Cooldown 30 detik.',
+      shop_tab_skill: 'SKILL',
+      shop_tab_arrow: 'ARROW',
+      healingswime_name: 'HEALING SWIME',
+      healingswime_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Kalau 2 detik gak kena damage, darah otomatis pulih 5 per detik.',
       watch_ad: 'TONTON IKLAN',
       ad_label: 'IKLAN',
       ad_loading: 'MEMUAT IKLAN...',
@@ -818,7 +860,15 @@
       shield_name: 'SHIELD',
       shield_desc: 'Tap to activate an impenetrable shield for 4 seconds. 30 second cooldown.',
       atkspd_name: 'ATTACK SPEED',
-      atkspd_desc: 'Tap to fire 2x faster for 2 seconds. 30 second cooldown.',
+      atkspd_desc: 'Tap to fire 2x faster for 5 seconds. 30 second cooldown.',
+      together_name: 'TOGETHER',
+      together_desc: 'Tap to fire a spreading shotgun blast, 3x automatically with a short delay between each. 30 second cooldown.',
+      hook_name: 'HOOK',
+      hook_desc: 'Tap to fire an auto-hook rope at the nearest enemy in range. On hit, it drains 10 HP every 0.5 seconds for 5 seconds, healing you with the drained blood. Once your HP is full, the rest turns into coins. 30 second cooldown.',
+      shop_tab_skill: 'SKILL',
+      shop_tab_arrow: 'ARROW',
+      healingswime_name: 'HEALING SWIME',
+      healingswime_desc: 'Passive arrow, looks the same plain white as always. If you avoid damage for 2 seconds, HP auto-heals 5 per second.',
       watch_ad: 'WATCH AD',
       ad_label: 'ADS',
       ad_loading: 'LOADING AD...',
@@ -991,8 +1041,10 @@
   };
 
   let coins = 0;
-  let ownedSkills = { laser: false, shield: false, attackspeed: false };
+  let ownedSkills = { laser: false, shield: false, attackspeed: false, together: false, hook: false };
   let equippedSkill = null;
+  let ownedArrows = { healingswime: false };
+  let equippedArrow = null;
   let adProgress = { attackspeed: 0 };  // berapa iklan sudah ditonton per skill
   let lossCount = 0;                    // hitungan kalah sejak iklan terakhir
 
@@ -1001,8 +1053,10 @@
     try {
       const d = JSON.parse(localStorage.getItem('sq_zone_data') || '{}');
       coins = d.coins || 0;
-      ownedSkills = Object.assign({ laser:false, shield:false, attackspeed:false }, d.ownedSkills || {});
+      ownedSkills = Object.assign({ laser:false, shield:false, attackspeed:false, together:false, hook:false }, d.ownedSkills || {});
       equippedSkill = d.equippedSkill || null;
+      ownedArrows = Object.assign({ healingswime: false }, d.ownedArrows || {});
+      equippedArrow = d.equippedArrow || null;
       adProgress = Object.assign({ attackspeed: 0 }, d.adProgress || {});
       lossCount = d.lossCount || 0;
     } catch(e){}
@@ -1012,7 +1066,7 @@
     try { localStorage.setItem('sq_zone_settings', JSON.stringify(settings)); } catch(e){}
   }
   function saveGameData() {
-    try { localStorage.setItem('sq_zone_data', JSON.stringify({ coins, ownedSkills, equippedSkill, adProgress, lossCount })); } catch(e){}
+    try { localStorage.setItem('sq_zone_data', JSON.stringify({ coins, ownedSkills, equippedSkill, ownedArrows, equippedArrow, adProgress, lossCount })); } catch(e){}
   }
 
   loadGameData();
@@ -1253,6 +1307,8 @@
   const shopCoinLabel = document.getElementById('shopCoinLabel');
   const shopScroll = document.getElementById('shopScroll');
   const shopThumb = document.getElementById('shopThumb');
+  const shopTabSkill = document.getElementById('shopTabSkill');
+  const shopTabArrow = document.getElementById('shopTabArrow');
 
   let gameStarted = false;
 
@@ -1318,6 +1374,8 @@
   btnClose.addEventListener('click', () => settingsEl.classList.remove('show'));
   btnShop.addEventListener('click', () => { openShop(); });
   btnShopClose.addEventListener('click', () => shopEl.classList.remove('show'));
+  shopTabSkill.addEventListener('click', () => setShopCategory('skill'));
+  shopTabArrow.addEventListener('click', () => setShopCategory('arrow'));
 
   /* ================= DONASI (sukarela, tanpa hadiah) ================= */
   // Isi dengan link Saweria / Trakteer kamu. Kosong = tombol ♥ disembunyikan.
@@ -1407,16 +1465,49 @@
       nameKey: 'atkspd_name',
       descKey: 'atkspd_desc',
       price: 200
+    },
+    {
+      id: 'together',
+      icon: '🎯',
+      nameKey: 'together_name',
+      descKey: 'together_desc',
+      price: 300
+    },
+    {
+      id: 'hook',
+      icon: '🪝',
+      nameKey: 'hook_name',
+      descKey: 'hook_desc',
+      price: 500
     }
   ];
 
-  function openShop() {
+  const ARROW_SHOP_ITEMS = [
+    {
+      id: 'healingswime',
+      icon: '🏹',
+      nameKey: 'healingswime_name',
+      descKey: 'healingswime_desc',
+      price: 500
+    }
+  ];
+
+  let shopCategory = 'skill';   // 'skill' | 'arrow'
+
+  function setShopCategory(cat) {
+    shopCategory = cat;
+    shopTabSkill.classList.toggle('active', cat === 'skill');
+    shopTabArrow.classList.toggle('active', cat === 'arrow');
     renderShop();
-    shopEl.classList.add('show');
     requestAnimationFrame(() => {
       shopScroll.scrollLeft = 0;
       updateThumb();
     });
+  }
+
+  function openShop() {
+    setShopCategory('skill');
+    shopEl.classList.add('show');
   }
 
   function updateThumb() {
@@ -1442,7 +1533,12 @@
     refreshCoinLabels();
     shopScroll.innerHTML = '';
 
-    if (SHOP_ITEMS.length === 0) {
+    const isArrowCat = shopCategory === 'arrow';
+    const items = isArrowCat ? ARROW_SHOP_ITEMS : SHOP_ITEMS;
+    const ownedMap = isArrowCat ? ownedArrows : ownedSkills;
+    const currentEquipped = isArrowCat ? equippedArrow : equippedSkill;
+
+    if (items.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'shop-empty';
       empty.textContent = t('empty_shop');
@@ -1450,9 +1546,9 @@
       return;
     }
 
-    for (const it of SHOP_ITEMS) {
-      const owned = ownedSkills[it.id];
-      const equipped = equippedSkill === it.id;
+    for (const it of items) {
+      const owned = ownedMap[it.id];
+      const equipped = currentEquipped === it.id;
 
       const card = document.createElement('div');
       card.className = 'shop-card' + (owned ? ' owned' : '') + (equipped ? ' equipped' : '');
@@ -1503,8 +1599,8 @@
         btn.addEventListener('click', () => {
           if (coins < it.price) return;
           coins -= it.price;
-          ownedSkills[it.id] = true;
-          equippedSkill = it.id;
+          ownedMap[it.id] = true;
+          if (isArrowCat) equippedArrow = it.id; else equippedSkill = it.id;
           saveGameData();
           refreshCoinLabels();
           renderShop();
@@ -1514,7 +1610,7 @@
         btn.classList.add('equip');
         btn.textContent = t('equip');
         btn.addEventListener('click', () => {
-          equippedSkill = it.id;
+          if (isArrowCat) equippedArrow = it.id; else equippedSkill = it.id;
           saveGameData();
           renderShop();
         });
@@ -1522,7 +1618,7 @@
         btn.classList.add('unequip');
         btn.textContent = t('unequip');
         btn.addEventListener('click', () => {
-          equippedSkill = null;
+          if (isArrowCat) equippedArrow = null; else equippedSkill = null;
           saveGameData();
           renderShop();
         });
@@ -1620,8 +1716,31 @@
 
   const ATKSPD = {
     cooldown: SKILL_COOLDOWN, cooldownTimer: 0,
-    duration: 2, activeTimer: 0, mult: 2     // 2 detik, tembakan 2x lebih cepat, cooldown 30 detik
+    duration: 5, activeTimer: 0, mult: 2     // 5 detik, tembakan 2x lebih cepat, cooldown 30 detik
   };
+
+  const TOGETHER = {
+    cooldown: SKILL_COOLDOWN, cooldownTimer: 0,
+    volleys: 3, volleyDelay: 0.28,   // 3x tembakan otomatis, jeda 0.28 detik antar tembakan
+    pellets: 6, spreadDeg: 46,        // 6 peluru menyebar per tembakan, sudut sebar 46 derajat
+    pending: 0, volleyTimer: 0
+  };
+
+  const HOOK_RANGE    = 700;    // jangkauan tembak tali, di luar ini gak bisa nembak
+  const HOOK_SPEED    = 2600;   // kecepatan tali terbang ke target
+  const HOOK_DRAIN    = 10;     // darah disedot per tick
+  const HOOK_TICK     = 0.5;    // detik per tick sedot darah
+  const HOOK_DURATION = 5;      // total detik nyedot darah setelah nyangkut
+  const HOOK = {
+    cooldown: SKILL_COOLDOWN, cooldownTimer: 0,
+    state: 'idle',          // 'idle' | 'flying' | 'attached'
+    target: null,
+    flyTimer: 0, flyDuration: 0,
+    drainTimer: 0, tickTimer: 0
+  };
+
+  const HEAL_ARROW_IDLE  = 2;   // detik gak kena damage sebelum mulai heal otomatis
+  const HEAL_ARROW_RATE  = 5;   // darah pulih per detik
 
   const arena = { x: -ARENA_SIZE/2, y: -ARENA_SIZE/2, w: ARENA_SIZE, h: ARENA_SIZE };
   const camera = { x: 0, y: 0 };
@@ -1661,7 +1780,8 @@
     name: 'YOU',
     autoAim: false,
     trail: [], trailAcc: 0,
-    alive: true
+    alive: true,
+    lastHitT: -99
   };
 
   let enemies = [];
@@ -1772,6 +1892,34 @@
     playShootPlayer();
   }
 
+  function shootTogetherVolley() {
+    let ax = player.aimX, ay = player.aimY;
+    if (player.autoAim) {
+      const tgt = getAimTarget();
+      if (tgt) {
+        const dx = tgt.x - player.x, dy = tgt.y - player.y;
+        const d = Math.hypot(dx, dy) || 1;
+        ax = dx / d; ay = dy / d;
+      }
+    }
+    const baseAngle = Math.atan2(ay, ax);
+    const off = player.size / 2 + 6;
+    const spreadRad = TOGETHER.spreadDeg * Math.PI / 180;
+    const n = TOGETHER.pellets;
+    for (let i = 0; i < n; i++) {
+      const t = n > 1 ? (i / (n - 1)) - 0.5 : 0;   // -0.5..0.5
+      const ang = baseAngle + t * spreadRad;
+      const pax = Math.cos(ang), pay = Math.sin(ang);
+      arrows.push({
+        x: player.x + pax * off, y: player.y + pay * off,
+        vx: pax * ARROW_SPEED, vy: pay * ARROW_SPEED,
+        angle: ang,
+        life: 0, traveled: 0, ownerId: 'player'
+      });
+    }
+    playShootPlayer();
+  }
+
   function shootEnemyBullet(e, nx, ny) {
     const off = e.size / 2 + 6;
     enemyBullets.push({
@@ -1865,6 +2013,100 @@
     spawnParticles(player.x, player.y, 255, 20);
   }
 
+  function activateTogether() {
+    if (TOGETHER.cooldownTimer > 0) return;
+    if (TOGETHER.pending > 0) return;
+    TOGETHER.pending = TOGETHER.volleys;
+    TOGETHER.volleyTimer = 0;                 // tembakan pertama langsung, sisanya pakai jeda
+    TOGETHER.cooldownTimer = TOGETHER.cooldown;
+  }
+
+  function findHookTarget() {
+    // musuh terdekat yang masih dalam jangkauan HOOK_RANGE; di luar itu gak bisa nembak
+    let best = null, bestD = HOOK_RANGE * HOOK_RANGE;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dx = e.x - player.x, dy = e.y - player.y;
+      const d = dx*dx + dy*dy;
+      if (d <= bestD) { bestD = d; best = e; }
+    }
+    return best;
+  }
+
+  function activateHook() {
+    if (HOOK.cooldownTimer > 0) return;
+    if (HOOK.state !== 'idle') return;
+    const tgt = findHookTarget();
+    if (!tgt) return;     // gak ada musuh dalam jangkauan -> gak bisa nembak
+    const dx = tgt.x - player.x, dy = tgt.y - player.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    HOOK.state = 'flying';
+    HOOK.target = tgt;
+    HOOK.flyTimer = 0;
+    HOOK.flyDuration = Math.max(0.08, dist / HOOK_SPEED);
+    HOOK.cooldownTimer = HOOK.cooldown;
+    playShootPlayer();
+  }
+
+  function detachHook() {
+    HOOK.state = 'idle';
+    HOOK.target = null;
+    HOOK.drainTimer = 0;
+    HOOK.tickTimer = 0;
+  }
+
+  function updateHook(dt) {
+    if (HOOK.cooldownTimer > 0) HOOK.cooldownTimer -= dt;
+
+    if (HOOK.state === 'flying') {
+      const tgt = HOOK.target;
+      if (!tgt || !tgt.alive) { detachHook(); return; }
+      HOOK.flyTimer += dt;
+      if (HOOK.flyTimer >= HOOK.flyDuration) {
+        // nyangkut ke target
+        HOOK.state = 'attached';
+        HOOK.drainTimer = HOOK_DURATION;
+        HOOK.tickTimer = HOOK_TICK;
+        spawnParticles(tgt.x, tgt.y, 200, 12);
+      }
+      return;
+    }
+
+    if (HOOK.state === 'attached') {
+      const tgt = HOOK.target;
+      if (!tgt || !tgt.alive) { detachHook(); return; }
+
+      HOOK.drainTimer -= dt;
+      HOOK.tickTimer -= dt;
+      if (HOOK.tickTimer <= 0) {
+        HOOK.tickTimer += HOOK_TICK;
+        const drained = Math.min(HOOK_DRAIN, tgt.hp);
+        if (drained > 0) {
+          tgt.hp -= drained;
+          tgt.lastHitBy = player; tgt.lastHitT = gameTime;
+
+          const room = player.maxHp - player.hp;
+          const healed = Math.min(room, drained);
+          const overflowCoins = drained - healed;
+          player.hp = Math.min(player.maxHp, player.hp + healed);
+          if (overflowCoins > 0) {
+            coins += overflowCoins;
+            saveGameData();
+            refreshCoinLabels();
+          }
+          spawnParticles(tgt.x, tgt.y, 200, 6);
+          spawnPopup(player.x, player.y - player.size, '+' + healed + (overflowCoins > 0 ? '  +' + overflowCoins + '¢' : ''));
+        }
+        if (tgt.hp <= 0) {
+          killEntity(tgt, player);
+          detachHook();
+          return;
+        }
+      }
+      if (HOOK.drainTimer <= 0) detachHook();
+    }
+  }
+
   /* ================= INPUT ================= */
   const STICK = { active: false, id: null, ox: 0, oy: 0, px: 0, py: 0, radius: 80, dead: 5 };
   const ATK   = { active: false, id: null, x: 0, y: 0, radius: 56, timer: 0 };
@@ -1900,6 +2142,18 @@
       } else if (equippedSkill === 'attackspeed') {
         if (ATKSPD.cooldownTimer <= 0) {
           activateAtkSpeed();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'together') {
+        if (TOGETHER.cooldownTimer <= 0 && TOGETHER.pending <= 0) {
+          activateTogether();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'hook') {
+        if (HOOK.cooldownTimer <= 0 && HOOK.state === 'idle') {
+          activateHook();
           SKILLBTN.active = true;
           setTimeout(() => { SKILLBTN.active = false; }, 150);
         }
@@ -1993,6 +2247,7 @@
     player.autoAim = false;
     player.alive = true;
     player.trail.length = 0;
+    player.lastHitT = -99;
 
     arrows.length = 0;
     enemyBullets.length = 0;
@@ -2010,6 +2265,16 @@
 
     ATKSPD.cooldownTimer = 0;
     ATKSPD.activeTimer = 0;
+
+    TOGETHER.cooldownTimer = 0;
+    TOGETHER.pending = 0;
+    TOGETHER.volleyTimer = 0;
+
+    HOOK.cooldownTimer = 0;
+    HOOK.state = 'idle';
+    HOOK.target = null;
+    HOOK.drainTimer = 0;
+    HOOK.tickTimer = 0;
 
     STICK.active = false; STICK.id = null;
     ATK.active = false; ATK.id = null; ATK.timer = 0;
@@ -2101,6 +2366,23 @@
     if (SHIELD.activeTimer > 0) SHIELD.activeTimer -= dt;
     if (ATKSPD.cooldownTimer > 0) ATKSPD.cooldownTimer -= dt;
     if (ATKSPD.activeTimer > 0) ATKSPD.activeTimer -= dt;
+    if (equippedSkill === 'hook') updateHook(dt);
+
+    // pasif panah Healing Swime: gak kena damage selama HEAL_ARROW_IDLE detik -> pulih otomatis
+    if (equippedArrow === 'healingswime' && player.alive &&
+        player.hp < player.maxHp && gameTime - player.lastHitT > HEAL_ARROW_IDLE) {
+      player.hp = Math.min(player.maxHp, player.hp + HEAL_ARROW_RATE * dt);
+    }
+
+    if (TOGETHER.pending > 0) {
+      TOGETHER.volleyTimer -= dt;
+      if (TOGETHER.volleyTimer <= 0) {
+        shootTogetherVolley();
+        TOGETHER.pending -= 1;
+        TOGETHER.volleyTimer = TOGETHER.volleyDelay;
+      }
+    }
+    if (TOGETHER.cooldownTimer > 0) TOGETHER.cooldownTimer -= dt;
   }
 
   /* ---------- AI musuh ---------- */
@@ -2425,6 +2707,7 @@
           continue;
         }
         player.hp -= BULLET_DAMAGE;
+        player.lastHitT = gameTime;
         spawnParticles(b.x, b.y, 200, 8);
         spawnParticles(b.x, b.y, 130, 4);
         enemyBullets.splice(i, 1);
@@ -3039,6 +3322,8 @@
     const isLaser = equippedSkill === 'laser';
     const isShield = equippedSkill === 'shield';
     const isAtk = equippedSkill === 'attackspeed';
+    const isTogether = equippedSkill === 'together';
+    const isHook = equippedSkill === 'hook';
     let onCooldown = false, cooldownTimer = 0, cooldownTotal = 1;
     let charging = false, chargeAmount = 0;
 
@@ -3056,6 +3341,14 @@
       onCooldown = ATKSPD.cooldownTimer > 0;
       cooldownTimer = ATKSPD.cooldownTimer;
       cooldownTotal = ATKSPD.cooldown;
+    } else if (isTogether) {
+      onCooldown = TOGETHER.cooldownTimer > 0;
+      cooldownTimer = TOGETHER.cooldownTimer;
+      cooldownTotal = TOGETHER.cooldown;
+    } else if (isHook) {
+      onCooldown = HOOK.cooldownTimer > 0;
+      cooldownTimer = HOOK.cooldownTimer;
+      cooldownTotal = HOOK.cooldown;
     }
 
     ctx.save();
@@ -3130,6 +3423,21 @@
       ctx.moveTo(-11, -10); ctx.lineTo(-2, 0); ctx.lineTo(-11, 10);
       ctx.moveTo(2, -10); ctx.lineTo(11, 0); ctx.lineTo(2, 10);
       ctx.stroke();
+    } else if (isTogether) {
+      ctx.strokeStyle = onCooldown ? 'rgba(255,255,255,0.3)' : '#ffffff';
+      ctx.lineWidth = 2.6; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, 9); ctx.lineTo(-11, -11);
+      ctx.moveTo(0, 9); ctx.lineTo(0, -13);
+      ctx.moveTo(0, 9); ctx.lineTo(11, -11);
+      ctx.stroke();
+    } else if (isHook) {
+      ctx.strokeStyle = onCooldown ? 'rgba(255,255,255,0.3)' : '#ffffff';
+      ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -13); ctx.lineTo(0, 4);
+      ctx.arc(-3.5, 4, 3.5, 0, Math.PI * 1.4);
+      ctx.stroke();
     }
     ctx.restore();
     ctx.restore();
@@ -3149,6 +3457,46 @@
     ctx.beginPath();
     ctx.arc(player.x, player.y, player.size * 0.95, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawHookRope() {
+    if (HOOK.state === 'idle' || !HOOK.target || !HOOK.target.alive) return;
+    const tgt = HOOK.target;
+    let ex = tgt.x, ey = tgt.y;
+    if (HOOK.state === 'flying') {
+      const p = Math.min(1, HOOK.flyTimer / HOOK.flyDuration);
+      ex = player.x + (tgt.x - player.x) * p;
+      ey = player.y + (tgt.y - player.y) * p;
+    }
+
+    const tsec = performance.now() / 1000;
+    const dx = ex - player.x, dy = ey - player.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len, ny = dx / len;     // normal buat efek gelombang tali
+    const segs = Math.max(4, Math.round(len / 26));
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.shadowColor = 'rgba(160,220,255,0.9)';
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = HOOK.state === 'attached' ? 'rgba(180,235,255,0.95)' : 'rgba(220,240,255,0.85)';
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y);
+    for (let i = 1; i < segs; i++) {
+      const t = i / segs;
+      const wave = Math.sin(t * Math.PI) * 10 * Math.sin(tsec * 6 + t * 4);
+      ctx.lineTo(player.x + dx * t + nx * wave, player.y + dy * t + ny * wave);
+    }
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(ex, ey, 5, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 
@@ -3265,6 +3613,7 @@
       }
       drawShieldEffect();
       drawAtkSpeedEffect();
+      drawHookRope();
     }
 
     drawLaserFx();
