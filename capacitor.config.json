@@ -1,0 +1,9 @@
+{
+  "appId": "com.kyoko.squarezone",
+  "appName": "BlockZone",
+  "webDir": "www",
+  "backgroundColor": "#000000",
+  "android": {
+    "backgroundColor": "#000000"
+  }
+}
