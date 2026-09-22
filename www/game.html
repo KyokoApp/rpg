@@ -802,6 +802,8 @@
       together_desc: 'Tap untuk tembakan shotgun menyebar, 3x otomatis dengan jeda. Cooldown 30 detik.',
       hook_name: 'HOOK',
       hook_desc: 'Tap untuk menembakkan tali auto-hook ke musuh terdekat dalam jangkauan. Musuh yang kena akan disedot darahnya 10 tiap 0.5 detik selama 5 detik, darahnya jadi darah kamu. Kalau darah kamu penuh, sisanya jadi koin. Cooldown 30 detik.',
+      instaheal_name: 'INSTANT HEAL',
+      instaheal_desc: 'Tap sekali, darah langsung penuh seketika. Cooldown 30 detik.',
       shop_tab_skill: 'SKILL',
       shop_tab_arrow: 'ARROW',
       healingswime_name: 'HEALING SWIME',
@@ -865,6 +867,8 @@
       together_desc: 'Tap to fire a spreading shotgun blast, 3x automatically with a short delay between each. 30 second cooldown.',
       hook_name: 'HOOK',
       hook_desc: 'Tap to fire an auto-hook rope at the nearest enemy in range. On hit, it drains 10 HP every 0.5 seconds for 5 seconds, healing you with the drained blood. Once your HP is full, the rest turns into coins. 30 second cooldown.',
+      instaheal_name: 'INSTANT HEAL',
+      instaheal_desc: 'Tap once to instantly fill your HP back to full. 30 second cooldown.',
       shop_tab_skill: 'SKILL',
       shop_tab_arrow: 'ARROW',
       healingswime_name: 'HEALING SWIME',
@@ -1041,7 +1045,7 @@
   };
 
   let coins = 0;
-  let ownedSkills = { laser: false, shield: false, attackspeed: false, together: false, hook: false };
+  let ownedSkills = { laser: false, shield: false, attackspeed: false, together: false, hook: false, instaheal: false };
   let equippedSkill = null;
   let ownedArrows = { healingswime: false };
   let equippedArrow = null;
@@ -1053,7 +1057,7 @@
     try {
       const d = JSON.parse(localStorage.getItem('sq_zone_data') || '{}');
       coins = d.coins || 0;
-      ownedSkills = Object.assign({ laser:false, shield:false, attackspeed:false, together:false, hook:false }, d.ownedSkills || {});
+      ownedSkills = Object.assign({ laser:false, shield:false, attackspeed:false, together:false, hook:false, instaheal:false }, d.ownedSkills || {});
       equippedSkill = d.equippedSkill || null;
       ownedArrows = Object.assign({ healingswime: false }, d.ownedArrows || {});
       equippedArrow = d.equippedArrow || null;
@@ -1479,6 +1483,13 @@
       nameKey: 'hook_name',
       descKey: 'hook_desc',
       price: 500
+    },
+    {
+      id: 'instaheal',
+      icon: '✚',
+      nameKey: 'instaheal_name',
+      descKey: 'instaheal_desc',
+      price: 400
     }
   ];
 
@@ -1668,8 +1679,15 @@
   const ENEMY_COUNT  = 200;
   const BULLET_DAMAGE = 20;
   const KILL_SCORE   = 100;
-  const KILL_COINS   = 10;
+  const KILL_COINS   = 50;
   const ARROW_MAX_RANGE = 700;
+
+  const MAP_COIN_VALUE          = 10;    // nilai tiap koin di map
+  const MAP_COIN_MAX             = 18;    // maksimal koin yang boleh ada di map bersamaan
+  const MAP_COIN_SPAWN_INTERVAL  = 2.2;   // detik jeda spawn koin baru
+  const MAP_COIN_RADIUS          = 16;
+  const COIN_GRAB_SENSE_SQ       = 550 * 550;  // bot mulai ngincer koin sedekat ini
+  const COIN_GRAB_RUSH_SQ        = 260 * 260;  // sedekat ini, bot rebutan walau lagi ngejar target lain
 
   const ACC      = 3200;
   const FRICTION = 1.6;
@@ -1741,6 +1759,8 @@
 
   const HEAL_ARROW_IDLE  = 2;   // detik gak kena damage sebelum mulai heal otomatis
   const HEAL_ARROW_RATE  = 5;   // darah pulih per detik
+
+  const INSTAHEAL = { cooldown: SKILL_COOLDOWN, cooldownTimer: 0 };
 
   const arena = { x: -ARENA_SIZE/2, y: -ARENA_SIZE/2, w: ARENA_SIZE, h: ARENA_SIZE };
   const camera = { x: 0, y: 0 };
@@ -1844,6 +1864,65 @@
     enemies.length = 0;
     nextEnemyId = 1;
     for (let i = 0; i < ENEMY_COUNT; i++) enemies.push(createEnemy(i));
+  }
+
+  let mapCoins = [];
+  let mapCoinIdSeq = 1;
+  let mapCoinSpawnTimer = 0;
+
+  function spawnMapCoin() {
+    const pos = randomSpawnPos();
+    mapCoins.push({ id: mapCoinIdSeq++, x: pos.x, y: pos.y, bob: Math.random() * Math.PI * 2 });
+  }
+
+  function spawnInitialMapCoins() {
+    mapCoins.length = 0;
+    mapCoinSpawnTimer = MAP_COIN_SPAWN_INTERVAL;
+    for (let i = 0; i < MAP_COIN_MAX; i++) spawnMapCoin();
+  }
+
+  // Pemain & bot berebutan koin di map: siapa nyentuh duluan yang dapat
+  function updateMapCoins(dt) {
+    mapCoinSpawnTimer -= dt;
+    if (mapCoinSpawnTimer <= 0 && mapCoins.length < MAP_COIN_MAX) {
+      spawnMapCoin();
+      mapCoinSpawnTimer = MAP_COIN_SPAWN_INTERVAL;
+    }
+
+    const pr = player.size / 2 + MAP_COIN_RADIUS;
+    for (let i = mapCoins.length - 1; i >= 0; i--) {
+      const c = mapCoins[i];
+      let taken = false;
+
+      if (player.alive) {
+        const dx = c.x - player.x, dy = c.y - player.y;
+        if (dx * dx + dy * dy < pr * pr) {
+          coins += MAP_COIN_VALUE;
+          saveGameData();
+          refreshCoinLabels();
+          spawnParticles(c.x, c.y, 210, 10);
+          spawnPopup(player.x, player.y - player.size, '+' + MAP_COIN_VALUE + '¢');
+          taken = true;
+        }
+      }
+
+      if (!taken) {
+        for (let j = 0; j < enemies.length; j++) {
+          const e = enemies[j];
+          if (!e.alive) continue;
+          const er = e.size / 2 + MAP_COIN_RADIUS;
+          const dx = c.x - e.x, dy = c.y - e.y;
+          if (dx * dx + dy * dy < er * er) {
+            e.hp = Math.min(e.maxHp, e.hp + 15);   // bot juga "makan" koin, pulih dikit
+            spawnParticles(c.x, c.y, 210, 10);
+            taken = true;
+            break;
+          }
+        }
+      }
+
+      if (taken) mapCoins.splice(i, 1);
+    }
   }
 
   function findEnemyById(id) {
@@ -2021,6 +2100,15 @@
     TOGETHER.cooldownTimer = TOGETHER.cooldown;
   }
 
+  function activateInstaHeal() {
+    if (INSTAHEAL.cooldownTimer > 0) return;
+    player.hp = player.maxHp;
+    INSTAHEAL.cooldownTimer = INSTAHEAL.cooldown;
+    spawnParticles(player.x, player.y, 210, 16);
+    spawnPopup(player.x, player.y - player.size, '♥ FULL');
+    playShield();
+  }
+
   function findHookTarget() {
     // musuh terdekat yang masih dalam jangkauan HOOK_RANGE; di luar itu gak bisa nembak
     let best = null, bestD = HOOK_RANGE * HOOK_RANGE;
@@ -2157,6 +2245,12 @@
           SKILLBTN.active = true;
           setTimeout(() => { SKILLBTN.active = false; }, 150);
         }
+      } else if (equippedSkill === 'instaheal') {
+        if (INSTAHEAL.cooldownTimer <= 0) {
+          activateInstaHeal();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
       }
       return;
     }
@@ -2276,10 +2370,13 @@
     HOOK.drainTimer = 0;
     HOOK.tickTimer = 0;
 
+    INSTAHEAL.cooldownTimer = 0;
+
     STICK.active = false; STICK.id = null;
     ATK.active = false; ATK.id = null; ATK.timer = 0;
 
     spawnAllEnemies();
+    spawnInitialMapCoins();
   }
 
   function returnToMenu() {
@@ -2367,6 +2464,7 @@
     if (ATKSPD.cooldownTimer > 0) ATKSPD.cooldownTimer -= dt;
     if (ATKSPD.activeTimer > 0) ATKSPD.activeTimer -= dt;
     if (equippedSkill === 'hook') updateHook(dt);
+    if (INSTAHEAL.cooldownTimer > 0) INSTAHEAL.cooldownTimer -= dt;
 
     // pasif panah Healing Swime: gak kena damage selama HEAL_ARROW_IDLE detik -> pulih otomatis
     if (equippedArrow === 'healingswime' && player.alive &&
@@ -2558,6 +2656,22 @@
           mx = (e.wx - e.x) / wd; my = (e.wy - e.y) / wd;
         }
 
+        // rebutan koin di map: kalau ada yang deket, bot ikutan ngincer/ngerebut
+        if (mapCoins.length) {
+          let nc = null, ncD = COIN_GRAB_SENSE_SQ;
+          for (let k = 0; k < mapCoins.length; k++) {
+            const c = mapCoins[k];
+            const cdx = c.x - e.x, cdy = c.y - e.y;
+            const cd2 = cdx * cdx + cdy * cdy;
+            if (cd2 < ncD) { ncD = cd2; nc = c; }
+          }
+          if (nc && (!tgt || ncD < COIN_GRAB_RUSH_SQ)) {
+            const cdx = nc.x - e.x, cdy = nc.y - e.y;
+            const cl = Math.hypot(cdx, cdy) || 1;
+            mx = cdx / cl; my = cdy / cl;
+          }
+        }
+
         // hindari peluru (bot pemula skill < 0.35 tidak menghindar)
         if (skill > 0.35) {
           computeDodge(e);
@@ -2638,7 +2752,7 @@
       coins += KILL_COINS;
       saveGameData();
       refreshCoinLabels();
-      spawnPopup(victim.x, victim.y, '+' + bounty + '  +10¢');
+      spawnPopup(victim.x, victim.y, '+' + bounty + '  +' + KILL_COINS + '¢');
     } else if (killer) {
       killer.score = (killer.score || 0) + bounty;
       killer.hp = killer.maxHp;
@@ -2786,6 +2900,7 @@
 
     updatePlayer(dt);
     updateEnemies(dt);
+    updateMapCoins(dt);
     updateBullets(dt);
     updateParticles(dt);
 
@@ -2849,6 +2964,32 @@
     ctx.restore();
   }
 
+  // Koin di map: bulat kuning ngambang dikit, gampang keliatan dari jauh
+  function drawMapCoins() {
+    const m = 60;
+    const vx0 = camera.x - m, vx1 = camera.x + W + m;
+    const vy0 = camera.y - m, vy1 = camera.y + H + m;
+    const tsec = performance.now() / 1000;
+    for (let i = 0; i < mapCoins.length; i++) {
+      const c = mapCoins[i];
+      if (c.x < vx0 || c.x > vx1 || c.y < vy0 || c.y > vy1) continue;
+      const bob = Math.sin(tsec * 3 + c.bob) * 3;
+      ctx.save();
+      ctx.translate(c.x, c.y + bob);
+      ctx.shadowColor = 'rgba(255,214,90,0.9)';
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#ffd75e';
+      ctx.beginPath();
+      ctx.arc(0, 0, MAP_COIN_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, MAP_COIN_RADIUS - 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
   // Ekor: titik-titik posisi yang umurnya pendek. Digambar sebagai satu pita halus yang meruncing ke ujung.
   const TAIL_SCRATCH = 80;
   const TX = new Float32Array(TAIL_SCRATCH), TY = new Float32Array(TAIL_SCRATCH), TW = new Float32Array(TAIL_SCRATCH);
@@ -3324,6 +3465,7 @@
     const isAtk = equippedSkill === 'attackspeed';
     const isTogether = equippedSkill === 'together';
     const isHook = equippedSkill === 'hook';
+    const isInstaHeal = equippedSkill === 'instaheal';
     let onCooldown = false, cooldownTimer = 0, cooldownTotal = 1;
     let charging = false, chargeAmount = 0;
 
@@ -3349,6 +3491,10 @@
       onCooldown = HOOK.cooldownTimer > 0;
       cooldownTimer = HOOK.cooldownTimer;
       cooldownTotal = HOOK.cooldown;
+    } else if (isInstaHeal) {
+      onCooldown = INSTAHEAL.cooldownTimer > 0;
+      cooldownTimer = INSTAHEAL.cooldownTimer;
+      cooldownTotal = INSTAHEAL.cooldown;
     }
 
     ctx.save();
@@ -3437,6 +3583,13 @@
       ctx.beginPath();
       ctx.moveTo(0, -13); ctx.lineTo(0, 4);
       ctx.arc(-3.5, 4, 3.5, 0, Math.PI * 1.4);
+      ctx.stroke();
+    } else if (isInstaHeal) {
+      ctx.strokeStyle = onCooldown ? 'rgba(255,255,255,0.3)' : '#ffffff';
+      ctx.lineWidth = 3.2; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(0, -12); ctx.lineTo(0, 12);
+      ctx.moveTo(-12, 0); ctx.lineTo(12, 0);
       ctx.stroke();
     }
     ctx.restore();
@@ -3547,6 +3700,7 @@
     ctx.translate(-camera.x, -camera.y);
     drawGrid();
     drawArena();
+    drawMapCoins();
 
     const vMinX = camera.x - RENDER_MARGIN;
     const vMaxX = camera.x + W + RENDER_MARGIN;
