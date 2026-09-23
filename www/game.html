@@ -804,12 +804,26 @@
       hook_desc: 'Tap untuk menembakkan tali auto-hook ke musuh terdekat dalam jangkauan. Musuh yang kena akan disedot darahnya 10 tiap 0.5 detik selama 5 detik, darahnya jadi darah kamu. Kalau darah kamu penuh, sisanya jadi koin. Cooldown 30 detik.',
       instaheal_name: 'INSTANT HEAL',
       instaheal_desc: 'Tap sekali, darah langsung penuh seketika. Cooldown 30 detik.',
+      dash_name: 'DASH',
+      dash_desc: 'Tap untuk blink cepat ke arah gerak kita, sekejap kebal dari panah musuh. Cooldown 8 detik.',
+      shockwave_name: 'SHOCKWAVE',
+      shockwave_desc: 'Tap untuk ledakan dorongan di sekitar kita, musuh terdekat kedorong menjauh. Cooldown 30 detik.',
+      berserk_name: 'BERSERK',
+      berserk_desc: 'Tap untuk masuk mode berserk 6 detik: tembakan jauh lebih cepat & lebih sakit, tapi damage yang kita terima juga naik. Cooldown 30 detik.',
       shop_tab_skill: 'SKILL',
       shop_tab_arrow: 'ARROW',
       healingswime_name: 'HEALING SWIME',
       healingswime_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Kalau 2 detik gak kena damage, darah otomatis pulih 5 per detik.',
       dodgeadaptasi_name: 'DODGE ADAPTASI',
       dodgeadaptasi_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Otomatis dodge 1 panah musuh yang bakal kena, siap dipakai lagi tiap 2 detik.',
+      vampirearrow_name: 'VAMPIRE ARROW',
+      vampirearrow_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Tiap kena musuh, 35% damage-nya balik jadi darah kita.',
+      piercingarrow_name: 'PIERCING ARROW',
+      piercingarrow_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Panah tembus, bisa kena 1 musuh tambahan di belakangnya.',
+      explosivearrow_name: 'EXPLOSIVE ARROW',
+      explosivearrow_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Meledak pas kena musuh, splash damage ke musuh lain di sekitarnya.',
+      thornsarrow_name: 'THORNS ARROW',
+      thornsarrow_desc: 'Panah pasif, tampilannya sama putih seperti biasa. 50% damage yang kita terima dipantulin balik ke musuh yang nembak.',
       watch_ad: 'TONTON IKLAN',
       ad_label: 'IKLAN',
       ad_loading: 'MEMUAT IKLAN...',
@@ -871,12 +885,26 @@
       hook_desc: 'Tap to fire an auto-hook rope at the nearest enemy in range. On hit, it drains 10 HP every 0.5 seconds for 5 seconds, healing you with the drained blood. Once your HP is full, the rest turns into coins. 30 second cooldown.',
       instaheal_name: 'INSTANT HEAL',
       instaheal_desc: 'Tap once to instantly fill your HP back to full. 30 second cooldown.',
+      dash_name: 'DASH',
+      dash_desc: 'Tap to instantly blink in your movement direction, with a brief moment of immunity to enemy arrows. 8 second cooldown.',
+      shockwave_name: 'SHOCKWAVE',
+      shockwave_desc: 'Tap to unleash a knockback blast around you, pushing nearby enemies away. 30 second cooldown.',
+      berserk_name: 'BERSERK',
+      berserk_desc: 'Tap to enter berserk mode for 6 seconds: much faster and harder-hitting shots, but you also take more damage. 30 second cooldown.',
       shop_tab_skill: 'SKILL',
       shop_tab_arrow: 'ARROW',
       healingswime_name: 'HEALING SWIME',
       healingswime_desc: 'Passive arrow, looks the same plain white as always. If you avoid damage for 2 seconds, HP auto-heals 5 per second.',
       dodgeadaptasi_name: 'DODGE ADAPTASI',
       dodgeadaptasi_desc: 'Passive arrow, looks the same plain white as always. Automatically dodges one incoming enemy arrow, ready again every 2 seconds.',
+      vampirearrow_name: 'VAMPIRE ARROW',
+      vampirearrow_desc: 'Passive arrow, looks the same plain white as always. Every hit heals you for 35% of the damage dealt.',
+      piercingarrow_name: 'PIERCING ARROW',
+      piercingarrow_desc: 'Passive arrow, looks the same plain white as always. Your arrows pierce through and can hit one extra enemy behind the first.',
+      explosivearrow_name: 'EXPLOSIVE ARROW',
+      explosivearrow_desc: 'Passive arrow, looks the same plain white as always. Explodes on hit, dealing splash damage to nearby enemies.',
+      thornsarrow_name: 'THORNS ARROW',
+      thornsarrow_desc: 'Passive arrow, looks the same plain white as always. Reflects 50% of the damage you take back at whoever shot you.',
       watch_ad: 'WATCH AD',
       ad_label: 'ADS',
       ad_loading: 'LOADING AD...',
@@ -1049,9 +1077,9 @@
   };
 
   let coins = 0;
-  let ownedSkills = { laser: false, shield: false, attackspeed: false, together: false, hook: false, instaheal: false };
+  let ownedSkills = { laser: false, shield: false, attackspeed: false, together: false, hook: false, instaheal: false, dash: false, shockwave: false, berserk: false };
   let equippedSkill = null;
-  let ownedArrows = { healingswime: false, dodgeadaptasi: false };
+  let ownedArrows = { healingswime: false, dodgeadaptasi: false, vampirearrow: false, piercingarrow: false, explosivearrow: false, thornsarrow: false };
   let equippedArrow = null;
   let adProgress = { attackspeed: 0 };  // berapa iklan sudah ditonton per skill
   let lossCount = 0;                    // hitungan kalah sejak iklan terakhir
@@ -1061,9 +1089,9 @@
     try {
       const d = JSON.parse(localStorage.getItem('sq_zone_data') || '{}');
       coins = d.coins || 0;
-      ownedSkills = Object.assign({ laser:false, shield:false, attackspeed:false, together:false, hook:false, instaheal:false }, d.ownedSkills || {});
+      ownedSkills = Object.assign({ laser:false, shield:false, attackspeed:false, together:false, hook:false, instaheal:false, dash:false, shockwave:false, berserk:false }, d.ownedSkills || {});
       equippedSkill = d.equippedSkill || null;
-      ownedArrows = Object.assign({ healingswime: false, dodgeadaptasi: false }, d.ownedArrows || {});
+      ownedArrows = Object.assign({ healingswime: false, dodgeadaptasi: false, vampirearrow: false, piercingarrow: false, explosivearrow: false, thornsarrow: false }, d.ownedArrows || {});
       equippedArrow = d.equippedArrow || null;
       adProgress = Object.assign({ attackspeed: 0 }, d.adProgress || {});
       lossCount = d.lossCount || 0;
@@ -1494,6 +1522,27 @@
       nameKey: 'instaheal_name',
       descKey: 'instaheal_desc',
       price: 400
+    },
+    {
+      id: 'dash',
+      icon: '➤',
+      nameKey: 'dash_name',
+      descKey: 'dash_desc',
+      price: 350
+    },
+    {
+      id: 'shockwave',
+      icon: '◎',
+      nameKey: 'shockwave_name',
+      descKey: 'shockwave_desc',
+      price: 450
+    },
+    {
+      id: 'berserk',
+      icon: '🔺',
+      nameKey: 'berserk_name',
+      descKey: 'berserk_desc',
+      price: 600
     }
   ];
 
@@ -1511,6 +1560,34 @@
       nameKey: 'dodgeadaptasi_name',
       descKey: 'dodgeadaptasi_desc',
       price: 500
+    },
+    {
+      id: 'vampirearrow',
+      icon: '🩸',
+      nameKey: 'vampirearrow_name',
+      descKey: 'vampirearrow_desc',
+      price: 600
+    },
+    {
+      id: 'piercingarrow',
+      icon: '➶',
+      nameKey: 'piercingarrow_name',
+      descKey: 'piercingarrow_desc',
+      price: 550
+    },
+    {
+      id: 'explosivearrow',
+      icon: '💥',
+      nameKey: 'explosivearrow_name',
+      descKey: 'explosivearrow_desc',
+      price: 650
+    },
+    {
+      id: 'thornsarrow',
+      icon: '🌵',
+      nameKey: 'thornsarrow_name',
+      descKey: 'thornsarrow_desc',
+      price: 550
     }
   ];
 
@@ -1774,7 +1851,35 @@
   const DODGE_ADAPT_COOLDOWN = 2;   // jeda antar dodge otomatis
   let dodgeCooldownTimer = 0;
 
+  const VAMPIRE_LIFESTEAL   = 0.35;  // persen damage yang kena jadi darah balik ke kita
+  const PIERCING_EXTRA_HIT  = 1;     // tembus berapa musuh tambahan (dipakai buat teks deskripsi)
+  const EXPLOSIVE_RADIUS    = 90;
+  const EXPLOSIVE_SPLASH    = 14;    // damage splash ke musuh lain di sekitar titik kena
+  const THORNS_REFLECT      = 0.5;   // persen damage yang kita terima, dipantulin ke penembaknya
+
+  function spawnExplosiveBlast(x, y, excludeEnemy) {
+    spawnParticles(x, y, 255, 18);
+    spawnParticles(x, y, 200, 10);
+    for (const e of enemies) {
+      if (!e.alive || e === excludeEnemy) continue;
+      const dx = e.x - x, dy = e.y - y;
+      if (dx * dx + dy * dy > EXPLOSIVE_RADIUS * EXPLOSIVE_RADIUS) continue;
+      e.hp -= EXPLOSIVE_SPLASH;
+      e.lastHitBy = player; e.lastHitT = gameTime;
+      if (e.hp <= 0) killEntity(e, player);
+    }
+  }
+
   const INSTAHEAL = { cooldown: SKILL_COOLDOWN, cooldownTimer: 0 };
+
+  const DASH = { cooldown: 8, cooldownTimer: 0, distance: 260, iframeTimer: 0, iframeDuration: 0.18 };
+  const SHOCKWAVE = { cooldown: SKILL_COOLDOWN, cooldownTimer: 0, radius: 260, push: 200 };
+  const BERSERK = { cooldown: SKILL_COOLDOWN, cooldownTimer: 0, duration: 6, activeTimer: 0, fireMult: 2.2, dmgMult: 1.6, takenMult: 1.5 };
+
+  const shockFx = [];
+  function spawnShockRingFx(x, y) {
+    shockFx.push({ x, y, life: 0, maxLife: 0.5 });
+  }
 
   const arena = { x: -ARENA_SIZE/2, y: -ARENA_SIZE/2, w: ARENA_SIZE, h: ARENA_SIZE };
   const camera = { x: 0, y: 0 };
@@ -2026,7 +2131,9 @@
   }
 
   const particles = [];
+  const MAX_PARTICLES = 600;
   function spawnParticles(x, y, shade, count) {
+    if (particles.length > MAX_PARTICLES) return;   // cegah lag spike pas efek numpuk bareng
     for (let i = 0; i < count; i++) {
       const ang = Math.random() * Math.PI * 2;
       const sp = 100 + Math.random() * 260;
@@ -2136,6 +2243,67 @@
     spawnParticles(player.x, player.y, 210, 16);
     spawnPopup(player.x, player.y - player.size, '♥ FULL');
     playShield();
+  }
+
+  function spawnDashTrail(x1, y1, x2, y2) {
+    const steps = 6;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      spawnParticles(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, 230, 5);
+    }
+  }
+
+  function activateDash() {
+    if (DASH.cooldownTimer > 0) return;
+    let dx = player.vx, dy = player.vy;
+    let len = Math.hypot(dx, dy);
+    if (len < 20) { dx = player.aimX; dy = player.aimY; len = Math.hypot(dx, dy) || 1; }
+    dx /= len; dy /= len;
+
+    const fromX = player.x, fromY = player.y;
+    const pad = 40;
+    let toX = player.x + dx * DASH.distance;
+    let toY = player.y + dy * DASH.distance;
+    toX = Math.max(arena.x + pad, Math.min(arena.x + arena.w - pad, toX));
+    toY = Math.max(arena.y + pad, Math.min(arena.y + arena.h - pad, toY));
+
+    player.x = toX; player.y = toY;
+    DASH.cooldownTimer = DASH.cooldown;
+    DASH.iframeTimer = DASH.iframeDuration;
+    spawnDashTrail(fromX, fromY, toX, toY);
+    spawnParticles(fromX, fromY, 210, 14);
+    spawnParticles(toX, toY, 255, 10);
+    playHaste();
+  }
+
+  function activateShockwave() {
+    if (SHOCKWAVE.cooldownTimer > 0) return;
+    SHOCKWAVE.cooldownTimer = SHOCKWAVE.cooldown;
+    spawnShockRingFx(player.x, player.y);
+    spawnParticles(player.x, player.y, 220, 20);
+    playHaste();
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dx = e.x - player.x, dy = e.y - player.y;
+      const d = Math.hypot(dx, dy);
+      if (d > SHOCKWAVE.radius || d < 0.01) continue;
+      const push = (1 - d / SHOCKWAVE.radius) * SHOCKWAVE.push;
+      const nx = dx / d, ny = dy / d;
+      e.x += nx * push; e.y += ny * push;
+      e.x = Math.max(arena.x + 20, Math.min(arena.x + arena.w - 20, e.x));
+      e.y = Math.max(arena.y + 20, Math.min(arena.y + arena.h - 20, e.y));
+      e.vx = nx * push * 2; e.vy = ny * push * 2;
+      spawnParticles(e.x, e.y, 200, 6);
+    }
+  }
+
+  function activateBerserk() {
+    if (BERSERK.cooldownTimer > 0) return;
+    BERSERK.activeTimer = BERSERK.duration;
+    BERSERK.cooldownTimer = BERSERK.cooldown;
+    ATK.timer = Math.min(ATK.timer, ARROW_FIRE_RATE / BERSERK.fireMult);
+    playHaste();
+    spawnParticles(player.x, player.y, 250, 24);
   }
 
   function findHookTarget() {
@@ -2280,6 +2448,24 @@
           SKILLBTN.active = true;
           setTimeout(() => { SKILLBTN.active = false; }, 150);
         }
+      } else if (equippedSkill === 'dash') {
+        if (DASH.cooldownTimer <= 0) {
+          activateDash();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'shockwave') {
+        if (SHOCKWAVE.cooldownTimer <= 0) {
+          activateShockwave();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'berserk') {
+        if (BERSERK.cooldownTimer <= 0) {
+          activateBerserk();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
       }
       return;
     }
@@ -2402,6 +2588,14 @@
 
     INSTAHEAL.cooldownTimer = 0;
 
+    DASH.cooldownTimer = 0;
+    DASH.iframeTimer = 0;
+
+    SHOCKWAVE.cooldownTimer = 0;
+
+    BERSERK.cooldownTimer = 0;
+    BERSERK.activeTimer = 0;
+
     STICK.active = false; STICK.id = null;
     ATK.active = false; ATK.id = null; ATK.timer = 0;
 
@@ -2477,7 +2671,10 @@
       ATK.timer -= dt;
       while (ATK.timer <= 0) {
         shootArrow();
-        ATK.timer += (ATKSPD.activeTimer > 0 ? ARROW_FIRE_RATE / ATKSPD.mult : ARROW_FIRE_RATE);
+        let fireRate = ARROW_FIRE_RATE;
+        if (ATKSPD.activeTimer > 0) fireRate = ARROW_FIRE_RATE / ATKSPD.mult;
+        else if (BERSERK.activeTimer > 0) fireRate = ARROW_FIRE_RATE / BERSERK.fireMult;
+        ATK.timer += fireRate;
       }
     }
 
@@ -2495,6 +2692,11 @@
     if (ATKSPD.activeTimer > 0) ATKSPD.activeTimer -= dt;
     if (equippedSkill === 'hook') updateHook(dt);
     if (INSTAHEAL.cooldownTimer > 0) INSTAHEAL.cooldownTimer -= dt;
+    if (DASH.cooldownTimer > 0) DASH.cooldownTimer -= dt;
+    if (DASH.iframeTimer > 0) DASH.iframeTimer -= dt;
+    if (SHOCKWAVE.cooldownTimer > 0) SHOCKWAVE.cooldownTimer -= dt;
+    if (BERSERK.cooldownTimer > 0) BERSERK.cooldownTimer -= dt;
+    if (BERSERK.activeTimer > 0) BERSERK.activeTimer -= dt;
 
     // pasif panah Healing Swime: gak kena damage selama HEAL_ARROW_IDLE detik -> pulih otomatis
     if (equippedArrow === 'healingswime' && player.alive &&
@@ -2607,235 +2809,4 @@
     let x, y;
     if (r < 0.30) {
       const o = enemies[(Math.random() * enemies.length) | 0];
-      if (o && o !== e && o.alive) { x = o.x; y = o.y; }
-    } else if (r < 0.38 && player.alive && Math.abs(e.x - player.x) + Math.abs(e.y - player.y) < 7000) {
-      // bot yang sudah lumayan dekat kadang "mampir" ke sekitar pemain
-      const a = Math.random() * Math.PI * 2, d = 900 + Math.random() * 1800;
-      x = player.x + Math.cos(a) * d;
-      y = player.y + Math.sin(a) * d;
-    }
-    if (x === undefined) {
-      x = (Math.random() - 0.5) * 2 * lim;
-      y = (Math.random() - 0.5) * 2 * lim;
-    }
-    e.wx = Math.max(-lim, Math.min(lim, x));
-    e.wy = Math.max(-lim, Math.min(lim, y));
-    e.wpTimer = 6 + Math.random() * 6;
-  }
-
-  function updateEnemies(dt) {
-    const level = getEnemyLevel();
-    const ENEMY_MAXSPEED = ENEMY_MAXSPEED_BASE * (1 + level * 0.05);
-    const ENEMY_SHOOT_RANGE = ENEMY_SHOOT_RANGE_BASE + level * 45;
-    const WALL = 650;
-
-    for (let i = 0; i < enemies.length; i++) {
-      const e = enemies[i];
-      if (!e.alive) continue;
-
-      const dxp = e.x - player.x, dyp = e.y - player.y;
-      const active = dxp * dxp + dyp * dyp < AI_ACTIVE_RANGE_SQ;
-      const skill = enemySkill(e, level);
-
-      // pulih pelan-pelan kalau lama tidak kena tembak
-      if (e.hp < e.maxHp && gameTime - e.lastHitT > 5) e.hp = Math.min(e.maxHp, e.hp + 5 * dt);
-
-      let mx = 0, my = 0;
-
-      if (active) {
-        e.retargetTimer -= dt;
-        if (e.retargetTimer <= 0) {
-          e.retargetTimer = AI_RETARGET_MIN + Math.random() * 0.6;
-          e.tgt = pickTarget(e, skill);
-        }
-        let tgt = e.tgt;
-        if (tgt && !tgt.alive) tgt = e.tgt = null;
-        if (tgt) {
-          const tx = tgt.x - e.x, ty = tgt.y - e.y;
-          const td = Math.hypot(tx, ty) || 1;
-          if (td > AI_SENSE * 1.25) {
-            e.tgt = tgt = null;   // target sudah terlalu jauh / sudah respawn di tempat lain
-          } else {
-            const nx = tx / td, ny = ty / td;
-            e.strafeTimer -= dt;
-            if (e.strafeTimer <= 0) {
-              e.strafeTimer = 0.7 + Math.random() * 1.6;
-              if (Math.random() < 0.7) e.strafeDir = -e.strafeDir;
-            }
-            const sx = -ny * e.strafeDir, sy = nx * e.strafeDir;
-            const hurt = e.hp < e.maxHp * 0.3 && skill > 0.4;
-            if (hurt) { mx = -nx * 0.9 + sx * 0.5; my = -ny * 0.9 + sy * 0.5; }               // kabur sambil zig-zag
-            else if (td > e.pref + 80) { mx = nx + sx * 0.35; my = ny + sy * 0.35; }         // mendekat sambil melengkung
-            else if (td < e.pref - 80) { mx = -nx * 0.8 + sx * 0.5; my = -ny * 0.8 + sy * 0.5; }
-            else { mx = sx; my = sy; }                                                       // jaga jarak, muter-muter
-
-            e.fireTimer -= dt;
-            const holdFire = tgt === player && SHIELD.activeTimer > 0 && skill > 0.5;        // jangan buang peluru ke shield
-            if (e.fireTimer <= 0 && td < ENEMY_SHOOT_RANGE && !holdFire) {
-              enemyShoot(e, tgt, skill);
-              e.fireTimer = ENEMY_FIRE_RATE_BASE * (1.15 - 0.55 * skill) * Math.max(0.6, 1 - level * 0.06)
-                          + Math.random() * 0.25;
-              if (hurt) e.fireTimer *= 1.4;
-            }
-          }
-        }
-        if (!tgt) {
-          e.wpTimer -= dt;
-          const wdx = e.wx - e.x, wdy = e.wy - e.y;
-          if (e.wpTimer <= 0 || wdx * wdx + wdy * wdy < 160 * 160) pickWaypoint(e);
-          const wd = Math.hypot(e.wx - e.x, e.wy - e.y) || 1;
-          mx = (e.wx - e.x) / wd; my = (e.wy - e.y) / wd;
-        }
-
-        // rebutan koin di map: kalau ada yang deket, bot ikutan ngincer/ngerebut
-        if (mapCoins.length) {
-          let nc = null, ncD = COIN_GRAB_SENSE_SQ;
-          for (let k = 0; k < mapCoins.length; k++) {
-            const c = mapCoins[k];
-            const cdx = c.x - e.x, cdy = c.y - e.y;
-            const cd2 = cdx * cdx + cdy * cdy;
-            if (cd2 < ncD) { ncD = cd2; nc = c; }
-          }
-          if (nc && (!tgt || ncD < COIN_GRAB_RUSH_SQ)) {
-            const cdx = nc.x - e.x, cdy = nc.y - e.y;
-            const cl = Math.hypot(cdx, cdy) || 1;
-            mx = cdx / cl; my = cdy / cl;
-          }
-        }
-
-        // hindari peluru (bot pemula skill < 0.35 tidak menghindar)
-        if (skill > 0.35) {
-          computeDodge(e);
-          mx += e.dodgeX * 2.4 * skill;
-          my += e.dodgeY * 2.4 * skill;
-        }
-        // jangan numpuk dengan bot lain
-        for (let j = 0; j < enemies.length; j++) {
-          const o = enemies[j];
-          if (o === e || !o.alive) continue;
-          const ox = e.x - o.x, oy = e.y - o.y;
-          const d2 = ox * ox + oy * oy;
-          if (d2 < 90 * 90 && d2 > 0.01) {
-            const d = Math.sqrt(d2);
-            const k = (1 - d / 90) * 1.5;
-            mx += ox / d * k; my += oy / d * k;
-          }
-        }
-      } else {
-        // jauh dari pemain: cuma jalan-jalan
-        e.tgt = null;
-        e.wpTimer -= dt;
-        const wdx = e.wx - e.x, wdy = e.wy - e.y;
-        if (e.wpTimer <= 0 || wdx * wdx + wdy * wdy < 160 * 160) pickWaypoint(e);
-        const wd = Math.hypot(e.wx - e.x, e.wy - e.y) || 1;
-        mx = (e.wx - e.x) / wd; my = (e.wy - e.y) / wd;
-      }
-
-      // belok menjauh dari dinding arena
-      const hx = e.x - arena.x, hy = e.y - arena.y;
-      if (hx < WALL) mx += (1 - hx / WALL) * 2;
-      else if (arena.w - hx < WALL) mx -= (1 - (arena.w - hx) / WALL) * 2;
-      if (hy < WALL) my += (1 - hy / WALL) * 2;
-      else if (arena.h - hy < WALL) my -= (1 - (arena.h - hy) / WALL) * 2;
-
-      const ml = Math.hypot(mx, my);
-      if (ml > 1) { mx /= ml; my /= ml; }
-
-      e.vx += mx * ACC * dt;
-      e.vy += my * ACC * dt;
-      const f = Math.exp(-FRICTION * dt);
-      e.vx *= f; e.vy *= f;
-
-      const maxSp = ENEMY_MAXSPEED * (e.tgt ? 1 : 0.65);
-      let sp = Math.hypot(e.vx, e.vy);
-      if (sp > maxSp) {
-        e.vx = e.vx / sp * maxSp;
-        e.vy = e.vy / sp * maxSp;
-        sp = maxSp;
-      }
-      e.x += e.vx * dt;
-      e.y += e.vy * dt;
-
-      if (sp > 2) {
-        const spinBoost = 1 + (sp / ENEMY_MAXSPEED) * 0.5;
-        e.angle += sp * dt * 0.012 * spinBoost;
-      }
-
-      const h = e.size / 2;
-      e.x = Math.max(arena.x + h, Math.min(arena.x + arena.w - h, e.x));
-      e.y = Math.max(arena.y + h, Math.min(arena.y + arena.h - h, e.y));
-
-      if (settings.enemyTrail && active) pushTail(e);
-      e.displayHp += (e.hp - e.displayHp) * Math.min(1, dt * 8);
-    }
-  }
-
-  function killEntity(victim, killer) {
-    spawnParticles(victim.x, victim.y, 255, 30);
-    spawnParticles(victim.x, victim.y, 150, 15);
-    playKill();
-
-    // bonus: makin tinggi skor korban, makin besar hadiahnya (dihitung sebelum korban di-reset)
-    const bounty = KILL_SCORE + Math.round((victim.score || 0) * KILL_BOUNTY_RATIO);
-    if (killer === player) {
-      player.score += bounty;
-      player.hp = player.maxHp;
-      coins += KILL_COINS;
-      saveGameData();
-      refreshCoinLabels();
-      spawnPopup(victim.x, victim.y, '+' + bounty + '  +' + KILL_COINS + '¢');
-    } else if (killer) {
-      killer.score = (killer.score || 0) + bounty;
-      killer.hp = killer.maxHp;
-    }
-
-    if (victim === player) {
-      player.alive = false;
-      player.hp = 0;
-      gameState = 'dead';
-      deathTimer = 1.8;
-      playDeath();
-      spawnParticles(player.x, player.y, 255, 40);
-      spawnParticles(player.x, player.y, 120, 25);
-    } else {
-      respawnEnemy(victim);
-    }
-  }
-
-  function updateBullets(dt) {
-    for (let i = arrows.length - 1; i >= 0; i--) {
-      const a = arrows[i];
-      const dxf = a.vx * dt, dyf = a.vy * dt;
-      a.x += dxf; a.y += dyf;
-      a.life += dt;
-      a.traveled += Math.hypot(dxf, dyf);
-
-      if (a.life > 3 || a.traveled > ARROW_MAX_RANGE ||
-          a.x < arena.x || a.x > arena.x + arena.w ||
-          a.y < arena.y || a.y > arena.y + arena.h) {
-        arrows.splice(i, 1); continue;
-      }
-
-      for (const e of enemies) {
-        if (!e.alive) continue;
-        const dx = e.x - a.x, dy = e.y - a.y;
-        if (dx*dx + dy*dy > 900) continue;
-        e.hp -= BULLET_DAMAGE;
-        e.lastHitBy = player; e.lastHitT = gameTime;
-        spawnParticles(a.x, a.y, 255, 8);
-        spawnParticles(a.x, a.y, 150, 4);
-        arrows.splice(i, 1);
-        if (e.hp <= 0) killEntity(e, player);
-        break;
-      }
-    }
-
-    for (let i = enemyBullets.length - 1; i >= 0; i--) {
-      const b = enemyBullets[i];
-      const dxf = b.vx * dt, dyf = b.vy * dt;
-      b.x += dxf; b.y += dyf;
-      b.life += dt;
-      b.traveled += Math.hypot(dxf, dyf);
-
-      if (b.life > 3 || b.traveled > ARROW_MAX_RANGE ||
-          b.x 
+      if (o && o !== e && o.alive) {
