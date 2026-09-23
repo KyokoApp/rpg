@@ -808,6 +808,8 @@
       shop_tab_arrow: 'ARROW',
       healingswime_name: 'HEALING SWIME',
       healingswime_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Kalau 2 detik gak kena damage, darah otomatis pulih 5 per detik.',
+      dodgeadaptasi_name: 'DODGE ADAPTASI',
+      dodgeadaptasi_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Otomatis dodge 1 panah musuh yang bakal kena, siap dipakai lagi tiap 2 detik.',
       watch_ad: 'TONTON IKLAN',
       ad_label: 'IKLAN',
       ad_loading: 'MEMUAT IKLAN...',
@@ -873,6 +875,8 @@
       shop_tab_arrow: 'ARROW',
       healingswime_name: 'HEALING SWIME',
       healingswime_desc: 'Passive arrow, looks the same plain white as always. If you avoid damage for 2 seconds, HP auto-heals 5 per second.',
+      dodgeadaptasi_name: 'DODGE ADAPTASI',
+      dodgeadaptasi_desc: 'Passive arrow, looks the same plain white as always. Automatically dodges one incoming enemy arrow, ready again every 2 seconds.',
       watch_ad: 'WATCH AD',
       ad_label: 'ADS',
       ad_loading: 'LOADING AD...',
@@ -1047,7 +1051,7 @@
   let coins = 0;
   let ownedSkills = { laser: false, shield: false, attackspeed: false, together: false, hook: false, instaheal: false };
   let equippedSkill = null;
-  let ownedArrows = { healingswime: false };
+  let ownedArrows = { healingswime: false, dodgeadaptasi: false };
   let equippedArrow = null;
   let adProgress = { attackspeed: 0 };  // berapa iklan sudah ditonton per skill
   let lossCount = 0;                    // hitungan kalah sejak iklan terakhir
@@ -1059,7 +1063,7 @@
       coins = d.coins || 0;
       ownedSkills = Object.assign({ laser:false, shield:false, attackspeed:false, together:false, hook:false, instaheal:false }, d.ownedSkills || {});
       equippedSkill = d.equippedSkill || null;
-      ownedArrows = Object.assign({ healingswime: false }, d.ownedArrows || {});
+      ownedArrows = Object.assign({ healingswime: false, dodgeadaptasi: false }, d.ownedArrows || {});
       equippedArrow = d.equippedArrow || null;
       adProgress = Object.assign({ attackspeed: 0 }, d.adProgress || {});
       lossCount = d.lossCount || 0;
@@ -1500,6 +1504,13 @@
       nameKey: 'healingswime_name',
       descKey: 'healingswime_desc',
       price: 500
+    },
+    {
+      id: 'dodgeadaptasi',
+      icon: '💨',
+      nameKey: 'dodgeadaptasi_name',
+      descKey: 'dodgeadaptasi_desc',
+      price: 500
     }
   ];
 
@@ -1721,7 +1732,7 @@
 
   const LASER = {
     radius: 44, chargeTime: 1.2, minCharge: 0.5,
-    maxRange: 2200, cooldown: SKILL_COOLDOWN,
+    maxRange: 2200, cooldown: SKILL_COOLDOWN, killCooldown: 15,
     active: false, id: null,
     charging: false, chargeAmount: 0,
     cooldownTimer: 0, chargeSoundPlayed: false
@@ -1759,6 +1770,9 @@
 
   const HEAL_ARROW_IDLE  = 2;   // detik gak kena damage sebelum mulai heal otomatis
   const HEAL_ARROW_RATE  = 5;   // darah pulih per detik
+
+  const DODGE_ADAPT_COOLDOWN = 2;   // jeda antar dodge otomatis
+  let dodgeCooldownTimer = 0;
 
   const INSTAHEAL = { cooldown: SKILL_COOLDOWN, cooldownTimer: 0 };
 
@@ -2031,8 +2045,8 @@
   }
 
   const laserFx = [];
-  function spawnLaserFx(x1, y1, x2, y2) {
-    laserFx.push({ x1, y1, x2, y2, life: 0, maxLife: 0.28 });
+  function spawnLaserFx(x1, y1, x2, y2, locked) {
+    laserFx.push({ x1, y1, x2, y2, life: 0, maxLife: 0.34, locked: !!locked });
   }
 
   function getAimTarget() {
@@ -2046,30 +2060,45 @@
     return best;
   }
 
-  function fireLaser() {
-    const ax = player.aimX, ay = player.aimY;
-    let hitX = player.x + ax * LASER.maxRange;
-    let hitY = player.y + ay * LASER.maxRange;
-    let bestT = LASER.maxRange;
-    let hitEnemy = null;
+  // Musuh terdekat dalam jangkauan laser buat auto-lock
+  function findLaserTarget() {
+    let best = null, bestD = LASER.maxRange * LASER.maxRange;
     for (const e of enemies) {
       if (!e.alive) continue;
-      const ex = e.x - player.x, ey = e.y - player.y;
-      const tt = ex * ax + ey * ay;
-      if (tt < 0 || tt > LASER.maxRange) continue;
-      const perpX = ex - ax * tt, perpY = ey - ay * tt;
-      const perpSq = perpX*perpX + perpY*perpY;
-      const rad = e.size / 2 + 4;
-      if (perpSq <= rad * rad && tt < bestT) { bestT = tt; hitEnemy = e; }
+      const dx = e.x - player.x, dy = e.y - player.y;
+      const d = dx*dx + dy*dy;
+      if (d < bestD) { bestD = d; best = e; }
     }
-    if (hitEnemy) {
-      hitX = player.x + ax * bestT;
-      hitY = player.y + ay * bestT;
-      killEntity(hitEnemy, player);
+    return best;
+  }
+
+  function fireLaser() {
+    const lockTgt = findLaserTarget();
+    let ax = player.aimX, ay = player.aimY;
+    let hitEnemy = null;
+    let hitX, hitY;
+
+    if (lockTgt) {
+      // auto-lock: beam diarahkan pasti ke target, gak meleset
+      const dx = lockTgt.x - player.x, dy = lockTgt.y - player.y;
+      const d = Math.hypot(dx, dy) || 1;
+      ax = dx / d; ay = dy / d;
+      hitEnemy = lockTgt;
+      hitX = lockTgt.x; hitY = lockTgt.y;
+    } else {
+      // gak ada musuh dalam jangkauan -> tembak lurus ke arah aim manual (skillshot lama)
+      hitX = player.x + ax * LASER.maxRange;
+      hitY = player.y + ay * LASER.maxRange;
     }
-    spawnLaserFx(player.x, player.y, hitX, hitY);
-    spawnParticles(hitX, hitY, 255, 20);
+
+    const killed = !!hitEnemy;
+    if (hitEnemy) killEntity(hitEnemy, player);
+
+    spawnLaserFx(player.x, player.y, hitX, hitY, killed);
+    spawnParticles(player.x, player.y, 220, 10);
+    spawnParticles(hitX, hitY, 255, killed ? 34 : 20);
     playLaserFire();
+    return killed;
   }
 
   function activateShield() {
@@ -2290,8 +2319,8 @@
     if (ATK.active && e.pointerId === ATK.id) { ATK.active = false; ATK.id = null; ATK.timer = 0; }
     if (LASER.charging && e.pointerId === LASER.id) {
       if (LASER.chargeAmount >= LASER.minCharge) {
-        fireLaser();
-        LASER.cooldownTimer = LASER.cooldown;
+        const killed = fireLaser();
+        LASER.cooldownTimer = killed ? LASER.killCooldown : LASER.cooldown;
       }
       LASER.charging = false;
       LASER.id = null;
@@ -2342,6 +2371,7 @@
     player.alive = true;
     player.trail.length = 0;
     player.lastHitT = -99;
+    dodgeCooldownTimer = 0;
 
     arrows.length = 0;
     enemyBullets.length = 0;
@@ -2471,6 +2501,7 @@
         player.hp < player.maxHp && gameTime - player.lastHitT > HEAL_ARROW_IDLE) {
       player.hp = Math.min(player.maxHp, player.hp + HEAL_ARROW_RATE * dt);
     }
+    if (dodgeCooldownTimer > 0) dodgeCooldownTimer -= dt;
 
     if (TOGETHER.pending > 0) {
       TOGETHER.volleyTimer -= dt;
@@ -2807,991 +2838,4 @@
       b.traveled += Math.hypot(dxf, dyf);
 
       if (b.life > 3 || b.traveled > ARROW_MAX_RANGE ||
-          b.x < arena.x || b.x > arena.x + arena.w ||
-          b.y < arena.y || b.y > arena.y + arena.h) {
-        enemyBullets.splice(i, 1); continue;
-      }
-
-      const pdx = player.x - b.x, pdy = player.y - b.y;
-      if (player.alive && pdx*pdx + pdy*pdy < 900) {
-        if (SHIELD.activeTimer > 0) {
-          spawnParticles(b.x, b.y, 220, 10);
-          spawnParticles(b.x, b.y, 180, 6);
-          enemyBullets.splice(i, 1);
-          continue;
-        }
-        player.hp -= BULLET_DAMAGE;
-        player.lastHitT = gameTime;
-        spawnParticles(b.x, b.y, 200, 8);
-        spawnParticles(b.x, b.y, 130, 4);
-        enemyBullets.splice(i, 1);
-        if (player.hp <= 0) {
-          const killer = (typeof b.ownerId === 'number') ? findEnemyById(b.ownerId) : null;
-          killEntity(player, killer);
-        }
-        continue;
-      }
-
-      for (const e of enemies) {
-        if (!e.alive) continue;
-        if (e.id === b.ownerId) continue;
-        const dx = e.x - b.x, dy = e.y - b.y;
-        if (dx*dx + dy*dy > 900) continue;
-        e.hp -= BULLET_DAMAGE;
-        e.lastHitBy = (typeof b.ownerId === 'number') ? findEnemyById(b.ownerId) : null;
-        e.lastHitT = gameTime;
-        spawnParticles(b.x, b.y, 255, 8);
-        enemyBullets.splice(i, 1);
-        if (e.hp <= 0) {
-          const killer = (typeof b.ownerId === 'number') ? findEnemyById(b.ownerId) : null;
-          killEntity(e, killer);
-        }
-        break;
-      }
-    }
-
-    for (let i = arrows.length - 1; i >= 0; i--) {
-      const a = arrows[i];
-      for (let j = enemyBullets.length - 1; j >= 0; j--) {
-        const b = enemyBullets[j];
-        const dx = a.x - b.x, dy = a.y - b.y;
-        if (dx*dx + dy*dy < 144) {
-          const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-          spawnParticles(cx, cy, 255, 12);
-          spawnParticles(cx, cy, 170, 6);
-          arrows.splice(i, 1);
-          enemyBullets.splice(j, 1);
-          break;
-        }
-      }
-    }
-  }
-
-  function updateParticles(dt) {
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.x += p.vx * dt; p.y += p.vy * dt;
-      p.vx *= 0.94; p.vy *= 0.94;
-      p.life += dt;
-      if (p.life >= p.maxLife) particles.splice(i, 1);
-    }
-    for (let i = popups.length - 1; i >= 0; i--) {
-      const p = popups[i];
-      p.y -= 40 * dt; p.life += dt;
-      if (p.life >= p.maxLife) popups.splice(i, 1);
-    }
-    for (let i = laserFx.length - 1; i >= 0; i--) {
-      const l = laserFx[i];
-      l.life += dt;
-      if (l.life >= l.maxLife) laserFx.splice(i, 1);
-    }
-  }
-
-  function update(dt) {
-    if (!gameStarted) return;
-    gameTime += dt;
-
-    if (gameState === 'dead') {
-      updateParticles(dt);
-      deathTimer -= dt;
-      if (deathTimer <= 0) returnToMenu();
-      return;
-    }
-
-    updatePlayer(dt);
-    updateEnemies(dt);
-    updateMapCoins(dt);
-    updateBullets(dt);
-    updateParticles(dt);
-
-    player.displayHp += (player.hp - player.displayHp) * Math.min(1, dt * 8);
-
-    camera.x = player.x - W / 2;
-    camera.y = player.y - H / 2;
-  }
-
-  /* ================= RENDER ================= */
-  function drawGrid() {
-    const step = 100;
-    const startX = Math.floor((camera.x - arena.x) / step) * step + arena.x;
-    const endX = camera.x + W + step;
-    const startY = Math.floor((camera.y - arena.y) / step) * step + arena.y;
-    const endY = camera.y + H + step;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = startX; x <= endX; x += step) {
-      if (x < arena.x || x > arena.x + arena.w) continue;
-      const px = Math.round(x) + 0.5;
-      ctx.moveTo(px, camera.y); ctx.lineTo(px, camera.y + H);
-    }
-    for (let y = startY; y <= endY; y += step) {
-      if (y < arena.y || y > arena.y + arena.h) continue;
-      const py = Math.round(y) + 0.5;
-      ctx.moveTo(camera.x, py); ctx.lineTo(camera.x + W, py);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawArena() {
-    // Gambar hanya sisi border yang dekat layar (bukan seluruh kotak 30000px tiap frame)
-    const m = 60;
-    const vx0 = camera.x - m, vx1 = camera.x + W + m;
-    const vy0 = camera.y - m, vy1 = camera.y + H + m;
-    const ax0 = arena.x + 2, ax1 = arena.x + arena.w - 2;
-    const ay0 = arena.y + 2, ay1 = arena.y + arena.h - 2;
-    const left   = ax0 >= vx0 && ax0 <= vx1;
-    const right  = ax1 >= vx0 && ax1 <= vx1;
-    const top    = ay0 >= vy0 && ay0 <= vy1;
-    const bottom = ay1 >= vy0 && ay1 <= vy1;
-    if (!left && !right && !top && !bottom) return;
-    const x0 = Math.max(ax0, vx0), x1 = Math.min(ax1, vx1);
-    const y0 = Math.max(ay0, vy0), y1 = Math.min(ay1, vy1);
-    ctx.save();
-    ctx.shadowColor = 'rgba(255,255,255,0.5)';
-    ctx.shadowBlur = 25;
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 4;
-    ctx.lineCap = 'square';
-    ctx.beginPath();
-    if (left)   { ctx.moveTo(ax0, y0); ctx.lineTo(ax0, y1); }
-    if (right)  { ctx.moveTo(ax1, y0); ctx.lineTo(ax1, y1); }
-    if (top)    { ctx.moveTo(x0, ay0); ctx.lineTo(x1, ay0); }
-    if (bottom) { ctx.moveTo(x0, ay1); ctx.lineTo(x1, ay1); }
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // Koin di map: bulat kuning ngambang dikit, gampang keliatan dari jauh
-  function drawMapCoins() {
-    const m = 60;
-    const vx0 = camera.x - m, vx1 = camera.x + W + m;
-    const vy0 = camera.y - m, vy1 = camera.y + H + m;
-    const tsec = performance.now() / 1000;
-    for (let i = 0; i < mapCoins.length; i++) {
-      const c = mapCoins[i];
-      if (c.x < vx0 || c.x > vx1 || c.y < vy0 || c.y > vy1) continue;
-      const bob = Math.sin(tsec * 3 + c.bob) * 3;
-      ctx.save();
-      ctx.translate(c.x, c.y + bob);
-      ctx.shadowColor = 'rgba(255,214,90,0.9)';
-      ctx.shadowBlur = 14;
-      ctx.fillStyle = '#ffd75e';
-      ctx.beginPath();
-      ctx.arc(0, 0, MAP_COIN_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, MAP_COIN_RADIUS - 3, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-  // Ekor: titik-titik posisi yang umurnya pendek. Digambar sebagai satu pita halus yang meruncing ke ujung.
-  const TAIL_SCRATCH = 80;
-  const TX = new Float32Array(TAIL_SCRATCH), TY = new Float32Array(TAIL_SCRATCH), TW = new Float32Array(TAIL_SCRATCH);
-  const LX = new Float32Array(TAIL_SCRATCH), LY = new Float32Array(TAIL_SCRATCH);
-  const RX = new Float32Array(TAIL_SCRATCH), RY = new Float32Array(TAIL_SCRATCH);
-
-  function drawTail(entity, peakAlpha) {
-    ctx.save();
-    drawTailInner(entity, peakAlpha);
-    ctx.restore();
-  }
-  function drawTailInner(entity, peakAlpha) {
-    const tr = entity.trail;
-    let start = 0;
-    while (start < tr.length && gameTime - tr[start].t > TAIL_LIFE) start++;
-    let m = 0;
-    const halfW = entity.size * TAIL_WIDTH;
-    for (let i = start; i < tr.length && m < TAIL_SCRATCH - 1; i++) {
-      const p = tr[i];
-      const f = 1 - (gameTime - p.t) / TAIL_LIFE;
-      TX[m] = p.x; TY[m] = p.y; TW[m] = halfW * Math.pow(f, 0.9);
-      m++;
-    }
-    TX[m] = entity.x; TY[m] = entity.y; TW[m] = halfW;   // kepala ekor selalu nempel di badan
-    m++;
-    if (m < 3) return;
-    const cx = TX[m - 1] - TX[0], cy = TY[m - 1] - TY[0];
-    if (cx * cx + cy * cy < 25) return;
-
-    for (let i = 0; i < m; i++) {
-      const a = i > 0 ? i - 1 : 0, b = i < m - 1 ? i + 1 : m - 1;
-      const dx = TX[b] - TX[a], dy = TY[b] - TY[a];
-      const len = Math.hypot(dx, dy) || 1;
-      const nx = -dy / len, ny = dx / len;
-      LX[i] = TX[i] + nx * TW[i]; LY[i] = TY[i] + ny * TW[i];
-      RX[i] = TX[i] - nx * TW[i]; RY[i] = TY[i] - ny * TW[i];
-    }
-
-    ctx.beginPath();
-    ctx.moveTo(LX[0], LY[0]);
-    for (let i = 1; i < m - 1; i++) ctx.quadraticCurveTo(LX[i], LY[i], (LX[i] + LX[i + 1]) / 2, (LY[i] + LY[i + 1]) / 2);
-    ctx.lineTo(LX[m - 1], LY[m - 1]);
-    ctx.lineTo(RX[m - 1], RY[m - 1]);
-    for (let i = m - 2; i >= 1; i--) ctx.quadraticCurveTo(RX[i], RY[i], (RX[i] + RX[i - 1]) / 2, (RY[i] + RY[i - 1]) / 2);
-    ctx.lineTo(RX[0], RY[0]);
-    ctx.closePath();
-
-    const g = ctx.createLinearGradient(TX[0], TY[0], TX[m - 1], TY[m - 1]);
-    g.addColorStop(0, 'rgba(255,255,255,0)');
-    g.addColorStop(0.55, 'rgba(255,255,255,' + (peakAlpha * 0.4).toFixed(3) + ')');
-    g.addColorStop(1, 'rgba(255,255,255,' + peakAlpha.toFixed(3) + ')');
-    ctx.fillStyle = g;
-    ctx.fill();
-  }
-
-  function drawSquareBody(x, y, angle, size) {
-    ctx.save();
-    ctx.translate(x, y); ctx.rotate(angle);
-    ctx.shadowColor = 'rgba(255,255,255,0.9)';
-    ctx.shadowBlur = 22;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(-size / 2, -size / 2, size, size);
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(-size / 2 + 6, -size / 2 + 6, size - 12, size - 12);
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(-size / 2 + 4, -size / 2 + 4, 4, 4);
-    ctx.restore();
-  }
-
-  // Bentuk panah (dart): dipakai di peluru dan ikon tombol serang
-  function traceDart(s) {
-    ctx.moveTo(11 * s, 0);
-    ctx.lineTo(-3 * s, -4.6 * s);
-    ctx.lineTo(0.5 * s, 0);
-    ctx.lineTo(-3 * s, 4.6 * s);
-    ctx.closePath();
-  }
-
-  let streakGradPlayer = null, streakGradEnemy = null;
-  function getStreakGrad(hostile) {
-    if (hostile) {
-      if (!streakGradEnemy) {
-        streakGradEnemy = ctx.createLinearGradient(-ARROW_STREAK, 0, 0, 0);
-        streakGradEnemy.addColorStop(0, 'rgba(210,210,210,0)');
-        streakGradEnemy.addColorStop(1, 'rgba(210,210,210,0.5)');
-      }
-      return streakGradEnemy;
-    }
-    if (!streakGradPlayer) {
-      streakGradPlayer = ctx.createLinearGradient(-ARROW_STREAK, 0, 0, 0);
-      streakGradPlayer.addColorStop(0, 'rgba(255,255,255,0)');
-      streakGradPlayer.addColorStop(1, 'rgba(255,255,255,0.85)');
-    }
-    return streakGradPlayer;
-  }
-
-  // Panah pemain: putih solid + cahaya. Peluru musuh: outline kosong, lebih redup (gampang dibedakan).
-  function drawArrowProjectile(x, y, angle, alpha, hostile, streak) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    ctx.globalAlpha = alpha;
-
-    if (streak) {
-      ctx.fillStyle = getStreakGrad(hostile);
-      ctx.beginPath();
-      ctx.moveTo(-ARROW_STREAK, 0);
-      ctx.lineTo(-1, -1.9);
-      ctx.lineTo(-1, 1.9);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    if (hostile) {
-      ctx.lineJoin = 'round';
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.strokeStyle = 'rgba(235,235,235,0.95)';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath(); traceDart(1); ctx.fill(); ctx.stroke();
-    } else {
-      ctx.fillStyle = 'rgba(255,255,255,0.16)';
-      ctx.beginPath(); traceDart(1.6); ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath(); traceDart(1); ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // Ujung jangkauan: panah memudar pelan supaya kelihatan jaraknya
-  function bulletAlpha(b) {
-    const rem = 1 - b.traveled / ARROW_MAX_RANGE;
-    return 0.35 + 0.65 * Math.max(0, Math.min(1, rem / 0.25));
-  }
-
-  function drawParticles() {
-    ctx.save();
-    for (const p of particles) {
-      const a = Math.max(0, 1 - p.life / p.maxLife);
-      ctx.globalAlpha = a;
-      ctx.fillStyle = 'rgb(' + p.shade + ',' + p.shade + ',' + p.shade + ')';
-      const s = p.size * (0.5 + a * 0.5);
-      ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
-    }
-    ctx.restore();
-  }
-
-  function drawPopups() {
-    ctx.save();
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (const p of popups) {
-      const a = Math.max(0, 1 - p.life / p.maxLife);
-      ctx.globalAlpha = a;
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px system-ui, sans-serif';
-      ctx.shadowColor = 'rgba(0,0,0,0.9)';
-      ctx.shadowBlur = 4;
-      ctx.fillText(p.text, p.x, p.y);
-    }
-    ctx.restore();
-  }
-
-  function drawLaserFx() {
-    ctx.save();
-    for (const l of laserFx) {
-      const a = Math.max(0, 1 - l.life / l.maxLife);
-      ctx.globalAlpha = a;
-      ctx.shadowColor = 'rgba(255,255,255,1)';
-      ctx.shadowBlur = 22;
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3 + a * 4;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = a * 0.9;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(l.x1, l.y1); ctx.lineTo(l.x2, l.y2);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  function drawShieldEffect() {
-    if (SHIELD.activeTimer <= 0) return;
-    const tsec = performance.now() / 1000;
-    const pulse = 0.6 + Math.sin(tsec * 8) * 0.25;
-    ctx.save();
-    ctx.globalAlpha = 0.85;
-    ctx.shadowColor = 'rgba(160,220,255,1)';
-    ctx.shadowBlur = 24;
-    ctx.strokeStyle = 'rgba(200,235,255,' + (0.9 * pulse) + ')';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.size * 1.05, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = 'rgba(255,255,255,' + (0.6 * pulse) + ')';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.size * 1.4, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.globalAlpha = 0.25;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const a = tsec * 1.5 + (i / 6) * Math.PI * 2;
-      const r1 = player.size * 1.05;
-      const r2 = player.size * 1.4;
-      ctx.moveTo(player.x + Math.cos(a) * r1, player.y + Math.sin(a) * r1);
-      ctx.lineTo(player.x + Math.cos(a) * r2, player.y + Math.sin(a) * r2);
-    }
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function roundRect(x, y, w, h, r) {
-    r = Math.min(r, w / 2, h / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-  }
-
-  function drawHPBar(x, y, w, h, hp, displayHp, maxHp) {
-    const ratio = Math.max(0, Math.min(1, displayHp / maxHp));
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    roundRect(x, y, w, h, h / 2); ctx.fill();
-    if (ratio > 0.001) {
-      const grad = ctx.createLinearGradient(x, y, x, y + h);
-      grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, '#bbbbbb');
-      ctx.fillStyle = grad;
-      roundRect(x + 1, y + 1, (w - 2) * ratio, h - 2, (h - 2) / 2); ctx.fill();
-    }
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 1;
-    roundRect(x, y, w, h, h / 2); ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawHUD() {
-    const barH = 8;
-    const barW = Math.min(220, W * 0.26);
-    const barX = 26;
-    const barY = H - barH - 20;
-    drawHPBar(barX, barY, barW, barH, player.hp, player.displayHp, player.maxHp);
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = 'bold 11px system-ui, sans-serif';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(Math.ceil(player.displayHp) + ' / ' + player.maxHp,
-                 barX + barW + 10, barY + barH / 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.font = 'bold 13px system-ui, sans-serif';
-    ctx.fillText(t('score') + ' ' + player.score, barX, barY - 14);
-    ctx.fillText(t('coin') + ' ' + coins, barX + 100, barY - 14);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = 'bold 11px system-ui, sans-serif';
-    ctx.fillText(player.name, barX, barY - 30);
-    ctx.restore();
-  }
-
-  let lbCache = [];
-  let lbCacheTime = 0;
-  function refreshLeaderboard() {
-    const now = performance.now();
-    if (now - lbCacheTime < 600) return;
-    lbCacheTime = now;
-    const all = [];
-    for (const e of enemies) {
-      if (!e.alive) continue;
-      all.push({ name: e.name, score: e.score, isPlayer: false });
-    }
-    all.push({ name: player.name, score: player.score, isPlayer: true });
-    all.sort((a, b) => b.score - a.score);
-    const rows = [];
-    let playerRank = 0;
-    for (let i = 0; i < all.length; i++) if (all[i].isPlayer) { playerRank = i + 1; break; }
-    for (let i = 0; i < Math.min(5, all.length); i++) {
-      rows.push({ rank: i + 1, name: all[i].name, score: all[i].score, isPlayer: all[i].isPlayer });
-    }
-    // pemain di luar 5 besar tetap kelihatan posisinya
-    if (playerRank > 5) rows.push({ rank: playerRank, name: player.name, score: player.score, isPlayer: true, gap: true });
-    lbCache = rows;
-  }
-
-  function drawLeaderboard() {
-    refreshLeaderboard();
-    const rows = lbCache;
-    if (rows.length === 0) return;
-    const rowH = 13, padX = 7, padY = 5;
-    const hasGap = rows[rows.length - 1].gap === true;
-
-    ctx.save();
-    ctx.font = 'bold 10px system-ui, sans-serif';
-    let maxW = 100;
-    for (const r of rows) {
-      const w = ctx.measureText(r.name + '  ' + r.score).width + 26;
-      if (w > maxW) maxW = w;
-    }
-    const boxW = Math.min(maxW + 50, W * 0.28);
-    const boxH = rowH * rows.length + padY * 2 + 12 + (hasGap ? 5 : 0);
-    const x = W - boxW - 12, y = 12;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.32)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.20)';
-    ctx.lineWidth = 1;
-    roundRect(x, y, boxW, boxH, 6);
-    ctx.fill(); ctx.stroke();
-
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = 'bold 8px system-ui, sans-serif';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText(t('rank'), x + padX, y + padY + 2);
-
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      const ry = y + padY + 14 + i * rowH + (r.gap ? 5 : 0);
-      if (r.gap) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-        ctx.beginPath();
-        ctx.moveTo(x + padX, ry - rowH / 2 - 1); ctx.lineTo(x + boxW - padX, ry - rowH / 2 - 1);
-        ctx.stroke();
-      }
-      ctx.fillStyle = r.isPlayer ? 'rgba(255,255,255,0.95)' : 'rgba(230,230,230,0.72)';
-      ctx.font = (r.isPlayer ? 'bold ' : '') + '10px system-ui, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillText(r.rank + '.', x + padX, ry);
-      ctx.fillText(r.name, x + padX + 24, ry);
-      ctx.textAlign = 'right';
-      ctx.fillText(r.score, x + boxW - padX, ry);
-    }
-    ctx.restore();
-  }
-
-  function drawMinimap() {
-    const size = Math.min(W, H) * 0.18;
-    const pad = 14;
-    const mapX = pad, mapY = pad;
-    const scale = size / ARENA_SIZE;
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.lineWidth = 2;
-    roundRect(mapX, mapY, size, size, 6);
-    ctx.fill(); ctx.stroke();
-
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    for (const e of enemies) {
-      if (!e.alive) continue;
-      const ex = mapX + (e.x - arena.x) * scale;
-      const ey = mapY + (e.y - arena.y) * scale;
-      ctx.fillRect(ex - 1, ey - 1, 2, 2);
-    }
-    const px = mapX + (player.x - arena.x) * scale;
-    const py = mapY + (player.y - arena.y) * scale;
-    ctx.shadowColor = 'rgba(255,255,255,0.9)';
-    ctx.shadowBlur = 8;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(px - 2.5, py - 2.5, 5, 5);
-    ctx.restore();
-  }
-
-  function drawPlus(x, y, arm, thick, color) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = thick;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(x - arm, y); ctx.lineTo(x + arm, y);
-    ctx.moveTo(x, y - arm); ctx.lineTo(x, y + arm);
-    ctx.stroke();
-  }
-
-  function drawStick() {
-    if (!STICK.active) return;
-    let dx = STICK.px - STICK.ox, dy = STICK.py - STICK.oy;
-    const len = Math.hypot(dx, dy);
-    if (len > STICK.radius) {
-      dx = dx / len * STICK.radius;
-      dy = dy / len * STICK.radius;
-    }
-    ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 8]);
-    ctx.beginPath();
-    ctx.arc(STICK.ox, STICK.oy, STICK.radius, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    drawPlus(STICK.ox, STICK.oy, STICK.radius * 0.85, 4, 'rgba(255,255,255,0.25)');
-    drawPlus(STICK.ox + dx, STICK.oy + dy, 24, 8, 'rgba(255,255,255,0.95)');
-    ctx.restore();
-  }
-
-  function drawAttackButton() {
-    const r = ATK.radius, pressed = ATK.active;
-    ctx.save();
-    ctx.shadowColor = 'rgba(255,255,255,0.6)';
-    ctx.shadowBlur = pressed ? 22 : 12;
-    ctx.fillStyle = pressed ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.07)';
-    ctx.beginPath(); ctx.arc(ATK.x, ATK.y, r, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = pressed ? '#ffffff' : 'rgba(255,255,255,0.8)';
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(ATK.x, ATK.y, r, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(ATK.x, ATK.y, r - 8, 0, Math.PI * 2); ctx.stroke();
-
-    const tgt = player.autoAim ? getAimTarget() : null;
-    const aimAng = tgt ? Math.atan2(tgt.y - player.y, tgt.x - player.x)
-                       : Math.atan2(player.aimY, player.aimX);
-    ctx.save();
-    ctx.translate(ATK.x, ATK.y); ctx.rotate(aimAng);
-    ctx.scale(pressed ? 1.12 : 1.0, pressed ? 1.12 : 1.0);
-    ctx.shadowColor = 'rgba(255,255,255,0.9)';
-    ctx.shadowBlur = 12;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.rect(-15, -1.3, 14, 2.6);
-    ctx.fill();
-    ctx.beginPath();
-    traceDart(1.9);
-    ctx.fill();
-    ctx.restore();
-    ctx.restore();
-  }
-
-  function drawAutoButton() {
-    const r = AUTO.radius, on = player.autoAim;
-    ctx.save();
-    ctx.shadowColor = 'rgba(255,255,255,0.6)';
-    ctx.shadowBlur = on ? 20 : 8;
-    ctx.fillStyle = on ? (AUTO.active ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.20)')
-                       : 'rgba(255,255,255,0.06)';
-    ctx.beginPath(); ctx.arc(AUTO.x, AUTO.y, r, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = on ? '#ffffff' : 'rgba(255,255,255,0.7)';
-    ctx.lineWidth = 2.2;
-    ctx.beginPath(); ctx.arc(AUTO.x, AUTO.y, r, 0, Math.PI * 2); ctx.stroke();
-    const ir = r * 0.5;
-    ctx.strokeStyle = on ? '#ffffff' : 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = 1.8; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.arc(AUTO.x, AUTO.y, ir, 0, Math.PI * 2); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(AUTO.x - ir - 4, AUTO.y); ctx.lineTo(AUTO.x - ir + 2, AUTO.y);
-    ctx.moveTo(AUTO.x + ir - 2, AUTO.y); ctx.lineTo(AUTO.x + ir + 4, AUTO.y);
-    ctx.moveTo(AUTO.x, AUTO.y - ir - 4); ctx.lineTo(AUTO.x, AUTO.y - ir + 2);
-    ctx.moveTo(AUTO.x, AUTO.y + ir - 2); ctx.lineTo(AUTO.x, AUTO.y + ir + 4);
-    ctx.stroke();
-    ctx.fillStyle = on ? '#ffffff' : 'rgba(255,255,255,0.85)';
-    ctx.beginPath(); ctx.arc(AUTO.x, AUTO.y, 1.6, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-
-  function drawSkillButton() {
-    if (!equippedSkill) return;
-    const r = SKILLBTN.radius;
-    const isLaser = equippedSkill === 'laser';
-    const isShield = equippedSkill === 'shield';
-    const isAtk = equippedSkill === 'attackspeed';
-    const isTogether = equippedSkill === 'together';
-    const isHook = equippedSkill === 'hook';
-    const isInstaHeal = equippedSkill === 'instaheal';
-    let onCooldown = false, cooldownTimer = 0, cooldownTotal = 1;
-    let charging = false, chargeAmount = 0;
-
-    if (isLaser) {
-      onCooldown = LASER.cooldownTimer > 0;
-      cooldownTimer = LASER.cooldownTimer;
-      cooldownTotal = LASER.cooldown;
-      charging = LASER.charging;
-      chargeAmount = LASER.chargeAmount;
-    } else if (isShield) {
-      onCooldown = SHIELD.cooldownTimer > 0;
-      cooldownTimer = SHIELD.cooldownTimer;
-      cooldownTotal = SHIELD.cooldown;
-    } else if (isAtk) {
-      onCooldown = ATKSPD.cooldownTimer > 0;
-      cooldownTimer = ATKSPD.cooldownTimer;
-      cooldownTotal = ATKSPD.cooldown;
-    } else if (isTogether) {
-      onCooldown = TOGETHER.cooldownTimer > 0;
-      cooldownTimer = TOGETHER.cooldownTimer;
-      cooldownTotal = TOGETHER.cooldown;
-    } else if (isHook) {
-      onCooldown = HOOK.cooldownTimer > 0;
-      cooldownTimer = HOOK.cooldownTimer;
-      cooldownTotal = HOOK.cooldown;
-    } else if (isInstaHeal) {
-      onCooldown = INSTAHEAL.cooldownTimer > 0;
-      cooldownTimer = INSTAHEAL.cooldownTimer;
-      cooldownTotal = INSTAHEAL.cooldown;
-    }
-
-    ctx.save();
-    const alpha = onCooldown ? 0.15 : (charging ? 0.4 : 0.22);
-    ctx.shadowColor = 'rgba(160,220,255,0.85)';
-    ctx.shadowBlur = charging ? 28 : 14;
-    ctx.fillStyle = 'rgba(160,220,255,' + alpha + ')';
-    ctx.beginPath(); ctx.arc(SKILLBTN.x, SKILLBTN.y, r, 0, Math.PI * 2); ctx.fill();
-
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = onCooldown ? 'rgba(255,255,255,0.25)' : 'rgba(200,235,255,0.9)';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(SKILLBTN.x, SKILLBTN.y, r, 0, Math.PI * 2); ctx.stroke();
-
-    if (charging) {
-      const pct = Math.min(1, chargeAmount);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.arc(SKILLBTN.x, SKILLBTN.y, r - 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
-      ctx.stroke();
-    }
-    if (onCooldown) {
-      const pct = 1 - (cooldownTimer / cooldownTotal);
-      ctx.strokeStyle = 'rgba(160,220,255,0.9)';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(SKILLBTN.x, SKILLBTN.y, r - 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
-      ctx.stroke();
-    }
-
-    if (isAtk && ATKSPD.activeTimer > 0) {
-      const pct = Math.max(0, ATKSPD.activeTimer / ATKSPD.duration);
-      ctx.strokeStyle = '#ffd36a';
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.arc(SKILLBTN.x, SKILLBTN.y, r - 11, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
-      ctx.stroke();
-    }
-
-    ctx.save();
-    ctx.translate(SKILLBTN.x, SKILLBTN.y);
-    ctx.shadowColor = 'rgba(200,235,255,0.9)';
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = onCooldown ? 'rgba(255,255,255,0.3)' : '#ffffff';
-
-    if (isLaser) {
-      ctx.beginPath();
-      ctx.moveTo(-6, -13); ctx.lineTo(4, -2); ctx.lineTo(-1, -2);
-      ctx.lineTo(6, 13); ctx.lineTo(-4, 2); ctx.lineTo(1, 2);
-      ctx.closePath(); ctx.fill();
-    } else if (isShield) {
-      ctx.strokeStyle = onCooldown ? 'rgba(255,255,255,0.3)' : '#ffffff';
-      ctx.lineWidth = 2.2; ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(0, -13); ctx.lineTo(9, -9); ctx.lineTo(9, 2);
-      ctx.quadraticCurveTo(9, 10, 0, 14);
-      ctx.quadraticCurveTo(-9, 10, -9, 2);
-      ctx.lineTo(-9, -9);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle = onCooldown ? 'rgba(0,0,0,0.2)' : 'rgba(160,220,255,0.55)';
-      ctx.beginPath();
-      ctx.moveTo(0, -8); ctx.lineTo(5, -6); ctx.lineTo(5, 1);
-      ctx.quadraticCurveTo(5, 6, 0, 9);
-      ctx.quadraticCurveTo(-5, 6, -5, 1);
-      ctx.lineTo(-5, -6);
-      ctx.closePath(); ctx.fill();
-    } else if (isAtk) {
-      ctx.strokeStyle = onCooldown ? 'rgba(255,255,255,0.3)' : '#ffffff';
-      ctx.lineWidth = 3.2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(-11, -10); ctx.lineTo(-2, 0); ctx.lineTo(-11, 10);
-      ctx.moveTo(2, -10); ctx.lineTo(11, 0); ctx.lineTo(2, 10);
-      ctx.stroke();
-    } else if (isTogether) {
-      ctx.strokeStyle = onCooldown ? 'rgba(255,255,255,0.3)' : '#ffffff';
-      ctx.lineWidth = 2.6; ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(0, 9); ctx.lineTo(-11, -11);
-      ctx.moveTo(0, 9); ctx.lineTo(0, -13);
-      ctx.moveTo(0, 9); ctx.lineTo(11, -11);
-      ctx.stroke();
-    } else if (isHook) {
-      ctx.strokeStyle = onCooldown ? 'rgba(255,255,255,0.3)' : '#ffffff';
-      ctx.lineWidth = 2.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(0, -13); ctx.lineTo(0, 4);
-      ctx.arc(-3.5, 4, 3.5, 0, Math.PI * 1.4);
-      ctx.stroke();
-    } else if (isInstaHeal) {
-      ctx.strokeStyle = onCooldown ? 'rgba(255,255,255,0.3)' : '#ffffff';
-      ctx.lineWidth = 3.2; ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(0, -12); ctx.lineTo(0, 12);
-      ctx.moveTo(-12, 0); ctx.lineTo(12, 0);
-      ctx.stroke();
-    }
-    ctx.restore();
-    ctx.restore();
-  }
-
-  function drawAtkSpeedEffect() {
-    if (ATKSPD.activeTimer <= 0) return;
-    const tsec = performance.now() / 1000;
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.shadowColor = 'rgba(255,190,80,0.95)';
-    ctx.shadowBlur = 20;
-    ctx.strokeStyle = 'rgba(255,211,106,0.95)';
-    ctx.lineWidth = 2.2;
-    ctx.setLineDash([7, 7]);
-    ctx.lineDashOffset = -tsec * 60;
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, player.size * 0.95, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawHookRope() {
-    if (HOOK.state === 'idle' || !HOOK.target || !HOOK.target.alive) return;
-    const tgt = HOOK.target;
-    let ex = tgt.x, ey = tgt.y;
-    if (HOOK.state === 'flying') {
-      const p = Math.min(1, HOOK.flyTimer / HOOK.flyDuration);
-      ex = player.x + (tgt.x - player.x) * p;
-      ey = player.y + (tgt.y - player.y) * p;
-    }
-
-    const tsec = performance.now() / 1000;
-    const dx = ex - player.x, dy = ey - player.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len, ny = dx / len;     // normal buat efek gelombang tali
-    const segs = Math.max(4, Math.round(len / 26));
-
-    ctx.save();
-    ctx.globalAlpha = 0.9;
-    ctx.shadowColor = 'rgba(160,220,255,0.9)';
-    ctx.shadowBlur = 12;
-    ctx.strokeStyle = HOOK.state === 'attached' ? 'rgba(180,235,255,0.95)' : 'rgba(220,240,255,0.85)';
-    ctx.lineWidth = 2.4;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(player.x, player.y);
-    for (let i = 1; i < segs; i++) {
-      const t = i / segs;
-      const wave = Math.sin(t * Math.PI) * 10 * Math.sin(tsec * 6 + t * 4);
-      ctx.lineTo(player.x + dx * t + nx * wave, player.y + dy * t + ny * wave);
-    }
-    ctx.lineTo(ex, ey);
-    ctx.stroke();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(ex, ey, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawDeathOverlay() {
-    if (gameState !== 'dead') return;
-    const tt = 1 - (deathTimer / 1.8);
-    const a = Math.min(1, tt * 1.6);
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,' + (0.55 * a) + ')';
-    ctx.fillRect(0, 0, W, H);
-
-    ctx.globalAlpha = a;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(255,80,80,0.9)';
-    ctx.shadowBlur = 30;
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold ' + Math.round(Math.min(W, H) * 0.12) + 'px system-ui, sans-serif';
-    ctx.fillText(t('you_died'), W / 2, H / 2 - 10);
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = a * 0.75;
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.font = '600 14px system-ui, sans-serif';
-    ctx.fillText(t('return_menu'), W / 2, H / 2 + Math.round(Math.min(W, H) * 0.10));
-    ctx.restore();
-  }
-
-  let last = performance.now();
-  let bzOkSent = false;
-  function loop(now) {
-    if (!bzOkSent) { bzOkSent = true; if (window.BZUpdater) BZUpdater.markOk(); else window.__bzOk = true; }
-    let dt = (now - last) / 1000;
-    last = now;
-    if (dt > 0.05) dt = 0.05;
-
-    update(dt);
-
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, W, H);
-
-    if (!gameStarted) {
-      requestAnimationFrame(loop);
-      return;
-    }
-
-    ctx.save();
-    ctx.translate(-camera.x, -camera.y);
-    drawGrid();
-    drawArena();
-    drawMapCoins();
-
-    const vMinX = camera.x - RENDER_MARGIN;
-    const vMaxX = camera.x + W + RENDER_MARGIN;
-    const vMinY = camera.y - RENDER_MARGIN;
-    const vMaxY = camera.y + H + RENDER_MARGIN;
-
-    if (settings.playerTrail && player.alive) drawTail(player, 0.5);
-    if (settings.enemyTrail) {
-      for (const e of enemies) {
-        if (!e.alive) continue;
-        if (e.x < vMinX || e.x > vMaxX || e.y < vMinY || e.y > vMaxY) continue;
-        drawTail(e, 0.32);
-      }
-    }
-
-    for (const a of arrows) {
-      if (a.x < vMinX || a.x > vMaxX || a.y < vMinY || a.y > vMaxY) continue;
-      drawArrowProjectile(a.x, a.y, a.angle, bulletAlpha(a), false, settings.arrowTrail);
-    }
-    for (const b of enemyBullets) {
-      if (b.x < vMinX || b.x > vMaxX || b.y < vMinY || b.y > vMaxY) continue;
-      drawArrowProjectile(b.x, b.y, b.angle, bulletAlpha(b), true, settings.arrowTrail);
-    }
-
-    const aimTarget = player.autoAim ? getAimTarget() : null;
-    for (const e of enemies) {
-      if (!e.alive) continue;
-      if (e.x < vMinX || e.x > vMaxX || e.y < vMinY || e.y > vMaxY) continue;
-      drawSquareBody(e.x, e.y, e.angle, e.size);
-      if (aimTarget === e) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        ctx.arc(e.x, e.y, e.size * 1.05, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.restore();
-      }
-      const barW = 30, barH = 3;
-      const barX = e.x - barW / 2;
-      const barY = e.y - e.size / 2 - 12;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
-      ctx.fillStyle = '#dddddd';
-      ctx.fillRect(barX, barY, barW * (e.displayHp / e.maxHp), barH);
-    }
-
-    if (player.alive) {
-      drawSquareBody(player.x, player.y, player.angle, player.size);
-      if (LASER.charging) {
-        const pct = Math.min(1, LASER.chargeAmount);
-        ctx.save();
-        ctx.globalAlpha = 0.6 + pct * 0.4;
-        ctx.shadowColor = 'rgba(180,230,255,0.95)';
-        ctx.shadowBlur = 18 + pct * 30;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(player.x, player.y, player.size * (0.8 + pct * 0.7), 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
-      drawShieldEffect();
-      drawAtkSpeedEffect();
-      drawHookRope();
-    }
-
-    drawLaserFx();
-    drawParticles();
-    drawPopups();
-    ctx.restore();
-
-    if (gameState === 'playing') {
-      drawStick();
-      drawAttackButton();
-      drawAutoButton();
-      drawSkillButton();
-      drawMinimap();
-      drawHUD();
-      drawLeaderboard();
-    }
-
-    drawDeathOverlay();
-
-    requestAnimationFrame(loop);
-  }
-
-  requestAnimationFrame(loop);
-})();
-</script>
-</body>
-</html>
+          b.x 
