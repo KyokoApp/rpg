@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -38,6 +38,21 @@ jobs:
 
       - name: Bikin paket update
         run: node scripts/make-update.mjs --update
+
+      # Mirror ke branch update-pkg -> otomatis tersedia juga lewat
+      # raw.githubusercontent.com/REPO/update-pkg/ dan cdn.jsdelivr.net/gh/REPO@update-pkg/
+      # (cadangan kalau GitHub Pages tidak terjangkau dari jaringan pemain).
+      - name: Cermin paket ke branch update-pkg
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          cd update
+          git init -q -b update-pkg
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Paket update ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:$TOKEN@github.com/${GITHUB_REPOSITORY}.git" update-pkg
 
       - uses: actions/configure-pages@v5
 

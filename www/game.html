@@ -1438,6 +1438,101 @@
   const updRow = document.getElementById('updRow');
   let updState = 'idle';   // idle | busy | ready
 
+  // Ringkas daftar kegagalan server jadi teks pendek buat toast.
+  function updErrText(errors) {
+    return (errors || []).map(function (e) {
+      return String(e).replace(/^https?:\/\/[^/]+\/?/, '').replace(/Error:\s*/g, '').trim();
+    }).filter(Boolean).join(' · ').slice(0, 80);
+  }
+
+  // ---- cadangan: unduh + pasang lewat mirror sendiri, tanpa updater bawaan APK ----
+  // Dipakai kalau APK masih membawa updater versi lama (satu server) dan server itu gagal.
+  // Menulis langsung ke IndexedDB yang sama dengan updater, jadi launcher akan menjalankannya.
+  function idbOpenGame() {
+    return new Promise(function (res, rej) {
+      const rq = indexedDB.open('bz-updates', 1);
+      rq.onupgradeneeded = () => { rq.result.createObjectStore('kv'); };
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  function idbGetGame() {
+    return idbOpenGame().then(db => new Promise((res, rej) => {
+      const tx = db.transaction('kv', 'readonly');
+      const r = tx.objectStore('kv').get('game');
+      tx.oncomplete = () => { db.close(); res(r && r.result); };
+      tx.onerror = tx.onabort = () => { db.close(); rej(tx.error || new Error('idb')); };
+    })).catch(() => null);
+  }
+  function idbPutGame(obj) {
+    return idbOpenGame().then(db => new Promise((res, rej) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(obj, 'game');
+      tx.oncomplete = () => { db.close(); res(); };
+      tx.onerror = tx.onabort = () => { db.close(); rej(tx.error || new Error('idb')); };
+    }));
+  }
+  function selfInstall() {
+    const c = window.BZ_UPDATE || {};
+    const list = [], seen = {};
+    const add = (u) => {
+      u = String(u || '').trim(); if (!u) return;
+      if (u.charAt(u.length - 1) !== '/') u += '/';
+      if (!seen[u]) { seen[u] = 1; list.push(u); }
+    };
+    if (Array.isArray(c.urls)) c.urls.forEach(add);
+    if (c.repo) {
+      add('https://raw.githubusercontent.com/' + c.repo + '/update-pkg/');
+      add('https://cdn.jsdelivr.net/gh/' + c.repo + '@update-pkg/');
+    }
+    if (!list.length) return Promise.resolve({ ok: false });
+    return Promise.all([
+      fetch('version.json', { cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
+      idbGetGame()
+    ]).then(([bundled, storedOld]) => {
+      const curBuild = Math.max(Number(bundled.build) || 0, (storedOld && Number(storedOld.build)) || 0);
+      const out = { ok: false, installed: false, errors: [] };
+      let i = 0;
+      const next = () => {
+        if (i >= list.length) return out;
+        const base = list[i++];
+        return fetch(base + 'version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).then(remote => {
+          if ((Number(remote.build) || 0) <= curBuild) { out.ok = true; out.uptodate = true; return out; }
+          return fetch(base + (remote.file || 'game.html') + '?v=' + remote.build, { cache: 'no-store' }).then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.arrayBuffer();
+          }).then(ab => {
+            const bytes = new Uint8Array(ab);
+            if (remote.size && bytes.length !== Number(remote.size)) throw new Error('ukuran tidak cocok');
+            const html = new TextDecoder('utf-8').decode(bytes);
+            if (html.indexOf('</html>') < 0) throw new Error('file rusak');
+            const hashOk = (remote.sha256 && window.crypto && window.crypto.subtle)
+              ? window.crypto.subtle.digest('SHA-256', bytes).then(h => {
+                  const hex = Array.prototype.map.call(new Uint8Array(h), b => ('0' + b.toString(16)).slice(-2)).join('');
+                  if (hex !== String(remote.sha256).toLowerCase()) throw new Error('hash tidak cocok');
+                })
+              : Promise.resolve();
+            return hashOk.then(() => idbPutGame({
+              build: Number(remote.build) || 0,
+              name: String(remote.name || remote.build),
+              html: html,
+              savedAt: Date.now()
+            })).then(() => { out.ok = true; out.installed = true; out.name = remote.name; return out; });
+          });
+        }).catch(e => { out.errors.push(String((e && e.message) || e)); return next(); });
+      };
+      return next();
+    });
+  }
+  function markReady() {
+    updState = 'ready';
+    btnUpdate.disabled = false;
+    btnUpdate.textContent = t('update_restart');
+  }
+
   async function refreshUpdateInfo() {
     const U = window.BZUpdater;
     if (!U) { if (updRow) updRow.style.display = 'none'; return; }
@@ -1458,20 +1553,27 @@
     btnUpdate.textContent = t('update_checking');
     try {
       const r = await U.check();
-      if (r.reason === 'offline') { toast(t('update_failed')); }
-      else if (!r.available) { toast(t('update_latest')); }
+      if (r.reason === 'offline') {
+        // updater bawaan APK lama cuma punya satu server -> coba mirror sendiri
+        const alt = (U.VER >= 2) ? null : await selfInstall();
+        if (alt && alt.installed) { toast(t('update_found')); markReady(); return; }
+        const det = updErrText(r.errors);
+        toast(t('update_failed') + (det ? ' — ' + det : ''));
+      } else if (!r.available) { toast(t('update_latest')); }
       else {
         toast(t('update_found'));
         await U.download(r.remote, (p) => {
           btnUpdate.textContent = (p === null) ? '...' : Math.round(p * 100) + '%';
         });
         toast(t('update_ready'));
-        updState = 'ready';
-        btnUpdate.textContent = t('update_restart');
-        btnUpdate.disabled = false;
+        markReady();
         return;
       }
-    } catch (e) { toast(t('update_failed')); }
+    } catch (e) {
+      const alt = (U.VER >= 2) ? null : await selfInstall();
+      if (alt && alt.installed) { toast(t('update_found')); markReady(); return; }
+      toast(t('update_failed'));
+    }
     updState = 'idle';
     btnUpdate.disabled = false;
     btnUpdate.textContent = t('update_check');

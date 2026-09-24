@@ -1,34 +1,54 @@
-/* BlockZone updater
+/* BlockZone updater (v2)
  * Aplikasi Android cuma peluncur. Game (game.html) bisa diperbarui lewat internet:
  *   - versi bawaan APK  : game.html + version.json (di dalam APK)
  *   - versi terunduh    : disimpan di IndexedDB, dipakai kalau lebih baru dari bawaan APK
  * Update = ganti game.html di server (lihat README). Tidak perlu install APK lagi.
+ *
+ * v2: beberapa server sekaligus (utama + mirror raw.githubusercontent + mirror jsDelivr).
+ *     Server yang pernah berhasil dicoba duluan. Semua kegagalan dilaporkan dengan alasannya.
  */
 (function (global) {
   'use strict';
   if (global.BZUpdater) return;
 
-  var cfg = global.BZ_UPDATE || {};
-  var base = String(cfg.url || '').trim();
-  if (base && base.charAt(base.length - 1) !== '/') base += '/';
-
   var DB_NAME = 'bz-updates', STORE = 'kv', KEY_GAME = 'game';
   var LS_BAD = 'bz_bad_build';          // build terunduh yang gagal jalan -> jangan diunduh lagi
+  var LS_BASE_OK = 'bz_base_ok';        // server update yang terakhir berhasil (dicoba duluan)
   var SS_STORED = 'bz_stored_run';      // sesi ini menjalankan versi terunduh (bukan bawaan APK)
+  var CHECK_BUDGET = 15000;             // total anggaran waktu cek versi (semua server)
+  var CHECK_TIMEOUT = 8000;             // batas waktu per server saat cek versi
   var WATCHDOG_MS = 10000;
+  var DOWNLOAD_TIMEOUT = 30000;
 
-  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function cfg() { return global.BZ_UPDATE || {}; }
+  function norm(u) { u = String(u || '').trim(); if (!u) return ''; if (u.charAt(u.length - 1) !== '/') u += '/'; return u; }
+  function ls(k) { try { return global.localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { global.localStorage.setItem(k, v); } catch (e) {} }
+  function ss(k) { try { return global.sessionStorage.getItem(k); } catch (e) { return null; } }
+  function ssSet(k, v) { try { global.sessionStorage.setItem(k, v); } catch (e) {} }
+  function ssDel(k) { try { global.sessionStorage.removeItem(k); } catch (e) {} }
+
   function withTimeout(p, ms) {
     return new Promise(function (resolve, reject) {
       var to = setTimeout(function () { reject(new Error('timeout')); }, ms);
       Promise.resolve(p).then(function (v) { clearTimeout(to); resolve(v); }, function (e) { clearTimeout(to); reject(e); });
     });
   }
-  function ls(k) { try { return global.localStorage.getItem(k); } catch (e) { return null; } }
-  function lsSet(k, v) { try { global.localStorage.setItem(k, v); } catch (e) {} }
-  function ss(k) { try { return global.sessionStorage.getItem(k); } catch (e) { return null; } }
-  function ssSet(k, v) { try { global.sessionStorage.setItem(k, v); } catch (e) {} }
-  function ssDel(k) { try { global.sessionStorage.removeItem(k); } catch (e) {} }
+
+  /* ---------- daftar server update ---------- */
+  // Urutan: yang terakhir berhasil -> daftar dari konfigurasi -> mirror otomatis dari repo.
+  function baseList() {
+    var c = cfg(), out = [], seen = {};
+    function add(u) { u = norm(u); if (u && !seen[u]) { seen[u] = 1; out.push(u); } }
+    add(ls(LS_BASE_OK));
+    if (Array.isArray(c.urls)) for (var i = 0; i < c.urls.length; i++) add(c.urls[i]);
+    add(c.url);
+    if (c.repo) {
+      add('https://raw.githubusercontent.com/' + c.repo + '/update-pkg/');
+      add('https://cdn.jsdelivr.net/gh/' + c.repo + '@update-pkg/');
+    }
+    return out;
+  }
 
   /* ---------- penyimpanan (IndexedDB) ---------- */
   function openDb() {
@@ -71,18 +91,34 @@
     });
   }
 
+  // Cek versi di semua server sampai ada yang jawab. Semua kegagalan dikembalikan di `errors`.
   function check() {
-    if (!base) return Promise.resolve({ available: false, reason: 'disabled' });
+    var bases = baseList();
+    if (!bases.length) return Promise.resolve({ available: false, reason: 'disabled' });
     return current().then(function (cur) {
-      return withTimeout(fetch(base + 'version.json?t=' + Date.now(), { cache: 'no-store' }), 6000)
-        .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
-        .then(function (remote) {
-          remote.build = Number(remote.build) || 0;
-          var bad = Number(ls(LS_BAD)) || 0;
-          var available = remote.build > cur.build && remote.build > bad;
-          return { available: available, remote: remote, current: cur };
-        })
-        .catch(function () { return { available: false, reason: 'offline', current: cur }; });
+      var errors = [], t0 = Date.now();
+      function attempt(i) {
+        if (i >= bases.length || Date.now() - t0 > CHECK_BUDGET) {
+          return { available: false, reason: 'offline', current: cur, errors: errors };
+        }
+        var b = bases[i];
+        var left = Math.min(CHECK_TIMEOUT, CHECK_BUDGET - (Date.now() - t0));
+        return withTimeout(fetch(b + 'version.json?t=' + Date.now(), { cache: 'no-store' }), left)
+          .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+          .then(function (j) {
+            if (!j || !Number(j.build)) throw new Error('version.json tidak valid');
+            j._base = b;
+            lsSet(LS_BASE_OK, b);
+            var bad = Number(ls(LS_BAD)) || 0;
+            var rb = Number(j.build) || 0;
+            return { available: rb > cur.build && rb > bad, remote: j, current: cur, errors: errors };
+          })
+          .catch(function (e) {
+            errors.push(b + ' ' + String((e && e.message) || e));
+            return attempt(i + 1);
+          });
+      }
+      return attempt(0);
     });
   }
 
@@ -90,15 +126,23 @@
     return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
   }
 
-  // Unduh game terbaru, cek ukuran + hash, baru simpan. onProgress(0..1 | null)
+  // Unduh game terbaru dari server asal version.json, cek ukuran + hash, baru simpan.
+  // onProgress(0..1 | null)
   function download(remote, onProgress) {
-    var url = base + (remote.file || 'game.html') + '?v=' + remote.build;
-    return withTimeout(fetch(url, { cache: 'no-store' }), 15000).then(function (res) {
+    var base = norm(remote && remote._base) || baseList()[0] || '';
+    if (!base) return Promise.reject(new Error('pembaruan dimatikan'));
+    var url = base + ((remote && remote.file) || 'game.html') + '?v=' + ((remote && remote.build) || Date.now());
+    var t0 = Date.now();
+    return withTimeout(fetch(url, { cache: 'no-store' }), DOWNLOAD_TIMEOUT).then(function (res) {
       if (!res.ok) throw new Error('http ' + res.status);
       var total = Number(remote.size) || Number(res.headers.get('content-length')) || 0;
       if (res.body && res.body.getReader) {
         var reader = res.body.getReader(), parts = [], got = 0;
         var pump = function () {
+          if (Date.now() - t0 > DOWNLOAD_TIMEOUT) {
+            try { reader.cancel(); } catch (e) {}
+            return Promise.reject(new Error('timeout'));
+          }
           return reader.read().then(function (c) {
             if (c.done) return;
             parts.push(c.value); got += c.value.length;
@@ -182,7 +226,9 @@
   }
 
   global.BZUpdater = {
-    enabled: !!base,
+    VER: 2,
+    get enabled() { return baseList().length > 0; },
+    baseList: baseList,
     current: current,
     check: check,
     download: download,
