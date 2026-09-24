@@ -29,6 +29,11 @@ Game battle royale kotak (Capacitor + HTML5 canvas). Aplikasi Android hanya **pe
 Setelah `UPDATE_BASE_URL` / Pages diatur, jalankan workflow **Build Android** sekali (manual) supaya
 APK tahu alamat server updatenya. Setelah itu tidak perlu build APK lagi untuk update game.
 
+> **Penting:** workflow lain (mis. *Deploy Jekyll to GitHub Pages*, template bawaan GitHub) tidak boleh
+> ikut deploy ke Pages repo ini. Dia akan menimpa paket update dengan isi repo mentah (tanpa
+> `version.json` di root), dan aplikasi diam-diam lanjut main versi lama. Workflow `publish-update.yml`
+> satu-satunya yang boleh deploy ke Pages. Mau hosting situs lain? Pakai repo terpisah atau Vercel.
+
 ## Keystore permanen
 
 Semua APK (debug, release) dan AAB ditandatangani **satu kunci yang sama**:
