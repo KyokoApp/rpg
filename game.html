@@ -1,0 +1,2919 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>BlockZone - Battle Royale</title>
+<link rel="icon" href="icon.jpg">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; width: 100%;
+    overflow: hidden; background: #000;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-user-select: none; user-select: none;
+    overscroll-behavior: none;
+  }
+  canvas { display: block; touch-action: none; }
+
+  /* ================= MENU ================= */
+  #menu {
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, #15151a 0%, #000 100%);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+    transition: opacity 0.35s ease;
+  }
+  #menu.hidden { opacity: 0; pointer-events: none; }
+
+  .menu-inner {
+    width: 100%; max-width: 720px; padding: 24px;
+    display: flex; flex-direction: column; gap: 16px; align-items: center;
+  }
+
+  .title {
+    font-size: clamp(28px, 6vw, 54px);
+    font-weight: 800; letter-spacing: 4px;
+    text-shadow: 0 0 24px rgba(255,255,255,0.55);
+    text-align: center;
+  }
+  .subtitle {
+    font-size: clamp(11px, 1.6vw, 14px);
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 3px; margin-bottom: 8px; text-align: center;
+  }
+
+  .coin-display {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 18px;
+    background: rgba(255,255,255,0.06);
+    border: 2px solid rgba(255,255,255,0.22);
+    border-radius: 999px;
+    font-weight: 700; letter-spacing: 2px; font-size: 14px;
+  }
+  .coin-icon {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff, #aaa 70%);
+    box-shadow: 0 0 8px rgba(255,255,255,0.6);
+    display: inline-block; flex-shrink: 0;
+  }
+
+  .row { display: flex; gap: 10px; width: 100%; max-width: 460px; }
+
+  input[type=text] {
+    flex: 1; padding: 14px 18px; font-size: 16px;
+    background: rgba(255,255,255,0.06);
+    border: 2px solid rgba(255,255,255,0.25);
+    border-radius: 10px; color: #fff; outline: none;
+    transition: all 0.15s;
+  }
+  input[type=text]:focus {
+    border-color: #fff; background: rgba(255,255,255,0.10);
+    box-shadow: 0 0 20px rgba(255,255,255,0.25);
+  }
+  input[type=text]::placeholder { color: rgba(255,255,255,0.35); }
+
+  button {
+    padding: 14px 24px; font-size: 15px; font-weight: 700;
+    letter-spacing: 2px;
+    background: #ffffff; color: #000;
+    border: none; border-radius: 10px;
+    cursor: pointer; transition: all 0.15s;
+    min-width: 120px;
+  }
+  button:hover:not(:disabled) { transform: scale(1.03); box-shadow: 0 0 24px rgba(255,255,255,0.55); }
+  button:active:not(:disabled) { transform: scale(0.97); }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  button.ghost {
+    background: rgba(255,255,255,0.06); color: #fff;
+    border: 2px solid rgba(255,255,255,0.35);
+  }
+  button.ghost:hover:not(:disabled) { background: rgba(255,255,255,0.14); box-shadow: none; }
+
+  .hint {
+    font-size: 12px; color: rgba(255,255,255,0.4);
+    letter-spacing: 1px; margin-top: 12px; text-align: center; line-height: 1.6;
+  }
+
+  /* ================= BRAND (ikon + judul di menu) ================= */
+  .brand {
+    display: flex; align-items: center; justify-content: center;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .brand-icon {
+    width: clamp(48px, 15vh, 84px); height: clamp(48px, 15vh, 84px);
+    border-radius: 22%; object-fit: cover; flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.12), 0 0 26px rgba(255,190,120,0.22);
+    -webkit-user-drag: none; pointer-events: none;
+  }
+  .brand-text { display: flex; flex-direction: column; align-items: flex-start; }
+  .brand-text .title, .brand-text .subtitle { text-align: left; }
+  .brand-text .subtitle { margin-bottom: 0; }
+
+  .menu-inner.enter { animation: menuIn 0.7s ease both; }
+  @keyframes menuIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* ================= LOADING SCREEN ================= */
+  #boot {
+    position: fixed; inset: 0; z-index: 9000;
+    background: #000;
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity 0.8s ease;
+  }
+  #boot.out { opacity: 0; pointer-events: none; }
+  .boot-stack {
+    display: flex; flex-direction: column; align-items: center;
+    gap: clamp(10px, 4vh, 22px);
+  }
+  .boot-icon {
+    width: clamp(88px, 34vh, 240px); height: clamp(88px, 34vh, 240px);
+    border-radius: 22%; object-fit: cover;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.10), 0 0 48px rgba(255,190,120,0.18);
+    opacity: 0; transform: scale(0.9);
+    animation: bootIn 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s forwards;
+    -webkit-user-drag: none;
+  }
+  .boot-text {
+    font-family: "Noto Sans JP", "Noto Sans CJK JP", "Hiragino Sans", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+    font-size: clamp(18px, 6vh, 34px); font-weight: 700;
+    letter-spacing: 0.35em; padding-left: 0.35em;
+    color: #fff; text-shadow: 0 0 18px rgba(255,255,255,0.45);
+    opacity: 0; transform: translateY(6px);
+    animation: bootIn 0.8s ease 0.6s forwards;
+  }
+  @keyframes bootIn { to { opacity: 1; transform: none; } }
+
+  /* ================= TOP-LEFT ICON BUTTONS ================= */
+  .corner-btn {
+    position: absolute;
+    left: 20px;
+    width: 56px; height: 56px;
+    padding: 0; min-width: 0;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    border: 2px solid rgba(255,255,255,0.35);
+    font-size: 24px;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10;
+    transition: all 0.15s;
+  }
+  .corner-btn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.16);
+    transform: scale(1.05);
+    box-shadow: 0 0 22px rgba(255,255,255,0.4);
+  }
+  .corner-btn:active:not(:disabled) { transform: scale(0.95); }
+
+  #btnShop { top: 20px; }
+  #btnSettings { top: 86px; } /* 20 + 56 + 10 */
+  #btnDonate { top: 152px; color: #ff8fa3; } /* 86 + 56 + 10 */
+  #btnDonate.off { display: none; }
+  .donate-note { font-size: 13px; line-height: 1.55; color: rgba(255,255,255,0.7); margin: 6px 0 20px; text-align: center; }
+
+  @media (max-width: 500px) {
+    .corner-btn {
+      width: 48px; height: 48px;
+      left: 14px;
+      font-size: 20px;
+      border-radius: 12px;
+    }
+    #btnShop { top: 14px; }
+    #btnSettings { top: 70px; } /* 14 + 48 + 8 */
+    #btnDonate { top: 126px; } /* 70 + 48 + 8 */
+  }
+
+  /* ================= OVERLAYS ================= */
+  .overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.88);
+    z-index: 1001; display: none;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .overlay.show { display: flex; }
+
+  .panel {
+    background: #0d0d10;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-radius: 16px; padding: 24px 28px;
+    width: 100%; max-width: 460px;
+    box-shadow: 0 0 40px rgba(255,255,255,0.15);
+    max-height: 90vh; overflow-y: auto;
+  }
+  .panel h2 { margin: 0 0 20px; font-size: 20px; letter-spacing: 3px; text-align: center; color: #fff; }
+
+  .opt-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .opt-row:last-of-type { border-bottom: none; }
+  .opt-label { font-size: 14px; letter-spacing: 1px; }
+  .opt-sub { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 4px; }
+
+  .switch {
+    position: relative; width: 52px; height: 28px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 14px; cursor: pointer;
+    transition: background 0.2s; flex-shrink: 0;
+  }
+  .switch::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 22px; height: 22px;
+    background: #fff; border-radius: 50%;
+    transition: transform 0.2s;
+  }
+  .switch.on { background: #ffffff; }
+  .switch.on::after { transform: translateX(24px); background: #000; }
+
+  .close-btn { width: 100%; margin-top: 16px; }
+
+  /* Language selector */
+  .lang-select {
+    display: flex;
+    gap: 6px;
+    background: rgba(255,255,255,0.05);
+    border: 2px solid rgba(255,255,255,0.18);
+    border-radius: 10px;
+    padding: 4px;
+    flex-shrink: 0;
+  }
+  .lang-opt {
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    border-radius: 7px;
+    cursor: pointer;
+    color: rgba(255,255,255,0.5);
+    transition: all 0.15s;
+    user-select: none;
+    border: none;
+    background: transparent;
+    min-width: 0;
+  }
+  .lang-opt:hover { color: #fff; }
+  .lang-opt.active {
+    background: #ffffff;
+    color: #000;
+    box-shadow: 0 0 14px rgba(255,255,255,0.4);
+  }
+
+  /* ================= SHOP ================= */
+  #shop {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  .shop-wrap {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+  }
+
+  .shop-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.10);
+    flex-shrink: 0;
+    background: rgba(0,0,0,0.4);
+  }
+  .shop-title {
+    font-size: 18px; font-weight: 800;
+    letter-spacing: 4px; color: #fff;
+    text-shadow: 0 0 12px rgba(255,255,255,0.35);
+  }
+  .shop-balance-inline {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px;
+    background: rgba(255,255,255,0.06);
+    border: 1.5px solid rgba(255,255,255,0.25);
+    border-radius: 999px;
+    font-weight: 800; letter-spacing: 2px; font-size: 14px;
+  }
+  .shop-balance-inline .coin-icon { width: 16px; height: 16px; }
+
+  .shop-close-x {
+    width: 44px; height: 44px;
+    min-width: 0; padding: 0;
+    border-radius: 12px;
+    background: rgba(255,255,255,0.06);
+    color: #fff;
+    border: 2px solid rgba(255,255,255,0.3);
+    font-size: 20px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    line-height: 1;
+  }
+  .shop-close-x:hover:not(:disabled) {
+    background: rgba(255,255,255,0.18);
+    box-shadow: none; transform: none;
+  }
+
+  .shop-tabs {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    padding: 12px 20px 0;
+    flex-shrink: 0;
+  }
+  .shop-tab {
+    padding: 9px 22px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: rgba(255,255,255,0.5);
+    transition: all 0.15s;
+    user-select: none;
+    border: 1.5px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.05);
+    min-width: 0;
+  }
+  .shop-tab:hover { color: #fff; }
+  .shop-tab.active {
+    background: #ffffff;
+    color: #000;
+    border-color: #fff;
+    box-shadow: 0 0 14px rgba(255,255,255,0.4);
+  }
+
+  .shop-scroll-area {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    display: flex;
+    align-items: center;
+    padding: 20px max(20px, calc((100vw - 220px * 2 - 16px) / 2));
+    gap: 16px;
+  }
+  .shop-scroll-area::-webkit-scrollbar { display: none; }
+  .shop-scrollbar {
+    flex-shrink: 0;
+    padding: 10px 20px 18px;
+    display: flex;
+    justify-content: center;
+  }
+  .shop-scrollbar-track {
+    width: min(60%, 340px);
+    height: 4px;
+    background: rgba(255,255,255,0.10);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+  .shop-scrollbar-thumb {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    background: rgba(255,255,255,0.65);
+    border-radius: 2px;
+    transition: transform 0.1s;
+    will-change: transform, width;
+  }
+
+  .shop-card {
+    flex: 0 0 220px;
+    width: 220px;
+    height: 300px;
+    scroll-snap-align: center;
+    background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+    border: 2px solid rgba(255,255,255,0.16);
+    border-radius: 18px;
+    padding: 18px 16px;
+    display: flex; flex-direction: column;
+    align-items: center;
+    position: relative;
+    transition: all 0.25s;
+    color: #fff;
+  }
+  .shop-card.owned {
+    border-color: rgba(120,200,255,0.55);
+    background: linear-gradient(180deg, rgba(80,180,255,0.10) 0%, rgba(80,180,255,0.02) 100%);
+  }
+  .shop-card.equipped {
+    border-color: rgba(255,255,255,0.95);
+    background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 100%);
+    box-shadow: 0 0 30px rgba(255,255,255,0.20);
+  }
+
+  .shop-card-badge {
+    position: absolute;
+    top: -1px; left: -1px;
+    padding: 4px 10px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    border-radius: 16px 0 16px 0;
+    border: 2px solid rgba(255,255,255,0.9);
+    background: #fff;
+    color: #000;
+  }
+  .shop-card.owned .shop-card-badge {
+    background: #6ac3ff;
+    border-color: #6ac3ff;
+    color: #000;
+  }
+  .shop-card.equipped .shop-card-badge {
+    background: #ffffff;
+    color: #000;
+    box-shadow: 0 0 14px rgba(255,255,255,0.7);
+  }
+
+  .shop-card-icon {
+    width: 84px; height: 84px;
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.05);
+    border: 2px solid rgba(255,255,255,0.25);
+    font-size: 44px;
+    margin-top: 6px;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+  }
+  .shop-card.owned .shop-card-icon {
+    border-color: rgba(120,200,255,0.55);
+    background: rgba(80,180,255,0.10);
+  }
+  .shop-card.equipped .shop-card-icon {
+    border-color: #fff;
+    background: rgba(255,255,255,0.10);
+    box-shadow: 0 0 20px rgba(255,255,255,0.25);
+  }
+
+  .shop-card-name {
+    font-size: 15px; font-weight: 800;
+    letter-spacing: 2px;
+    text-align: center;
+    margin-bottom: 8px;
+    color: #fff;
+  }
+  .shop-card-desc {
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+    text-align: center;
+    line-height: 1.55;
+    flex: 1;
+    padding: 0 4px;
+  }
+  .shop-card-price {
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px;
+    padding: 8px 14px;
+    background: rgba(0,0,0,0.4);
+    border: 1.5px solid rgba(255,255,255,0.18);
+    border-radius: 999px;
+    font-weight: 800; letter-spacing: 2px; font-size: 14px;
+    margin-bottom: 12px;
+    width: 100%;
+  }
+  .shop-card-price .coin-icon { width: 15px; height: 15px; }
+  .shop-card.owned .shop-card-price {
+    background: rgba(80,180,255,0.15);
+    border-color: rgba(120,200,255,0.4);
+    color: #9ddcff;
+  }
+
+  .shop-card-btn {
+    width: 100%;
+    padding: 12px 0;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    border-radius: 10px;
+    min-width: 0;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .shop-card-btn.buy { background: #ffffff; color: #000; }
+  .shop-card-btn.buy:hover:not(:disabled) {
+    box-shadow: 0 0 20px rgba(255,255,255,0.7);
+    transform: translateY(-1px);
+  }
+  .shop-card-btn.buy:disabled {
+    background: rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.30);
+    cursor: not-allowed;
+  }
+  .shop-card-btn.equip { background: rgba(120,200,255,0.9); color: #000; }
+  .shop-card-btn.equip:hover {
+    background: #9ddcff;
+    box-shadow: 0 0 20px rgba(120,200,255,0.7);
+    transform: translateY(-1px);
+  }
+  .shop-card-btn.unequip {
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    border: 2px solid rgba(255,255,255,0.35);
+  }
+  .shop-card-btn.unequip:hover { background: rgba(255,255,255,0.16); }
+  .shop-card-btn:hover:not(:disabled) { transform: translateY(-1px); }
+  .shop-card-btn:active:not(:disabled) { transform: translateY(0); }
+
+  .shop-empty {
+    color: rgba(255,255,255,0.4);
+    font-size: 13px;
+    letter-spacing: 2px;
+    margin: auto;
+  }
+
+  /* ================= TOAST & AD LOADING ================= */
+  .toast {
+    position: fixed; left: 50%; bottom: 22px;
+    transform: translateX(-50%) translateY(10px);
+    z-index: 4000;
+    background: rgba(0,0,0,0.88);
+    border: 1.5px solid rgba(255,255,255,0.35);
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 13px; font-weight: 700; letter-spacing: 1px;
+    text-align: center; max-width: 90vw;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .ad-loading { z-index: 3000; background: rgba(0,0,0,0.85); }
+  .ad-loading-text {
+    color: #fff; font-size: 14px; font-weight: 800; letter-spacing: 4px;
+    animation: adpulse 1s ease-in-out infinite;
+  }
+  @keyframes adpulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+  /* Layar landscape pendek (kebanyakan HP): kartu shop dipadatkan supaya tombol tidak terpotong */
+  @media (max-height: 480px) {
+    .shop-topbar { padding: 8px 16px; }
+    .shop-scroll-area { padding-top: 8px; padding-bottom: 8px; }
+    .shop-card { height: 248px; padding: 10px 12px; }
+    .shop-card-icon { width: 52px; height: 52px; font-size: 28px; margin: 0 0 6px; }
+    .shop-card-name { font-size: 13px; margin-bottom: 4px; letter-spacing: 1.5px; }
+    .shop-card-desc { font-size: 10px; line-height: 1.4; margin-bottom: 6px; }
+    .shop-card-price { padding: 5px 12px; font-size: 12px; margin-bottom: 8px; }
+    .shop-card-btn { padding: 9px 0; font-size: 12px; }
+    .shop-scrollbar { padding: 6px 20px 10px; }
+  }
+  .upd-btn { min-width: 108px; padding: 9px 14px; font-size: 12px; letter-spacing: 1.5px; }
+</style>
+</head>
+<body>
+
+<!-- LOADING SCREEN: ikon + ようこそ, lalu fade out ke menu -->
+<div id="boot" aria-hidden="true">
+  <div class="boot-stack">
+    <img id="bootIcon" class="boot-icon" src="icon.jpg" alt="" draggable="false">
+    <div class="boot-text" lang="ja">ようこそ</div>
+  </div>
+</div>
+<script>
+(function () {
+  var boot = document.getElementById('boot');
+  var icon = document.getElementById('bootIcon');
+  if (!boot) return;
+  var MIN_MS = 2300, MAX_MS = 6000, FADE_MS = 800;
+  var t0 = Date.now(), done = false;
+  var pageReady = document.readyState === 'complete';
+  var iconReady = !icon || icon.complete;
+  window.addEventListener('load', function () { pageReady = true; });
+  if (icon && icon.decode) icon.decode().then(function () { iconReady = true; }, function () { iconReady = true; });
+
+  function finish() {
+    if (done) return;
+    done = true;
+    boot.classList.add('out');
+    var inner = document.querySelector('.menu-inner');
+    if (inner) inner.classList.add('enter');
+    setTimeout(function () { if (boot.parentNode) boot.parentNode.removeChild(boot); }, FADE_MS + 100);
+  }
+  (function tick() {
+    if (done) return;
+    var el = Date.now() - t0;
+    if (el >= MAX_MS || (el >= MIN_MS && pageReady && iconReady)) finish();
+    else setTimeout(tick, 100);
+  })();
+})();
+</script>
+
+<div id="menu">
+  <!-- SHOP icon pojok kiri atas -->
+  <button id="btnShop" class="corner-btn" aria-label="Shop">🛒</button>
+  <!-- SETTINGS icon di bawah shop -->
+  <button id="btnSettings" class="corner-btn" aria-label="Settings">⚙</button>
+  <!-- DONASI (sukarela) di bawah pengaturan -->
+  <button id="btnDonate" class="corner-btn off" aria-label="Donate">♥</button>
+
+  <div class="menu-inner">
+    <div class="brand">
+      <img class="brand-icon" src="icon.jpg" alt="" draggable="false">
+      <div class="brand-text">
+        <div class="title">BLOCKZONE</div>
+        <div class="subtitle" data-i18n="subtitle">200 BATTLE ROYALE</div>
+      </div>
+    </div>
+
+    <div class="coin-display">
+      <span class="coin-icon"></span>
+      <span id="menuCoinLabel">0</span>
+    </div>
+
+    <div class="row">
+      <input id="nickname" type="text" maxlength="14" data-i18n-placeholder="nickname_ph" placeholder="Masukkan nickname..." autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="row">
+      <button id="btnStart" disabled data-i18n="start">MULAI</button>
+    </div>
+
+    <div class="hint" data-i18n-html="hint">
+      Tarik tanda "+" untuk gerak • Tahan tombol panah untuk tembak<br>
+      Tap crosshair untuk auto-aim
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div id="settings" class="overlay">
+  <div class="panel">
+    <h2 data-i18n="settings">PENGATURAN</h2>
+
+    <div class="opt-row">
+      <div>
+        <div class="opt-label" data-i18n="language">BAHASA</div>
+        <div class="opt-sub" data-i18n="language_desc">Pilih bahasa tampilan</div>
+      </div>
+      <div class="lang-select">
+        <button class="lang-opt" data-lang="id">ID</button>
+        <button class="lang-opt" data-lang="en">EN</button>
+      </div>
+    </div>
+
+    <div class="opt-row">
+      <div>
+        <div class="opt-label" data-i18n="sound">SUARA</div>
+        <div class="opt-sub" data-i18n="sound_desc">Efek suara tembakan & ledakan</div>
+      </div>
+      <div id="swSound" class="switch on"></div>
+    </div>
+
+    <div class="opt-row">
+      <div>
+        <div class="opt-label" data-i18n="trail">TRAIL</div>
+        <div class="opt-sub" data-i18n="trail_desc">Garis ekor halus di belakang karakter</div>
+      </div>
+      <div id="swTrail" class="switch on"></div>
+    </div>
+
+    <div class="opt-row">
+      <div>
+        <div class="opt-label" data-i18n="arrow_trail">TRAIL PELURU</div>
+        <div class="opt-sub" data-i18n="arrow_trail_desc">Jejak cahaya di belakang panah</div>
+      </div>
+      <div id="swArrowTrail" class="switch on"></div>
+    </div>
+
+    <div class="opt-row">
+      <div>
+        <div class="opt-label" data-i18n="enemy_trail">MUSUH TRAIL</div>
+        <div class="opt-sub" data-i18n="enemy_trail_desc">Garis ekor halus di belakang musuh</div>
+      </div>
+      <div id="swEnemyTrail" class="switch on"></div>
+    </div>
+
+    <div class="opt-row" id="updRow">
+      <div>
+        <div class="opt-label" data-i18n="update">PEMBARUAN</div>
+        <div class="opt-sub" id="updSub">&nbsp;</div>
+      </div>
+      <button id="btnUpdate" class="ghost upd-btn">CEK</button>
+    </div>
+
+    <button id="btnClose" class="ghost close-btn" data-i18n="close">TUTUP</button>
+  </div>
+</div>
+
+<!-- SHOP -->
+<div id="shop" class="overlay">
+  <div class="shop-wrap">
+    <div class="shop-topbar">
+      <div class="shop-title" data-i18n="shop">SHOP</div>
+      <div class="shop-balance-inline">
+        <span class="coin-icon"></span>
+        <span id="shopCoinLabel">0</span>
+      </div>
+      <button id="btnShopClose" class="shop-close-x">✕</button>
+    </div>
+
+    <div class="shop-tabs">
+      <button id="shopTabSkill" class="shop-tab active" data-i18n="shop_tab_skill">SKILL</button>
+      <button id="shopTabArrow" class="shop-tab" data-i18n="shop_tab_arrow">ARROW</button>
+    </div>
+
+    <div id="shopScroll" class="shop-scroll-area"></div>
+
+    <div class="shop-scrollbar">
+      <div class="shop-scrollbar-track">
+        <div id="shopThumb" class="shop-scrollbar-thumb"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- DONASI -->
+<div id="donate" class="overlay">
+  <div class="panel">
+    <h2 data-i18n="donate">DUKUNG PENGEMBANG</h2>
+    <div class="donate-note" data-i18n="donate_desc">Suka game ini? Kamu bisa mendukung pengembang lewat donasi. Sepenuhnya sukarela dan tidak mengubah apa pun di dalam game, jadi main gratis tetap seru.</div>
+    <button id="btnDonateOpen" class="ghost close-btn" data-i18n="donate_open">BUKA HALAMAN DONASI</button>
+    <button id="btnDonateClose" class="ghost close-btn" data-i18n="close">TUTUP</button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+<div id="adLoading" class="overlay ad-loading">
+  <div class="ad-loading-text" data-i18n="ad_loading">MEMUAT IKLAN...</div>
+</div>
+
+<canvas id="game"></canvas>
+
+<script src="ads-config.js"></script>
+<script src="update-config.js"></script>
+<script src="updater.js"></script>
+<script>if (window.BZUpdater) BZUpdater.armWatchdog();</script>
+<script>
+(() => {
+  'use strict';
+
+  // true kalau jalan sebagai aplikasi Android (Capacitor), false kalau dibuka di browser
+  const IS_NATIVE = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  let W = 0, H = 0;
+
+  /* ================= TRANSLATIONS ================= */
+  const TRANSLATIONS = {
+    id: {
+      subtitle: '200 BATTLE ROYALE',
+      nickname_ph: 'Masukkan nickname...',
+      start: 'MULAI',
+      hint: 'Tarik tanda "+" untuk gerak • Tahan tombol panah untuk tembak<br>Tap crosshair untuk auto-aim',
+      settings: 'PENGATURAN',
+      language: 'BAHASA',
+      language_desc: 'Pilih bahasa tampilan',
+      sound: 'SUARA',
+      sound_desc: 'Efek suara tembakan & ledakan',
+      trail: 'TRAIL',
+      trail_desc: 'Garis ekor halus di belakang karakter',
+      arrow_trail: 'TRAIL PELURU',
+      arrow_trail_desc: 'Jejak cahaya di belakang panah',
+      enemy_trail: 'MUSUH TRAIL',
+      enemy_trail_desc: 'Garis ekor halus di belakang musuh',
+      close: 'TUTUP',
+      shop: 'SHOP',
+      buy: 'BELI',
+      equip: 'PAKAI',
+      unequip: 'LEPAS',
+      owned: 'DIMILIKI',
+      owned_short: '✓ DIMILIKI',
+      active: 'AKTIF',
+      empty_shop: 'BELUM ADA ITEM',
+      score: 'SKOR',
+      coin: 'KOIN',
+      rank: 'RANK',
+      you_died: 'YOU DIED',
+      return_menu: 'Kembali ke menu...',
+      laser_name: 'LASER BEAM',
+      laser_desc: 'Tahan untuk charge, lepas untuk menembak laser tipis. Instan kill musuh. Cooldown 30 detik.',
+      shield_name: 'SHIELD',
+      shield_desc: 'Tap untuk aktifkan shield tak tertembus selama 4 detik. Cooldown 30 detik.',
+      atkspd_name: 'ATTACK SPEED',
+      atkspd_desc: 'Tap untuk menembak 2x lebih cepat selama 5 detik. Cooldown 30 detik.',
+      together_name: 'TOGETHER',
+      together_desc: 'Tap untuk tembakan shotgun menyebar, 3x otomatis dengan jeda. Cooldown 30 detik.',
+      hook_name: 'HOOK',
+      hook_desc: 'Tap untuk menembakkan tali auto-hook ke musuh terdekat dalam jangkauan. Musuh yang kena akan disedot darahnya 10 tiap 0.5 detik selama 5 detik, darahnya jadi darah kamu. Kalau darah kamu penuh, sisanya jadi koin. Cooldown 30 detik.',
+      instaheal_name: 'INSTANT HEAL',
+      instaheal_desc: 'Tap sekali, darah langsung penuh seketika. Cooldown 30 detik.',
+      dash_name: 'DASH',
+      dash_desc: 'Tap untuk blink cepat ke arah gerak kita, sekejap kebal dari panah musuh. Cooldown 8 detik.',
+      shockwave_name: 'SHOCKWAVE',
+      shockwave_desc: 'Tap untuk ledakan dorongan di sekitar kita, musuh terdekat kedorong menjauh. Cooldown 30 detik.',
+      berserk_name: 'BERSERK',
+      berserk_desc: 'Tap untuk masuk mode berserk 6 detik: tembakan jauh lebih cepat & lebih sakit, tapi damage yang kita terima juga naik. Cooldown 30 detik.',
+      shop_tab_skill: 'SKILL',
+      shop_tab_arrow: 'ARROW',
+      healingswime_name: 'HEALING SWIME',
+      healingswime_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Kalau 2 detik gak kena damage, darah otomatis pulih 5 per detik.',
+      dodgeadaptasi_name: 'DODGE ADAPTASI',
+      dodgeadaptasi_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Otomatis dodge 1 panah musuh yang bakal kena, siap dipakai lagi tiap 2 detik.',
+      vampirearrow_name: 'VAMPIRE ARROW',
+      vampirearrow_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Tiap kena musuh, 35% damage-nya balik jadi darah kita.',
+      piercingarrow_name: 'PIERCING ARROW',
+      piercingarrow_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Panah tembus, bisa kena 1 musuh tambahan di belakangnya.',
+      explosivearrow_name: 'EXPLOSIVE ARROW',
+      explosivearrow_desc: 'Panah pasif, tampilannya sama putih seperti biasa. Meledak pas kena musuh, splash damage ke musuh lain di sekitarnya.',
+      thornsarrow_name: 'THORNS ARROW',
+      thornsarrow_desc: 'Panah pasif, tampilannya sama putih seperti biasa. 50% damage yang kita terima dipantulin balik ke musuh yang nembak.',
+      watch_ad: 'TONTON IKLAN',
+      ad_label: 'IKLAN',
+      ad_loading: 'MEMUAT IKLAN...',
+      ad_unavailable: 'Iklan belum tersedia, coba lagi nanti',
+      ad_skipped: 'Tonton iklan sampai selesai untuk dapat hadiah',
+      skill_unlocked: 'Skill terbuka!',
+      update: 'PEMBARUAN',
+      version: 'Versi',
+      update_check: 'CEK',
+      update_checking: 'MEMERIKSA...',
+      update_restart: 'MULAI ULANG',
+      update_latest: 'Sudah versi terbaru',
+      update_found: 'Pembaruan ditemukan, mengunduh...',
+      update_ready: 'Pembaruan siap! Tekan MULAI ULANG',
+      update_failed: 'Gagal memeriksa pembaruan',
+      donate: 'DUKUNG PENGEMBANG',
+      donate_desc: 'Suka game ini? Kamu bisa mendukung pengembang lewat donasi. Sepenuhnya sukarela dan tidak mengubah apa pun di dalam game, jadi main gratis tetap seru.',
+      donate_open: 'BUKA HALAMAN DONASI'
+    },
+    en: {
+      subtitle: '200 BATTLE ROYALE',
+      nickname_ph: 'Enter nickname...',
+      start: 'START',
+      hint: 'Drag the "+" to move • Hold the arrow button to shoot<br>Tap crosshair for auto-aim',
+      settings: 'SETTINGS',
+      language: 'LANGUAGE',
+      language_desc: 'Choose display language',
+      sound: 'SOUND',
+      sound_desc: 'Shooting & explosion sound effects',
+      trail: 'TRAIL',
+      trail_desc: 'Smooth tail line behind the character',
+      arrow_trail: 'BULLET TRAIL',
+      arrow_trail_desc: 'Light streak behind the arrow',
+      enemy_trail: 'ENEMY TRAIL',
+      enemy_trail_desc: 'Smooth tail line behind enemies',
+      close: 'CLOSE',
+      shop: 'SHOP',
+      buy: 'BUY',
+      equip: 'EQUIP',
+      unequip: 'REMOVE',
+      owned: 'OWNED',
+      owned_short: '✓ OWNED',
+      active: 'ACTIVE',
+      empty_shop: 'NO ITEMS YET',
+      score: 'SCORE',
+      coin: 'COIN',
+      rank: 'RANK',
+      you_died: 'YOU DIED',
+      return_menu: 'Returning to menu...',
+      laser_name: 'LASER BEAM',
+      laser_desc: 'Hold to charge, release to fire a thin laser. Instantly kills enemies. 30 second cooldown.',
+      shield_name: 'SHIELD',
+      shield_desc: 'Tap to activate an impenetrable shield for 4 seconds. 30 second cooldown.',
+      atkspd_name: 'ATTACK SPEED',
+      atkspd_desc: 'Tap to fire 2x faster for 5 seconds. 30 second cooldown.',
+      together_name: 'TOGETHER',
+      together_desc: 'Tap to fire a spreading shotgun blast, 3x automatically with a short delay between each. 30 second cooldown.',
+      hook_name: 'HOOK',
+      hook_desc: 'Tap to fire an auto-hook rope at the nearest enemy in range. On hit, it drains 10 HP every 0.5 seconds for 5 seconds, healing you with the drained blood. Once your HP is full, the rest turns into coins. 30 second cooldown.',
+      instaheal_name: 'INSTANT HEAL',
+      instaheal_desc: 'Tap once to instantly fill your HP back to full. 30 second cooldown.',
+      dash_name: 'DASH',
+      dash_desc: 'Tap to instantly blink in your movement direction, with a brief moment of immunity to enemy arrows. 8 second cooldown.',
+      shockwave_name: 'SHOCKWAVE',
+      shockwave_desc: 'Tap to unleash a knockback blast around you, pushing nearby enemies away. 30 second cooldown.',
+      berserk_name: 'BERSERK',
+      berserk_desc: 'Tap to enter berserk mode for 6 seconds: much faster and harder-hitting shots, but you also take more damage. 30 second cooldown.',
+      shop_tab_skill: 'SKILL',
+      shop_tab_arrow: 'ARROW',
+      healingswime_name: 'HEALING SWIME',
+      healingswime_desc: 'Passive arrow, looks the same plain white as always. If you avoid damage for 2 seconds, HP auto-heals 5 per second.',
+      dodgeadaptasi_name: 'DODGE ADAPTASI',
+      dodgeadaptasi_desc: 'Passive arrow, looks the same plain white as always. Automatically dodges one incoming enemy arrow, ready again every 2 seconds.',
+      vampirearrow_name: 'VAMPIRE ARROW',
+      vampirearrow_desc: 'Passive arrow, looks the same plain white as always. Every hit heals you for 35% of the damage dealt.',
+      piercingarrow_name: 'PIERCING ARROW',
+      piercingarrow_desc: 'Passive arrow, looks the same plain white as always. Your arrows pierce through and can hit one extra enemy behind the first.',
+      explosivearrow_name: 'EXPLOSIVE ARROW',
+      explosivearrow_desc: 'Passive arrow, looks the same plain white as always. Explodes on hit, dealing splash damage to nearby enemies.',
+      thornsarrow_name: 'THORNS ARROW',
+      thornsarrow_desc: 'Passive arrow, looks the same plain white as always. Reflects 50% of the damage you take back at whoever shot you.',
+      watch_ad: 'WATCH AD',
+      ad_label: 'ADS',
+      ad_loading: 'LOADING AD...',
+      ad_unavailable: 'Ad not available, try again later',
+      ad_skipped: 'Watch the full ad to get the reward',
+      skill_unlocked: 'Skill unlocked!',
+      update: 'UPDATE',
+      version: 'Version',
+      update_check: 'CHECK',
+      update_checking: 'CHECKING...',
+      update_restart: 'RESTART',
+      update_latest: 'You are up to date',
+      update_found: 'Update found, downloading...',
+      update_ready: 'Update ready! Tap RESTART',
+      update_failed: 'Could not check for updates',
+      donate: 'SUPPORT THE DEVELOPER',
+      donate_desc: 'Enjoying the game? You can support the developer with a donation. It is completely optional and changes nothing in the game, so playing for free is just as fun.',
+      donate_open: 'OPEN DONATION PAGE'
+    }
+  };
+
+  function t(key) {
+    const lang = settings.language || 'id';
+    const dict = TRANSLATIONS[lang] || TRANSLATIONS.id;
+    return dict[key] || TRANSLATIONS.id[key] || key;
+  }
+
+  function applyTranslations() {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      el.textContent = t(el.getAttribute('data-i18n'));
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach(el => {
+      el.innerHTML = t(el.getAttribute('data-i18n-html'));
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+      el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+    });
+    // Language selector active state
+    document.querySelectorAll('.lang-opt').forEach(b => {
+      b.classList.toggle('active', b.dataset.lang === settings.language);
+    });
+    // Re-render shop if visible
+    if (shopEl && shopEl.classList.contains('show')) renderShop();
+  }
+
+  /* ================= AUDIO ================= */
+  let audioCtx = null;
+  let audioReady = false;
+  function ensureAudio() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch(e){ return; }
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    audioReady = true;
+  }
+  function nowT() { return audioCtx ? audioCtx.currentTime : 0; }
+
+  function playShootPlayer() {
+    if (!audioReady || !settings.sound) return;
+    const t0 = nowT();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(1200, t0);
+    o.frequency.exponentialRampToValueAtTime(500, t0 + 0.07);
+    g.gain.setValueAtTime(0.05, t0);
+    g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.08);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + 0.09);
+  }
+  function playShootEnemy() {
+    if (!audioReady || !settings.sound) return;
+    const t0 = nowT();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(320, t0);
+    o.frequency.exponentialRampToValueAtTime(140, t0 + 0.08);
+    g.gain.setValueAtTime(0.035, t0);
+    g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.09);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + 0.1);
+  }
+  function playKill() {
+    if (!audioReady || !settings.sound) return;
+    const t0 = nowT();
+    const bufSize = audioCtx.sampleRate * 0.15;
+    const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < bufSize; i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/bufSize, 2);
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(0.10, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.18);
+    const f = audioCtx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.setValueAtTime(1800, t0);
+    f.frequency.exponentialRampToValueAtTime(200, t0 + 0.18);
+    src.connect(f); f.connect(g); g.connect(audioCtx.destination);
+    src.start(t0); src.stop(t0 + 0.2);
+  }
+  function playLaserCharge() {
+    if (!audioReady || !settings.sound) return;
+    const t0 = nowT();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(200, t0);
+    o.frequency.exponentialRampToValueAtTime(900, t0 + 0.4);
+    g.gain.setValueAtTime(0.03, t0);
+    g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.5);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + 0.5);
+  }
+  function playLaserFire() {
+    if (!audioReady || !settings.sound) return;
+    const t0 = nowT();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(1800, t0);
+    o.frequency.exponentialRampToValueAtTime(300, t0 + 0.25);
+    g.gain.setValueAtTime(0.09, t0);
+    g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.3);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + 0.32);
+  }
+  function playHaste() {
+    if (!audioReady || !settings.sound) return;
+    const t0 = nowT();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(400, t0);
+    o.frequency.exponentialRampToValueAtTime(1600, t0 + 0.18);
+    g.gain.setValueAtTime(0.05, t0);
+    g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.24);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + 0.26);
+  }
+  function playShield() {
+    if (!audioReady || !settings.sound) return;
+    const t0 = nowT();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(300, t0);
+    o.frequency.exponentialRampToValueAtTime(1200, t0 + 0.15);
+    o.frequency.exponentialRampToValueAtTime(600, t0 + 0.4);
+    g.gain.setValueAtTime(0.06, t0);
+    g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.45);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + 0.5);
+  }
+  function playDeath() {
+    if (!audioReady || !settings.sound) return;
+    const t0 = nowT();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(500, t0);
+    o.frequency.exponentialRampToValueAtTime(60, t0 + 0.8);
+    g.gain.setValueAtTime(0.12, t0);
+    g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.9);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0); o.stop(t0 + 0.95);
+  }
+
+  /* ================= SETTINGS / DATA ================= */
+  const settings = {
+    sound: true,
+    playerTrail: true,
+    arrowTrail: true,
+    enemyTrail: true,
+    language: 'id'
+  };
+
+  let coins = 0;
+  let ownedSkills = { laser: false, shield: false, attackspeed: false, together: false, hook: false, instaheal: false, dash: false, shockwave: false, berserk: false };
+  let equippedSkill = null;
+  let ownedArrows = { healingswime: false, dodgeadaptasi: false, vampirearrow: false, piercingarrow: false, explosivearrow: false, thornsarrow: false };
+  let equippedArrow = null;
+  let adProgress = { attackspeed: 0 };  // berapa iklan sudah ditonton per skill
+  let lossCount = 0;                    // hitungan kalah sejak iklan terakhir
+
+  function loadGameData() {
+    try { Object.assign(settings, JSON.parse(localStorage.getItem('sq_zone_settings') || '{}')); } catch(e){}
+    try {
+      const d = JSON.parse(localStorage.getItem('sq_zone_data') || '{}');
+      coins = d.coins || 0;
+      ownedSkills = Object.assign({ laser:false, shield:false, attackspeed:false, together:false, hook:false, instaheal:false, dash:false, shockwave:false, berserk:false }, d.ownedSkills || {});
+      equippedSkill = d.equippedSkill || null;
+      ownedArrows = Object.assign({ healingswime: false, dodgeadaptasi: false, vampirearrow: false, piercingarrow: false, explosivearrow: false, thornsarrow: false }, d.ownedArrows || {});
+      equippedArrow = d.equippedArrow || null;
+      adProgress = Object.assign({ attackspeed: 0 }, d.adProgress || {});
+      lossCount = d.lossCount || 0;
+    } catch(e){}
+    if (!settings.language) settings.language = 'id';
+  }
+  function saveSettings() {
+    try { localStorage.setItem('sq_zone_settings', JSON.stringify(settings)); } catch(e){}
+  }
+  function saveGameData() {
+    try { localStorage.setItem('sq_zone_data', JSON.stringify({ coins, ownedSkills, equippedSkill, ownedArrows, equippedArrow, adProgress, lossCount })); } catch(e){}
+  }
+
+  loadGameData();
+
+  /* ================= IKLAN (AdMob via Capacitor) ================= */
+  // ID diisi otomatis dari www/ads-config.js (ditulis oleh GitHub Actions dari repo Variables)
+  const ADS_CFG = Object.assign({
+    testing: true,
+    interstitialId: 'ca-app-pub-3940256099942544/1033173712',   // ID test Google
+    rewardedId: 'ca-app-pub-3940256099942544/5224354917'        // ID test Google
+  }, window.SQ_ADS || {});
+  const LOSSES_PER_AD = 3;   // iklan muncul tiap kalah 3 kali
+  const ADS_ENABLED = false; // iklan dimatikan. Ganti true kalau mau dinyalakan lagi (butuh toko yang didukung AdMob)
+
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.remove('show'), 2400);
+  }
+  function showAdLoading(on) {
+    const el = document.getElementById('adLoading');
+    if (el) el.classList.toggle('show', !!on);
+  }
+  function withTimeout(p, ms) {
+    return new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error('timeout')), ms);
+      Promise.resolve(p).then(
+        (v) => { clearTimeout(to); resolve(v); },
+        (e) => { clearTimeout(to); reject(e); }
+      );
+    });
+  }
+  // Iklan tiruan, cuma kepakai kalau game dibuka di browser (buat ngetes alur)
+  function fakeAd(seconds) {
+    return new Promise((resolve) => {
+      const o = document.createElement('div');
+      o.style.cssText = 'position:fixed;inset:0;z-index:5000;background:#111;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-weight:800;letter-spacing:3px;text-align:center;';
+      const lab = document.createElement('div');
+      lab.style.cssText = 'font-size:12px;opacity:.5';
+      lab.textContent = 'IKLAN (SIMULASI BROWSER)';
+      const num = document.createElement('div');
+      num.style.cssText = 'font-size:44px';
+      let n = seconds;
+      num.textContent = n;
+      o.appendChild(lab); o.appendChild(num);
+      document.body.appendChild(o);
+      const iv = setInterval(() => {
+        n--;
+        if (n <= 0) { clearInterval(iv); o.remove(); resolve(); }
+        else num.textContent = n;
+      }, 1000);
+    });
+  }
+  function resumeAudio() {
+    try { if (audioCtx && audioCtx.state === 'suspended' && settings.sound) audioCtx.resume(); } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeAudio(); });
+
+  const Ads = (() => {
+    let AdMob = null;
+    if (IS_NATIVE) {
+      const cap = window.Capacitor;
+      try {
+        AdMob = (cap.Plugins && cap.Plugins.AdMob) || (cap.registerPlugin ? cap.registerPlugin('AdMob') : null);
+      } catch (e) { AdMob = null; }
+    }
+    let canRequest = true;
+    let interReady = false, interLoading = false;
+    let rewardReady = false, rewardLoadP = null;
+    let busy = false;
+    let rewardEarned = false;
+    let rewardWaiter = null;
+    let initP = null;
+    let lastError = '';   // kode error terakhir dari AdMob, ditampilkan di toast biar gampang dilacak
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    function errText(e) {
+      try {
+        if (!e) return 'unknown';
+        const code = (e.code !== undefined && e.code !== null) ? String(e.code) : '';
+        const msg = e.message || e.errorMessage || (typeof e === 'string' ? e : '');
+        return (code + ' ' + msg).trim().slice(0, 48) || 'unknown';
+      } catch (_) { return 'unknown'; }
+    }
+    function on(evt, fn) {
+      try {
+        const r = AdMob.addListener(evt, fn);
+        if (r && r.catch) r.catch(() => {});
+      } catch (e) {}
+    }
+
+    async function loadInterstitial() {
+      if (!AdMob || !canRequest || interReady || interLoading) return;
+      interLoading = true;
+      try {
+        await withTimeout(AdMob.prepareInterstitial({ adId: ADS_CFG.interstitialId, isTesting: ADS_CFG.testing }), 15000);
+        interReady = true;
+      } catch (e) {
+        interReady = false;
+        setTimeout(loadInterstitial, 30000);
+      }
+      interLoading = false;
+    }
+
+    // Satu permintaan iklan reward dalam satu waktu, dicoba 2x (iklan kadang telat siap)
+    function loadRewarded() {
+      if (!AdMob || !canRequest) return Promise.resolve(false);
+      if (rewardReady) return Promise.resolve(true);
+      if (rewardLoadP) return rewardLoadP;
+      rewardLoadP = (async () => {
+        for (let attempt = 0; attempt < 2 && !rewardReady; attempt++) {
+          try {
+            await withTimeout(AdMob.prepareRewardVideoAd({ adId: ADS_CFG.rewardedId, isTesting: ADS_CFG.testing }), 20000);
+            rewardReady = true;
+          } catch (e) {
+            lastError = errText(e);
+            if (attempt === 0) await sleep(1200);
+          }
+        }
+        rewardLoadP = null;
+        return rewardReady;
+      })();
+      return rewardLoadP;
+    }
+
+    // Listener dipasang duluan, consent/initialize dikasih batas waktu supaya tidak nyangkut selamanya
+    function init() {
+      if (!AdMob) return Promise.resolve();
+      if (initP) return initP;
+      initP = (async () => {
+        on('interstitialAdLoaded', () => { interReady = true; });
+        on('interstitialAdFailedToLoad', () => { interReady = false; });
+        on('interstitialAdDismissed', () => { interReady = false; resumeAudio(); setTimeout(loadInterstitial, 500); });
+        on('interstitialAdFailedToShow', () => { interReady = false; setTimeout(loadInterstitial, 2000); });
+
+        on('onRewardedVideoAdLoaded', () => { rewardReady = true; });
+        on('onRewardedVideoAdFailedToLoad', (e) => { rewardReady = false; lastError = errText(e); });
+        on('onRewardedVideoAdReward', () => { rewardEarned = true; });
+        on('onRewardedVideoAdDismissed', () => {
+          rewardReady = false;
+          resumeAudio();
+          if (rewardWaiter) rewardWaiter(rewardEarned ? 'ok' : 'skipped');
+        });
+        on('onRewardedVideoAdFailedToShow', (e) => {
+          rewardReady = false;
+          lastError = errText(e);
+          if (rewardWaiter) rewardWaiter('failed');
+        });
+
+        try {
+          let info = await withTimeout(AdMob.requestConsentInfo(), 8000);
+          if (info && info.isConsentFormAvailable && info.status === 'REQUIRED') info = await withTimeout(AdMob.showConsentForm(), 90000);
+          if (info && info.canRequestAds === false) canRequest = false;
+        } catch (e) {}
+        try { await withTimeout(AdMob.initialize(), 10000); }
+        catch (e) { lastError = 'init ' + errText(e); }
+
+        loadInterstitial();
+        loadRewarded();
+      })();
+      return initP;
+    }
+
+    // true = iklan benar-benar ditampilkan
+    async function showInterstitial() {
+      if (busy) return false;
+      if (!IS_NATIVE) { busy = true; await fakeAd(2); busy = false; return true; }
+      if (!AdMob || !canRequest) return false;
+      if (!interReady) { loadInterstitial(); return false; }
+      busy = true;
+      try {
+        await AdMob.showInterstitial();
+        interReady = false;
+        return true;
+      } catch (e) {
+        interReady = false;
+        loadInterstitial();
+        return false;
+      } finally {
+        busy = false;
+      }
+    }
+
+    // { ok: true } kalau hadiah didapat; ok false + reason ('skipped' | 'failed' | 'unavailable' | 'busy') + detail (kode error)
+    async function showRewarded() {
+      if (busy) return { ok: false, reason: 'busy' };
+      busy = true;
+      try {
+        if (!IS_NATIVE) { await fakeAd(3); return { ok: true, reason: 'ok' }; }
+        if (!AdMob) return { ok: false, reason: 'unavailable', detail: 'no plugin' };
+        try { await withTimeout(init(), 15000); } catch (e) { lastError = lastError || 'init timeout'; }
+        if (!canRequest) return { ok: false, reason: 'unavailable', detail: 'consent' };
+        if (!(await loadRewarded())) return { ok: false, reason: 'unavailable', detail: lastError };
+        rewardEarned = false;
+        const result = await new Promise((resolve) => {
+          let done = false;
+          const finish = (r) => { if (done) return; done = true; rewardWaiter = null; resolve(r); };
+          rewardWaiter = finish;
+          try {
+            AdMob.showRewardVideoAd().then(
+              (item) => {
+                if (item) rewardEarned = true;
+                setTimeout(() => finish(rewardEarned ? 'ok' : 'skipped'), 4000);   // jaga-jaga kalau event dismissed telat
+              },
+              (e) => { lastError = errText(e); finish(rewardEarned ? 'ok' : 'failed'); }
+            );
+          } catch (e) { lastError = errText(e); finish('failed'); }
+        });
+        return { ok: result === 'ok', reason: result, detail: lastError };
+      } finally {
+        busy = false;
+        if (AdMob) { rewardReady = false; setTimeout(loadRewarded, 800); }
+      }
+    }
+
+    return { init, showInterstitial, showRewarded };
+  })();
+  if (ADS_ENABLED) Ads.init();
+
+  /* ================= DOM ================= */
+  const menuEl = document.getElementById('menu');
+  const settingsEl = document.getElementById('settings');
+  const shopEl = document.getElementById('shop');
+  const nicknameEl = document.getElementById('nickname');
+  const btnStart = document.getElementById('btnStart');
+  const btnSettings = document.getElementById('btnSettings');
+  const btnShop = document.getElementById('btnShop');
+  const btnClose = document.getElementById('btnClose');
+  const btnShopClose = document.getElementById('btnShopClose');
+  const swSound = document.getElementById('swSound');
+  const swTrail = document.getElementById('swTrail');
+  const swArrowTrail = document.getElementById('swArrowTrail');
+  const swEnemyTrail = document.getElementById('swEnemyTrail');
+  const menuCoinLabel = document.getElementById('menuCoinLabel');
+  const shopCoinLabel = document.getElementById('shopCoinLabel');
+  const shopScroll = document.getElementById('shopScroll');
+  const shopThumb = document.getElementById('shopThumb');
+  const shopTabSkill = document.getElementById('shopTabSkill');
+  const shopTabArrow = document.getElementById('shopTabArrow');
+
+  let gameStarted = false;
+
+  function refreshSwitches() {
+    swSound.classList.toggle('on', settings.sound);
+    swTrail.classList.toggle('on', settings.playerTrail);
+    swArrowTrail.classList.toggle('on', settings.arrowTrail);
+    swEnemyTrail.classList.toggle('on', settings.enemyTrail);
+  }
+  refreshSwitches();
+
+  function refreshCoinLabels() {
+    menuCoinLabel.textContent = coins;
+    shopCoinLabel.textContent = coins;
+  }
+  refreshCoinLabels();
+
+  function validateNick() {
+    btnStart.disabled = nicknameEl.value.trim().length < 1;
+  }
+  nicknameEl.addEventListener('input', validateNick);
+  nicknameEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !btnStart.disabled) btnStart.click();
+  });
+  validateNick();
+  try {
+    const saved = localStorage.getItem('sq_zone_nick');
+    if (saved) { nicknameEl.value = saved; validateNick(); }
+  } catch(e){}
+
+  swSound.addEventListener('click', () => {
+    settings.sound = !settings.sound;
+    swSound.classList.toggle('on', settings.sound);
+    saveSettings();
+    if (settings.sound) { ensureAudio(); playShootPlayer(); }
+  });
+  swTrail.addEventListener('click', () => {
+    settings.playerTrail = !settings.playerTrail;
+    swTrail.classList.toggle('on', settings.playerTrail);
+    saveSettings();
+  });
+  swArrowTrail.addEventListener('click', () => {
+    settings.arrowTrail = !settings.arrowTrail;
+    swArrowTrail.classList.toggle('on', settings.arrowTrail);
+    saveSettings();
+  });
+  swEnemyTrail.addEventListener('click', () => {
+    settings.enemyTrail = !settings.enemyTrail;
+    swEnemyTrail.classList.toggle('on', settings.enemyTrail);
+    saveSettings();
+  });
+
+  // Language selector
+  document.querySelectorAll('.lang-opt').forEach(btn => {
+    btn.addEventListener('click', () => {
+      settings.language = btn.dataset.lang;
+      saveSettings();
+      applyTranslations();
+    });
+  });
+
+  btnSettings.addEventListener('click', () => { settingsEl.classList.add('show'); if (typeof refreshUpdateInfo === 'function') refreshUpdateInfo(); });
+  btnClose.addEventListener('click', () => settingsEl.classList.remove('show'));
+  btnShop.addEventListener('click', () => { openShop(); });
+  btnShopClose.addEventListener('click', () => shopEl.classList.remove('show'));
+  shopTabSkill.addEventListener('click', () => setShopCategory('skill'));
+  shopTabArrow.addEventListener('click', () => setShopCategory('arrow'));
+
+  /* ================= DONASI (sukarela, tanpa hadiah) ================= */
+  // Isi dengan link Saweria / Trakteer kamu. Kosong = tombol ♥ disembunyikan.
+  const DONATE_URL = 'https://saweria.co/YukiDesu';
+  const btnDonate = document.getElementById('btnDonate');
+  const donateEl = document.getElementById('donate');
+  if (DONATE_URL) btnDonate.classList.remove('off');
+  btnDonate.addEventListener('click', () => donateEl.classList.add('show'));
+  document.getElementById('btnDonateClose').addEventListener('click', () => donateEl.classList.remove('show'));
+  document.getElementById('btnDonateOpen').addEventListener('click', () => {
+    if (!DONATE_URL) return;
+    // di aplikasi Android, link luar otomatis dibuka di browser HP (game tetap di belakang)
+    if (IS_NATIVE) window.location.href = DONATE_URL;
+    else window.open(DONATE_URL, '_blank', 'noopener');
+    donateEl.classList.remove('show');
+  });
+
+  // Apply translations first time
+  applyTranslations();
+
+  // Game sudah hidup -> matikan watchdog updater supaya versi unduhan tidak di-rollback.
+  if (window.BZUpdater) window.BZUpdater.markOk();
+
+  /* ================= PEMBARUAN (game diunduh dari dalam game) ================= */
+  const btnUpdate = document.getElementById('btnUpdate');
+  const updSub = document.getElementById('updSub');
+  const updRow = document.getElementById('updRow');
+  let updState = 'idle';   // idle | busy | ready
+
+  // Ringkas daftar kegagalan server jadi teks pendek buat toast.
+  function updErrText(errors) {
+    return (errors || []).map(function (e) {
+      return String(e).replace(/^https?:\/\/[^/]+\/?/, '').replace(/Error:\s*/g, '').trim();
+    }).filter(Boolean).join(' · ').slice(0, 80);
+  }
+
+  // ---- cadangan: unduh + pasang lewat mirror sendiri, tanpa updater bawaan APK ----
+  // Dipakai kalau APK masih membawa updater versi lama (satu server) dan server itu gagal.
+  // Menulis langsung ke IndexedDB yang sama dengan updater, jadi launcher akan menjalankannya.
+  function idbOpenGame() {
+    return new Promise(function (res, rej) {
+      const rq = indexedDB.open('bz-updates', 1);
+      rq.onupgradeneeded = () => { rq.result.createObjectStore('kv'); };
+      rq.onsuccess = () => res(rq.result);
+      rq.onerror = () => rej(rq.error);
+    });
+  }
+  function idbGetGame() {
+    return idbOpenGame().then(db => new Promise((res, rej) => {
+      const tx = db.transaction('kv', 'readonly');
+      const r = tx.objectStore('kv').get('game');
+      tx.oncomplete = () => { db.close(); res(r && r.result); };
+      tx.onerror = tx.onabort = () => { db.close(); rej(tx.error || new Error('idb')); };
+    })).catch(() => null);
+  }
+  function idbPutGame(obj) {
+    return idbOpenGame().then(db => new Promise((res, rej) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(obj, 'game');
+      tx.oncomplete = () => { db.close(); res(); };
+      tx.onerror = tx.onabort = () => { db.close(); rej(tx.error || new Error('idb')); };
+    }));
+  }
+  function selfInstall() {
+    const c = window.BZ_UPDATE || {};
+    const list = [], seen = {};
+    const add = (u) => {
+      u = String(u || '').trim(); if (!u) return;
+      if (u.charAt(u.length - 1) !== '/') u += '/';
+      if (!seen[u]) { seen[u] = 1; list.push(u); }
+    };
+    if (Array.isArray(c.urls)) c.urls.forEach(add);
+    if (c.repo) {
+      add('https://raw.githubusercontent.com/' + c.repo + '/update-pkg/');
+      add('https://cdn.jsdelivr.net/gh/' + c.repo + '@update-pkg/');
+    }
+    if (!list.length) return Promise.resolve({ ok: false });
+    return Promise.all([
+      fetch('version.json', { cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
+      idbGetGame()
+    ]).then(([bundled, storedOld]) => {
+      const curBuild = Math.max(Number(bundled.build) || 0, (storedOld && Number(storedOld.build)) || 0);
+      const out = { ok: false, installed: false, errors: [] };
+      let i = 0;
+      const next = () => {
+        if (i >= list.length) return out;
+        const base = list[i++];
+        return fetch(base + 'version.json?t=' + Date.now(), { cache: 'no-store' }).then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).then(remote => {
+          if ((Number(remote.build) || 0) <= curBuild) { out.ok = true; out.uptodate = true; return out; }
+          return fetch(base + (remote.file || 'game.html') + '?v=' + remote.build, { cache: 'no-store' }).then(r => {
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.arrayBuffer();
+          }).then(ab => {
+            const bytes = new Uint8Array(ab);
+            if (remote.size && bytes.length !== Number(remote.size)) throw new Error('ukuran tidak cocok');
+            const html = new TextDecoder('utf-8').decode(bytes);
+            if (html.indexOf('</html>') < 0) throw new Error('file rusak');
+            const hashOk = (remote.sha256 && window.crypto && window.crypto.subtle)
+              ? window.crypto.subtle.digest('SHA-256', bytes).then(h => {
+                  const hex = Array.prototype.map.call(new Uint8Array(h), b => ('0' + b.toString(16)).slice(-2)).join('');
+                  if (hex !== String(remote.sha256).toLowerCase()) throw new Error('hash tidak cocok');
+                })
+              : Promise.resolve();
+            return hashOk.then(() => idbPutGame({
+              build: Number(remote.build) || 0,
+              name: String(remote.name || remote.build),
+              html: html,
+              savedAt: Date.now()
+            })).then(() => { out.ok = true; out.installed = true; out.name = remote.name; return out; });
+          });
+        }).catch(e => { out.errors.push(String((e && e.message) || e)); return next(); });
+      };
+      return next();
+    });
+  }
+  function markReady() {
+    updState = 'ready';
+    btnUpdate.disabled = false;
+    btnUpdate.textContent = t('update_restart');
+  }
+
+  async function refreshUpdateInfo() {
+    const U = window.BZUpdater;
+    if (!U) { if (updRow) updRow.style.display = 'none'; return; }
+    try {
+      const cur = await U.current();
+      updSub.textContent = t('version') + ' ' + cur.name;
+    } catch (e) { updSub.textContent = ''; }
+    btnUpdate.style.display = U.enabled ? '' : 'none';
+    if (updState === 'idle') btnUpdate.textContent = t('update_check');
+  }
+
+  async function onUpdateClick() {
+    const U = window.BZUpdater;
+    if (!U || updState === 'busy') return;
+    if (updState === 'ready') { location.reload(); return; }
+    updState = 'busy';
+    btnUpdate.disabled = true;
+    btnUpdate.textContent = t('update_checking');
+    // CEK manual = niat pengguna: hapus blacklist build lama supaya boleh dicoba lagi
+    try { localStorage.removeItem('bz_bad_build'); localStorage.removeItem('bz_bad_at'); } catch (e) {}
+    try {
+      const r = await U.check();
+      if (r.reason === 'offline') {
+        // updater bawaan APK lama cuma punya satu server -> coba mirror sendiri
+        const alt = (U.VER >= 2) ? null : await selfInstall();
+        if (alt && alt.installed) { toast(t('update_found')); markReady(); return; }
+        const det = updErrText(r.errors);
+        toast(t('update_failed') + (det ? ' — ' + det : ''));
+      } else if (!r.available) { toast(t('update_latest')); }
+      else {
+        toast(t('update_found'));
+        await U.download(r.remote, (p) => {
+          btnUpdate.textContent = (p === null) ? '...' : Math.round(p * 100) + '%';
+        });
+        toast(t('update_ready'));
+        markReady();
+        return;
+      }
+    } catch (e) {
+      const alt = (U.VER >= 2) ? null : await selfInstall();
+      if (alt && alt.installed) { toast(t('update_found')); markReady(); return; }
+      toast(t('update_failed'));
+    }
+    updState = 'idle';
+    btnUpdate.disabled = false;
+    btnUpdate.textContent = t('update_check');
+  }
+  if (btnUpdate) btnUpdate.addEventListener('click', onUpdateClick);
+  refreshUpdateInfo();
+
+  /* ================= SHOP ================= */
+  const SHOP_ITEMS = [
+    {
+      id: 'laser',
+      icon: '⚡',
+      nameKey: 'laser_name',
+      descKey: 'laser_desc',
+      price: 1000
+    },
+    {
+      id: 'shield',
+      icon: '🛡',
+      nameKey: 'shield_name',
+      descKey: 'shield_desc',
+      price: 200
+    },
+    {
+      id: 'attackspeed',
+      icon: '🔥',
+      nameKey: 'atkspd_name',
+      descKey: 'atkspd_desc',
+      price: 200
+    },
+    {
+      id: 'together',
+      icon: '🎯',
+      nameKey: 'together_name',
+      descKey: 'together_desc',
+      price: 300
+    },
+    {
+      id: 'hook',
+      icon: '🪝',
+      nameKey: 'hook_name',
+      descKey: 'hook_desc',
+      price: 500
+    },
+    {
+      id: 'instaheal',
+      icon: '✚',
+      nameKey: 'instaheal_name',
+      descKey: 'instaheal_desc',
+      price: 400
+    },
+    {
+      id: 'dash',
+      icon: '➤',
+      nameKey: 'dash_name',
+      descKey: 'dash_desc',
+      price: 350
+    },
+    {
+      id: 'shockwave',
+      icon: '◎',
+      nameKey: 'shockwave_name',
+      descKey: 'shockwave_desc',
+      price: 450
+    },
+    {
+      id: 'berserk',
+      icon: '🔺',
+      nameKey: 'berserk_name',
+      descKey: 'berserk_desc',
+      price: 600
+    }
+  ];
+
+  const ARROW_SHOP_ITEMS = [
+    {
+      id: 'healingswime',
+      icon: '🏹',
+      nameKey: 'healingswime_name',
+      descKey: 'healingswime_desc',
+      price: 500
+    },
+    {
+      id: 'dodgeadaptasi',
+      icon: '💨',
+      nameKey: 'dodgeadaptasi_name',
+      descKey: 'dodgeadaptasi_desc',
+      price: 500
+    },
+    {
+      id: 'vampirearrow',
+      icon: '🩸',
+      nameKey: 'vampirearrow_name',
+      descKey: 'vampirearrow_desc',
+      price: 600
+    },
+    {
+      id: 'piercingarrow',
+      icon: '➶',
+      nameKey: 'piercingarrow_name',
+      descKey: 'piercingarrow_desc',
+      price: 550
+    },
+    {
+      id: 'explosivearrow',
+      icon: '💥',
+      nameKey: 'explosivearrow_name',
+      descKey: 'explosivearrow_desc',
+      price: 650
+    },
+    {
+      id: 'thornsarrow',
+      icon: '🌵',
+      nameKey: 'thornsarrow_name',
+      descKey: 'thornsarrow_desc',
+      price: 550
+    }
+  ];
+
+  let shopCategory = 'skill';   // 'skill' | 'arrow'
+
+  function setShopCategory(cat) {
+    shopCategory = cat;
+    shopTabSkill.classList.toggle('active', cat === 'skill');
+    shopTabArrow.classList.toggle('active', cat === 'arrow');
+    renderShop();
+    requestAnimationFrame(() => {
+      shopScroll.scrollLeft = 0;
+      updateThumb();
+    });
+  }
+
+  function openShop() {
+    setShopCategory('skill');
+    shopEl.classList.add('show');
+  }
+
+  function updateThumb() {
+    const total = shopScroll.scrollWidth;
+    const view = shopScroll.clientWidth;
+    if (total <= view) {
+      shopThumb.style.width = '100%';
+      shopThumb.style.transform = 'translateX(0)';
+      return;
+    }
+    const ratio = view / total;
+    const thumbW = Math.max(0.15, ratio) * 100;
+    shopThumb.style.width = thumbW + '%';
+    const thumbPx = (thumbW / 100) * view;
+    const travelPx = view - thumbPx;
+    const leftPx = (total - view > 0) ? (shopScroll.scrollLeft / (total - view)) * travelPx : 0;
+    shopThumb.style.transform = 'translateX(' + leftPx + 'px)';
+  }
+  shopScroll.addEventListener('scroll', updateThumb, { passive: true });
+  window.addEventListener('resize', () => { if (shopEl.classList.contains('show')) updateThumb(); });
+
+  function renderShop() {
+    refreshCoinLabels();
+    shopScroll.innerHTML = '';
+
+    const isArrowCat = shopCategory === 'arrow';
+    const items = isArrowCat ? ARROW_SHOP_ITEMS : SHOP_ITEMS;
+    const ownedMap = isArrowCat ? ownedArrows : ownedSkills;
+    const currentEquipped = isArrowCat ? equippedArrow : equippedSkill;
+
+    if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'shop-empty';
+      empty.textContent = t('empty_shop');
+      shopScroll.appendChild(empty);
+      return;
+    }
+
+    for (const it of items) {
+      const owned = ownedMap[it.id];
+      const equipped = currentEquipped === it.id;
+
+      const card = document.createElement('div');
+      card.className = 'shop-card' + (owned ? ' owned' : '') + (equipped ? ' equipped' : '');
+
+      if (equipped) {
+        const b = document.createElement('div');
+        b.className = 'shop-card-badge';
+        b.textContent = t('active');
+        card.appendChild(b);
+      } else if (owned) {
+        const b = document.createElement('div');
+        b.className = 'shop-card-badge';
+        b.textContent = t('owned');
+        card.appendChild(b);
+      }
+
+      const icon = document.createElement('div');
+      icon.className = 'shop-card-icon';
+      icon.textContent = it.icon;
+      card.appendChild(icon);
+
+      const name = document.createElement('div');
+      name.className = 'shop-card-name';
+      name.textContent = t(it.nameKey);
+      card.appendChild(name);
+
+      const desc = document.createElement('div');
+      desc.className = 'shop-card-desc';
+      desc.textContent = t(it.descKey);
+      card.appendChild(desc);
+
+      const price = document.createElement('div');
+      price.className = 'shop-card-price';
+      if (!owned) {
+        price.innerHTML = '<span class="coin-icon"></span><span>' + it.price + '</span>';
+      } else {
+        price.innerHTML = '<span>' + t('owned_short') + '</span>';
+      }
+      card.appendChild(price);
+
+      const btn = document.createElement('button');
+      btn.className = 'shop-card-btn';
+
+      if (!owned) {
+        btn.classList.add('buy');
+        btn.textContent = t('buy');
+        if (coins < it.price) btn.disabled = true;
+        btn.addEventListener('click', () => {
+          if (coins < it.price) return;
+          coins -= it.price;
+          ownedMap[it.id] = true;
+          if (isArrowCat) equippedArrow = it.id; else equippedSkill = it.id;
+          saveGameData();
+          refreshCoinLabels();
+          renderShop();
+          if (settings.sound) { ensureAudio(); playShield(); }
+        });
+      } else if (!equipped) {
+        btn.classList.add('equip');
+        btn.textContent = t('equip');
+        btn.addEventListener('click', () => {
+          if (isArrowCat) equippedArrow = it.id; else equippedSkill = it.id;
+          saveGameData();
+          renderShop();
+        });
+      } else {
+        btn.classList.add('unequip');
+        btn.textContent = t('unequip');
+        btn.addEventListener('click', () => {
+          if (isArrowCat) equippedArrow = null; else equippedSkill = null;
+          saveGameData();
+          renderShop();
+        });
+      }
+
+      card.appendChild(btn);
+      shopScroll.appendChild(card);
+    }
+  }
+
+  /* ================= FULLSCREEN ================= */
+  async function enterFullscreenLandscape() {
+    if (IS_NATIVE) return;   // di app Android: fullscreen & landscape diatur native
+    try {
+      const el = document.documentElement;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+        else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
+        else if (el.msRequestFullscreen) await el.msRequestFullscreen();
+      }
+      if (screen.orientation && screen.orientation.lock) {
+        try { await screen.orientation.lock('landscape'); } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
+  btnStart.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const nick = nicknameEl.value.trim();
+    if (!nick) return;
+    try { localStorage.setItem('sq_zone_nick', nick); } catch(e){}
+
+    ensureAudio();
+    if (settings.sound) playShootPlayer();
+
+    await enterFullscreenLandscape();
+
+    player.name = nick;
+    resetGame();
+    menuEl.classList.add('hidden');
+    setTimeout(() => { menuEl.style.display = 'none'; }, 400);
+    gameStarted = true;
+  });
+
+  /* ================= KONFIGURASI GAME ================= */
+  const ARENA_SIZE   = 30000;
+  const ENEMY_COUNT  = 200;
+  const BULLET_DAMAGE = 20;
+  const KILL_SCORE   = 100;
+  const KILL_COINS   = 50;
+  const ARROW_MAX_RANGE = 700;
+
+  const MAP_COIN_VALUE          = 10;    // nilai tiap koin di map
+  const MAP_COIN_MAX             = 18;    // maksimal koin yang boleh ada di map bersamaan
+  const MAP_COIN_SPAWN_INTERVAL  = 2.2;   // detik jeda spawn koin baru
+  const MAP_COIN_RADIUS          = 16;
+  const COIN_GRAB_SENSE_SQ       = 550 * 550;  // bot mulai ngincer koin sedekat ini
+  const COIN_GRAB_RUSH_SQ        = 260 * 260;  // sedekat ini, bot rebutan walau lagi ngejar target lain
+
+  const ACC      = 3200;
+  const FRICTION = 1.6;
+  const PLAYER_MAXSPEED = 750;
+  const ENEMY_MAXSPEED_BASE = 700;
+
+  const ARROW_SPEED        = 1500;
+  const ARROW_FIRE_RATE    = 0.22;
+  const ENEMY_BULLET_SPEED = 950;
+  const ENEMY_FIRE_RATE_BASE = 1.0;
+  const ENEMY_SHOOT_RANGE_BASE = 550;
+  const ENEMY_RETARGET     = 3.0;
+
+  const AI_ACTIVE_RANGE_SQ = 3000 * 3000;
+  const RENDER_MARGIN      = 250;
+  const TAIL_LIFE          = 0.5;     // detik ekor bertahan (makin cepat gerak, makin panjang)
+  const TAIL_STEP          = 8;       // jarak (px) antar titik ekor
+  const TAIL_MAX_PTS       = 64;
+  const TAIL_WIDTH         = 0.30;    // setengah lebar ekor di kepala (x ukuran badan)
+  const ARROW_STREAK       = 46;      // panjang jejak cahaya di belakang panah (px)
+
+  const AI_SENSE           = 2200;    // jarak bot mendeteksi target
+  const AI_SENSE_SQ        = AI_SENSE * AI_SENSE;
+  const AI_RETARGET_MIN    = 0.5;     // bot mengevaluasi ulang target tiap 0.5-1.1 detik
+
+  const START_SCORE_MIN    = 150;     // skor awal bot: kebanyakan menengah, segelintir sangat tinggi
+  const START_SCORE_SPAN   = 8850;
+  const KILL_BOUNTY_RATIO  = 0.10;    // bonus skor = 10% dari skor korban (selain 100 dasar)
+
+  const SKILL_COOLDOWN = 30;
+
+  const LASER = {
+    radius: 44, chargeTime: 1.2, minCharge: 0.5,
+    maxRange: 2200, cooldown: SKILL_COOLDOWN, killCooldown: 15,
+    active: false, id: null,
+    charging: false, chargeAmount: 0,
+    cooldownTimer: 0, chargeSoundPlayed: false
+  };
+
+  const SHIELD = {
+    radius: 44, cooldown: SKILL_COOLDOWN,
+    cooldownTimer: 0, activeTimer: 0, duration: 4
+  };
+
+  const ATKSPD = {
+    cooldown: SKILL_COOLDOWN, cooldownTimer: 0,
+    duration: 5, activeTimer: 0, mult: 2     // 5 detik, tembakan 2x lebih cepat, cooldown 30 detik
+  };
+
+  const TOGETHER = {
+    cooldown: SKILL_COOLDOWN, cooldownTimer: 0,
+    volleys: 3, volleyDelay: 0.28,   // 3x tembakan otomatis, jeda 0.28 detik antar tembakan
+    pellets: 6, spreadDeg: 46,        // 6 peluru menyebar per tembakan, sudut sebar 46 derajat
+    pending: 0, volleyTimer: 0
+  };
+
+  const HOOK_RANGE    = 700;    // jangkauan tembak tali, di luar ini gak bisa nembak
+  const HOOK_SPEED    = 2600;   // kecepatan tali terbang ke target
+  const HOOK_DRAIN    = 10;     // darah disedot per tick
+  const HOOK_TICK     = 0.5;    // detik per tick sedot darah
+  const HOOK_DURATION = 5;      // total detik nyedot darah setelah nyangkut
+  const HOOK = {
+    cooldown: SKILL_COOLDOWN, cooldownTimer: 0,
+    state: 'idle',          // 'idle' | 'flying' | 'attached'
+    target: null,
+    flyTimer: 0, flyDuration: 0,
+    drainTimer: 0, tickTimer: 0
+  };
+
+  const HEAL_ARROW_IDLE  = 2;   // detik gak kena damage sebelum mulai heal otomatis
+  const HEAL_ARROW_RATE  = 5;   // darah pulih per detik
+
+  const DODGE_ADAPT_COOLDOWN = 2;   // jeda antar dodge otomatis
+  let dodgeCooldownTimer = 0;
+
+  const VAMPIRE_LIFESTEAL   = 0.35;  // persen damage yang kena jadi darah balik ke kita
+  const PIERCING_EXTRA_HIT  = 1;     // tembus berapa musuh tambahan (dipakai buat teks deskripsi)
+  const EXPLOSIVE_RADIUS    = 90;
+  const EXPLOSIVE_SPLASH    = 14;    // damage splash ke musuh lain di sekitar titik kena
+  const THORNS_REFLECT      = 0.5;   // persen damage yang kita terima, dipantulin ke penembaknya
+
+  function spawnExplosiveBlast(x, y, excludeEnemy) {
+    spawnParticles(x, y, 255, 18);
+    spawnParticles(x, y, 200, 10);
+    for (const e of enemies) {
+      if (!e.alive || e === excludeEnemy) continue;
+      const dx = e.x - x, dy = e.y - y;
+      if (dx * dx + dy * dy > EXPLOSIVE_RADIUS * EXPLOSIVE_RADIUS) continue;
+      e.hp -= EXPLOSIVE_SPLASH;
+      e.lastHitBy = player; e.lastHitT = gameTime;
+      if (e.hp <= 0) killEntity(e, player);
+    }
+  }
+
+  const INSTAHEAL = { cooldown: SKILL_COOLDOWN, cooldownTimer: 0 };
+
+  const DASH = { cooldown: 8, cooldownTimer: 0, distance: 260, iframeTimer: 0, iframeDuration: 0.18 };
+  const SHOCKWAVE = { cooldown: SKILL_COOLDOWN, cooldownTimer: 0, radius: 260, push: 200 };
+  const BERSERK = { cooldown: SKILL_COOLDOWN, cooldownTimer: 0, duration: 6, activeTimer: 0, fireMult: 2.2, dmgMult: 1.6, takenMult: 1.5 };
+
+  const shockFx = [];
+  function spawnShockRingFx(x, y) {
+    shockFx.push({ x, y, life: 0, maxLife: 0.5 });
+  }
+
+  const arena = { x: -ARENA_SIZE/2, y: -ARENA_SIZE/2, w: ARENA_SIZE, h: ARENA_SIZE };
+  const camera = { x: 0, y: 0 };
+
+  let gameState = 'playing';
+  let deathTimer = 0;
+  let gameTime = 0;   // detik, jalan hanya saat bermain
+
+  function getEnemyLevel() { return Math.min(player.score / 400, 6); }
+
+  const MATH_WORDS = [
+    'Alpha','Beta','Gamma','Delta','Epsilon','Zeta','Eta','Theta','Iota','Kappa',
+    'Lambda','Mu','Nu','Xi','Omicron','Pi','Rho','Sigma','Tau','Upsilon',
+    'Phi','Chi','Psi','Omega','Prime','Fibonacci','Factorial','Vector','Matrix','Tensor',
+    'Scalar','Neuron','Axon','Quantum','Photon','Quark','Boson','Fermion','Hadron','Lepton',
+    'Meson','Baryon','Gluon','Graviton','Integral','Derivative','Limit','Sine','Cosine','Tangent',
+    'Logarithm','Exponent','Modulo','Radical','Polynomial','Binomial','Eigen','Null','Void','Infinity'
+  ];
+  const MATH_ADJ = [
+    'Prime','Odd','Even','Rational','Real','Complex','Natural','Integer','Finite','Infinite',
+    'Binary','Octal','Hex','Decimal','Linear','Chaotic','Discrete','Absolute','Relative','Random'
+  ];
+  function makeName(idx) {
+    const a = MATH_WORDS[idx % MATH_WORDS.length];
+    const b = MATH_ADJ[(idx * 7 + 3) % MATH_ADJ.length];
+    const n = ((idx * 7919) % 900) + 100;
+    return a + b.charAt(0) + n;
+  }
+
+  const player = {
+    x: 0, y: 0, vx: 0, vy: 0,
+    size: 32, angle: 0,
+    aimX: 1, aimY: 0,
+    hp: 100, maxHp: 100, displayHp: 100,
+    score: 0,
+    id: 'player',
+    name: 'YOU',
+    autoAim: false,
+    trail: [], trailAcc: 0,
+    alive: true,
+    lastHitT: -99
+  };
+
+  let enemies = [];
+  let nextEnemyId = 1;
+
+  function randomSpawnPos(minDistFromPlayer) {
+    for (let tries = 0; tries < 20; tries++) {
+      const x = (Math.random() - 0.5) * ARENA_SIZE * 0.94;
+      const y = (Math.random() - 0.5) * ARENA_SIZE * 0.94;
+      if (!minDistFromPlayer) return { x, y };
+      const dx = x - player.x, dy = y - player.y;
+      if (dx*dx + dy*dy > minDistFromPlayer * minDistFromPlayer) return { x, y };
+    }
+    return { x: 0, y: 0 };
+  }
+
+  // Skor awal ala Worm Zone: sedikit bot sangat tinggi, kebanyakan menengah, tidak ada yang nol
+  function randomStartScore() {
+    return Math.round((START_SCORE_MIN + START_SCORE_SPAN * Math.pow(Math.random(), 3.4)) / 10) * 10;
+  }
+  // Bot yang baru respawn mulai dari skor kecil
+  function randomRespawnScore() {
+    return Math.round((100 + Math.random() * 400) / 10) * 10;
+  }
+
+  function createEnemy(idx) {
+    const pos = randomSpawnPos(1200);
+    return {
+      id: nextEnemyId++, name: makeName(idx),
+      x: pos.x, y: pos.y, vx: 0, vy: 0,
+      size: 32, angle: Math.random() * Math.PI * 2,
+      hp: 100, maxHp: 100, displayHp: 100,
+      score: randomStartScore(), alive: true,
+      fireTimer: 0.5 + Math.random() * 1.5,
+      retargetTimer: Math.random() * AI_RETARGET_MIN,
+      tgt: null, lastHitBy: null, lastHitT: -99,
+      strafeDir: Math.random() < 0.5 ? 1 : -1, strafeTimer: 0.5 + Math.random() * 1.5,
+      pref: 300 + Math.random() * 120,
+      wx: 0, wy: 0, wpTimer: 0,
+      dodgeX: 0, dodgeY: 0,
+      trail: []
+    };
+  }
+
+  function respawnEnemy(e) {
+    const pos = randomSpawnPos(1500);
+    e.x = pos.x; e.y = pos.y;
+    e.vx = 0; e.vy = 0;
+    e.hp = e.maxHp; e.displayHp = e.maxHp;
+    e.alive = true;
+    e.score = randomRespawnScore();
+    e.fireTimer = 0.5 + Math.random() * 1.5;
+    e.retargetTimer = Math.random() * AI_RETARGET_MIN;
+    e.tgt = null; e.lastHitBy = null; e.lastHitT = -99;
+    e.wpTimer = 0;
+    e.trail.length = 0;
+  }
+
+  function spawnAllEnemies() {
+    enemies.length = 0;
+    nextEnemyId = 1;
+    for (let i = 0; i < ENEMY_COUNT; i++) enemies.push(createEnemy(i));
+  }
+
+  let mapCoins = [];
+  let mapCoinIdSeq = 1;
+  let mapCoinSpawnTimer = 0;
+
+  function spawnMapCoin() {
+    const pos = randomSpawnPos();
+    mapCoins.push({ id: mapCoinIdSeq++, x: pos.x, y: pos.y, bob: Math.random() * Math.PI * 2 });
+  }
+
+  function spawnInitialMapCoins() {
+    mapCoins.length = 0;
+    mapCoinSpawnTimer = MAP_COIN_SPAWN_INTERVAL;
+    for (let i = 0; i < MAP_COIN_MAX; i++) spawnMapCoin();
+  }
+
+  // Pemain & bot berebutan koin di map: siapa nyentuh duluan yang dapat
+  function updateMapCoins(dt) {
+    mapCoinSpawnTimer -= dt;
+    if (mapCoinSpawnTimer <= 0 && mapCoins.length < MAP_COIN_MAX) {
+      spawnMapCoin();
+      mapCoinSpawnTimer = MAP_COIN_SPAWN_INTERVAL;
+    }
+
+    const pr = player.size / 2 + MAP_COIN_RADIUS;
+    for (let i = mapCoins.length - 1; i >= 0; i--) {
+      const c = mapCoins[i];
+      let taken = false;
+
+      if (player.alive) {
+        const dx = c.x - player.x, dy = c.y - player.y;
+        if (dx * dx + dy * dy < pr * pr) {
+          coins += MAP_COIN_VALUE;
+          saveGameData();
+          refreshCoinLabels();
+          spawnParticles(c.x, c.y, 210, 10);
+          spawnPopup(player.x, player.y - player.size, '+' + MAP_COIN_VALUE + '¢');
+          taken = true;
+        }
+      }
+
+      if (!taken) {
+        for (let j = 0; j < enemies.length; j++) {
+          const e = enemies[j];
+          if (!e.alive) continue;
+          const er = e.size / 2 + MAP_COIN_RADIUS;
+          const dx = c.x - e.x, dy = c.y - e.y;
+          if (dx * dx + dy * dy < er * er) {
+            e.hp = Math.min(e.maxHp, e.hp + 15);   // bot juga "makan" koin, pulih dikit
+            spawnParticles(c.x, c.y, 210, 10);
+            taken = true;
+            break;
+          }
+        }
+      }
+
+      if (taken) mapCoins.splice(i, 1);
+    }
+  }
+
+  function findEnemyById(id) {
+    for (const e of enemies) if (e.id === id) return e;
+    return null;
+  }
+
+  // Ekor berbasis jarak + umur: panjangnya konsisten, dan menyusut sendiri saat berhenti
+  function pushTail(entity) {
+    const tr = entity.trail;
+    const last = tr[tr.length - 1];
+    let far = !last;
+    if (last) {
+      const dx = entity.x - last.x, dy = entity.y - last.y;
+      far = dx * dx + dy * dy >= TAIL_STEP * TAIL_STEP;
+    }
+    if (far) {
+      tr.push({ x: entity.x, y: entity.y, t: gameTime });
+      if (tr.length > TAIL_MAX_PTS) tr.shift();
+    }
+    let n = 0;
+    while (n < tr.length && gameTime - tr[n].t > TAIL_LIFE) n++;
+    if (n) tr.splice(0, n);
+  }
+
+  const arrows = [];
+  const enemyBullets = [];
+
+  function shootArrow() {
+    let ax = player.aimX, ay = player.aimY;
+    if (player.autoAim) {
+      const tgt = getAimTarget();
+      if (tgt) {
+        const dx = tgt.x - player.x, dy = tgt.y - player.y;
+        const d = Math.hypot(dx, dy) || 1;
+        ax = dx / d; ay = dy / d;
+      }
+    }
+    const off = player.size / 2 + 6;
+    arrows.push({
+      x: player.x + ax * off, y: player.y + ay * off,
+      vx: ax * ARROW_SPEED, vy: ay * ARROW_SPEED,
+      angle: Math.atan2(ay, ax),
+      life: 0, traveled: 0, ownerId: 'player'
+    });
+    playShootPlayer();
+  }
+
+  function shootTogetherVolley() {
+    let ax = player.aimX, ay = player.aimY;
+    if (player.autoAim) {
+      const tgt = getAimTarget();
+      if (tgt) {
+        const dx = tgt.x - player.x, dy = tgt.y - player.y;
+        const d = Math.hypot(dx, dy) || 1;
+        ax = dx / d; ay = dy / d;
+      }
+    }
+    const baseAngle = Math.atan2(ay, ax);
+    const off = player.size / 2 + 6;
+    const spreadRad = TOGETHER.spreadDeg * Math.PI / 180;
+    const n = TOGETHER.pellets;
+    for (let i = 0; i < n; i++) {
+      const t = n > 1 ? (i / (n - 1)) - 0.5 : 0;   // -0.5..0.5
+      const ang = baseAngle + t * spreadRad;
+      const pax = Math.cos(ang), pay = Math.sin(ang);
+      arrows.push({
+        x: player.x + pax * off, y: player.y + pay * off,
+        vx: pax * ARROW_SPEED, vy: pay * ARROW_SPEED,
+        angle: ang,
+        life: 0, traveled: 0, ownerId: 'player'
+      });
+    }
+    playShootPlayer();
+  }
+
+  function shootEnemyBullet(e, nx, ny) {
+    const off = e.size / 2 + 6;
+    enemyBullets.push({
+      x: e.x + nx * off, y: e.y + ny * off,
+      vx: nx * ENEMY_BULLET_SPEED, vy: ny * ENEMY_BULLET_SPEED,
+      angle: Math.atan2(ny, nx),
+      life: 0, traveled: 0, ownerId: e.id
+    });
+    const dx = e.x - player.x, dy = e.y - player.y;
+    if (dx*dx + dy*dy < 900*900) playShootEnemy();
+  }
+
+  const particles = [];
+  const MAX_PARTICLES = 600;
+  function spawnParticles(x, y, shade, count) {
+    if (particles.length > MAX_PARTICLES) return;   // cegah lag spike pas efek numpuk bareng
+    for (let i = 0; i < count; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const sp = 100 + Math.random() * 260;
+      particles.push({
+        x, y,
+        vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
+        life: 0, maxLife: 0.25 + Math.random() * 0.35,
+        size: 2 + Math.random() * 3.5, shade
+      });
+    }
+  }
+
+  const popups = [];
+  function spawnPopup(x, y, text) {
+    popups.push({ x, y, text, life: 0, maxLife: 1.0 });
+  }
+
+  const laserFx = [];
+  function spawnLaserFx(x1, y1, x2, y2, locked) {
+    laserFx.push({ x1, y1, x2, y2, life: 0, maxLife: 0.34, locked: !!locked });
+  }
+
+  function getAimTarget() {
+    let best = null, bestD = 1200 * 1200;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dx = e.x - player.x, dy = e.y - player.y;
+      const d = dx*dx + dy*dy;
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    return best;
+  }
+
+  // Musuh terdekat dalam jangkauan laser buat auto-lock
+  function findLaserTarget() {
+    let best = null, bestD = LASER.maxRange * LASER.maxRange;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dx = e.x - player.x, dy = e.y - player.y;
+      const d = dx*dx + dy*dy;
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    return best;
+  }
+
+  function fireLaser() {
+    const lockTgt = findLaserTarget();
+    let ax = player.aimX, ay = player.aimY;
+    let hitEnemy = null;
+    let hitX, hitY;
+
+    if (lockTgt) {
+      // auto-lock: beam diarahkan pasti ke target, gak meleset
+      const dx = lockTgt.x - player.x, dy = lockTgt.y - player.y;
+      const d = Math.hypot(dx, dy) || 1;
+      ax = dx / d; ay = dy / d;
+      hitEnemy = lockTgt;
+      hitX = lockTgt.x; hitY = lockTgt.y;
+    } else {
+      // gak ada musuh dalam jangkauan -> tembak lurus ke arah aim manual (skillshot lama)
+      hitX = player.x + ax * LASER.maxRange;
+      hitY = player.y + ay * LASER.maxRange;
+    }
+
+    const killed = !!hitEnemy;
+    if (hitEnemy) killEntity(hitEnemy, player);
+
+    spawnLaserFx(player.x, player.y, hitX, hitY, killed);
+    spawnParticles(player.x, player.y, 220, 10);
+    spawnParticles(hitX, hitY, 255, killed ? 34 : 20);
+    playLaserFire();
+    return killed;
+  }
+
+  function activateShield() {
+    if (SHIELD.cooldownTimer > 0) return;
+    if (SHIELD.activeTimer > 0) return;
+    SHIELD.activeTimer = SHIELD.duration;
+    SHIELD.cooldownTimer = SHIELD.cooldown;
+    playShield();
+    spawnParticles(player.x, player.y, 230, 24);
+  }
+
+  function activateAtkSpeed() {
+    if (ATKSPD.cooldownTimer > 0) return;
+    if (ATKSPD.activeTimer > 0) return;
+    ATKSPD.activeTimer = ATKSPD.duration;
+    ATKSPD.cooldownTimer = ATKSPD.cooldown;
+    // kalau lagi nahan tombol tembak, langsung pakai ritme cepat
+    ATK.timer = Math.min(ATK.timer, ARROW_FIRE_RATE / ATKSPD.mult);
+    playHaste();
+    spawnParticles(player.x, player.y, 255, 20);
+  }
+
+  function activateTogether() {
+    if (TOGETHER.cooldownTimer > 0) return;
+    if (TOGETHER.pending > 0) return;
+    TOGETHER.pending = TOGETHER.volleys;
+    TOGETHER.volleyTimer = 0;                 // tembakan pertama langsung, sisanya pakai jeda
+    TOGETHER.cooldownTimer = TOGETHER.cooldown;
+  }
+
+  function activateInstaHeal() {
+    if (INSTAHEAL.cooldownTimer > 0) return;
+    player.hp = player.maxHp;
+    INSTAHEAL.cooldownTimer = INSTAHEAL.cooldown;
+    spawnParticles(player.x, player.y, 210, 16);
+    spawnPopup(player.x, player.y - player.size, '♥ FULL');
+    playShield();
+  }
+
+  function spawnDashTrail(x1, y1, x2, y2) {
+    const steps = 6;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      spawnParticles(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, 230, 5);
+    }
+  }
+
+  function activateDash() {
+    if (DASH.cooldownTimer > 0) return;
+    let dx = player.vx, dy = player.vy;
+    let len = Math.hypot(dx, dy);
+    if (len < 20) { dx = player.aimX; dy = player.aimY; len = Math.hypot(dx, dy) || 1; }
+    dx /= len; dy /= len;
+
+    const fromX = player.x, fromY = player.y;
+    const pad = 40;
+    let toX = player.x + dx * DASH.distance;
+    let toY = player.y + dy * DASH.distance;
+    toX = Math.max(arena.x + pad, Math.min(arena.x + arena.w - pad, toX));
+    toY = Math.max(arena.y + pad, Math.min(arena.y + arena.h - pad, toY));
+
+    player.x = toX; player.y = toY;
+    DASH.cooldownTimer = DASH.cooldown;
+    DASH.iframeTimer = DASH.iframeDuration;
+    spawnDashTrail(fromX, fromY, toX, toY);
+    spawnParticles(fromX, fromY, 210, 14);
+    spawnParticles(toX, toY, 255, 10);
+    playHaste();
+  }
+
+  function activateShockwave() {
+    if (SHOCKWAVE.cooldownTimer > 0) return;
+    SHOCKWAVE.cooldownTimer = SHOCKWAVE.cooldown;
+    spawnShockRingFx(player.x, player.y);
+    spawnParticles(player.x, player.y, 220, 20);
+    playHaste();
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dx = e.x - player.x, dy = e.y - player.y;
+      const d = Math.hypot(dx, dy);
+      if (d > SHOCKWAVE.radius || d < 0.01) continue;
+      const push = (1 - d / SHOCKWAVE.radius) * SHOCKWAVE.push;
+      const nx = dx / d, ny = dy / d;
+      e.x += nx * push; e.y += ny * push;
+      e.x = Math.max(arena.x + 20, Math.min(arena.x + arena.w - 20, e.x));
+      e.y = Math.max(arena.y + 20, Math.min(arena.y + arena.h - 20, e.y));
+      e.vx = nx * push * 2; e.vy = ny * push * 2;
+      spawnParticles(e.x, e.y, 200, 6);
+    }
+  }
+
+  function activateBerserk() {
+    if (BERSERK.cooldownTimer > 0) return;
+    BERSERK.activeTimer = BERSERK.duration;
+    BERSERK.cooldownTimer = BERSERK.cooldown;
+    ATK.timer = Math.min(ATK.timer, ARROW_FIRE_RATE / BERSERK.fireMult);
+    playHaste();
+    spawnParticles(player.x, player.y, 250, 24);
+  }
+
+  function findHookTarget() {
+    // musuh terdekat yang masih dalam jangkauan HOOK_RANGE; di luar itu gak bisa nembak
+    let best = null, bestD = HOOK_RANGE * HOOK_RANGE;
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      const dx = e.x - player.x, dy = e.y - player.y;
+      const d = dx*dx + dy*dy;
+      if (d <= bestD) { bestD = d; best = e; }
+    }
+    return best;
+  }
+
+  function activateHook() {
+    if (HOOK.cooldownTimer > 0) return;
+    if (HOOK.state !== 'idle') return;
+    const tgt = findHookTarget();
+    if (!tgt) return;     // gak ada musuh dalam jangkauan -> gak bisa nembak
+    const dx = tgt.x - player.x, dy = tgt.y - player.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    HOOK.state = 'flying';
+    HOOK.target = tgt;
+    HOOK.flyTimer = 0;
+    HOOK.flyDuration = Math.max(0.08, dist / HOOK_SPEED);
+    HOOK.cooldownTimer = HOOK.cooldown;
+    playShootPlayer();
+  }
+
+  function detachHook() {
+    HOOK.state = 'idle';
+    HOOK.target = null;
+    HOOK.drainTimer = 0;
+    HOOK.tickTimer = 0;
+  }
+
+  function updateHook(dt) {
+    if (HOOK.cooldownTimer > 0) HOOK.cooldownTimer -= dt;
+
+    if (HOOK.state === 'flying') {
+      const tgt = HOOK.target;
+      if (!tgt || !tgt.alive) { detachHook(); return; }
+      HOOK.flyTimer += dt;
+      if (HOOK.flyTimer >= HOOK.flyDuration) {
+        // nyangkut ke target
+        HOOK.state = 'attached';
+        HOOK.drainTimer = HOOK_DURATION;
+        HOOK.tickTimer = HOOK_TICK;
+        spawnParticles(tgt.x, tgt.y, 200, 12);
+      }
+      return;
+    }
+
+    if (HOOK.state === 'attached') {
+      const tgt = HOOK.target;
+      if (!tgt || !tgt.alive) { detachHook(); return; }
+
+      HOOK.drainTimer -= dt;
+      HOOK.tickTimer -= dt;
+      if (HOOK.tickTimer <= 0) {
+        HOOK.tickTimer += HOOK_TICK;
+        const drained = Math.min(HOOK_DRAIN, tgt.hp);
+        if (drained > 0) {
+          tgt.hp -= drained;
+          tgt.lastHitBy = player; tgt.lastHitT = gameTime;
+
+          const room = player.maxHp - player.hp;
+          const healed = Math.min(room, drained);
+          const overflowCoins = drained - healed;
+          player.hp = Math.min(player.maxHp, player.hp + healed);
+          if (overflowCoins > 0) {
+            coins += overflowCoins;
+            saveGameData();
+            refreshCoinLabels();
+          }
+          spawnParticles(tgt.x, tgt.y, 200, 6);
+          spawnPopup(player.x, player.y - player.size, '+' + healed + (overflowCoins > 0 ? '  +' + overflowCoins + '¢' : ''));
+        }
+        if (tgt.hp <= 0) {
+          killEntity(tgt, player);
+          detachHook();
+          return;
+        }
+      }
+      if (HOOK.drainTimer <= 0) detachHook();
+    }
+  }
+
+  /* ================= INPUT ================= */
+  const STICK = { active: false, id: null, ox: 0, oy: 0, px: 0, py: 0, radius: 80, dead: 5 };
+  const ATK   = { active: false, id: null, x: 0, y: 0, radius: 56, timer: 0 };
+  const AUTO  = { active: false, id: null, x: 0, y: 0, radius: 30 };
+  const SKILLBTN = { active: false, id: null, x: 0, y: 0, radius: 44 };
+
+  function inCircle(x, y, cx, cy, r) {
+    const dx = x - cx, dy = y - cy;
+    return dx*dx + dy*dy <= r*r;
+  }
+
+  function onDown(e) {
+    if (!gameStarted) return;
+    if (gameState !== 'playing') return;
+    e.preventDefault();
+    const x = e.clientX, y = e.clientY;
+
+    if (equippedSkill && inCircle(x, y, SKILLBTN.x, SKILLBTN.y, SKILLBTN.radius)) {
+      if (equippedSkill === 'laser') {
+        if (LASER.cooldownTimer <= 0 && !LASER.charging) {
+          LASER.charging = true;
+          LASER.id = e.pointerId;
+          LASER.chargeAmount = 0;
+          LASER.chargeSoundPlayed = false;
+          if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+        }
+      } else if (equippedSkill === 'shield') {
+        if (SHIELD.cooldownTimer <= 0) {
+          activateShield();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'attackspeed') {
+        if (ATKSPD.cooldownTimer <= 0) {
+          activateAtkSpeed();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'together') {
+        if (TOGETHER.cooldownTimer <= 0 && TOGETHER.pending <= 0) {
+          activateTogether();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'hook') {
+        if (HOOK.cooldownTimer <= 0 && HOOK.state === 'idle') {
+          activateHook();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'instaheal') {
+        if (INSTAHEAL.cooldownTimer <= 0) {
+          activateInstaHeal();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'dash') {
+        if (DASH.cooldownTimer <= 0) {
+          activateDash();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'shockwave') {
+        if (SHOCKWAVE.cooldownTimer <= 0) {
+          activateShockwave();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      } else if (equippedSkill === 'berserk') {
+        if (BERSERK.cooldownTimer <= 0) {
+          activateBerserk();
+          SKILLBTN.active = true;
+          setTimeout(() => { SKILLBTN.active = false; }, 150);
+        }
+      }
+      return;
+    }
+
+    if (inCircle(x, y, AUTO.x, AUTO.y, AUTO.radius)) {
+      player.autoAim = !player.autoAim;
+      AUTO.active = true;
+      setTimeout(() => { AUTO.active = false; }, 120);
+      return;
+    }
+    if (inCircle(x, y, ATK.x, ATK.y, ATK.radius)) {
+      if (!ATK.active) {
+        ATK.active = true;
+        ATK.id = e.pointerId;
+        ATK.timer = 0;
+        if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+      }
+      return;
+    }
+    if (STICK.active) return;
+    STICK.active = true;
+    STICK.id = e.pointerId;
+    STICK.ox = STICK.px = x;
+    STICK.oy = STICK.py = y;
+    if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+  }
+  function onMove(e) {
+    if (!gameStarted) return;
+    if (STICK.active && e.pointerId === STICK.id) {
+      e.preventDefault();
+      STICK.px = e.clientX;
+      STICK.py = e.clientY;
+    }
+  }
+  function onUp(e) {
+    if (STICK.active && e.pointerId === STICK.id) { STICK.active = false; STICK.id = null; }
+    if (ATK.active && e.pointerId === ATK.id) { ATK.active = false; ATK.id = null; ATK.timer = 0; }
+    if (LASER.charging && e.pointerId === LASER.id) {
+      if (LASER.chargeAmount >= LASER.minCharge) {
+        const killed = fireLaser();
+        LASER.cooldownTimer = killed ? LASER.killCooldown : LASER.cooldown;
+      }
+      LASER.charging = false;
+      LASER.id = null;
+      LASER.chargeAmount = 0;
+    }
+  }
+  canvas.addEventListener('pointerdown', onDown, { passive: false });
+  canvas.addEventListener('pointermove', onMove, { passive: false });
+  canvas.addEventListener('pointerup', onUp);
+  canvas.addEventListener('pointercancel', onUp);
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    ATK.radius = Math.min(56, Math.min(W, H) * 0.13);
+    ATK.x = W - ATK.radius - 30;
+    ATK.y = H - ATK.radius - 30;
+    AUTO.radius = 30;
+    AUTO.x = ATK.x;
+    AUTO.y = ATK.y - ATK.radius - AUTO.radius - 14;
+    SKILLBTN.radius = 44;
+    SKILLBTN.x = ATK.x;
+    SKILLBTN.y = AUTO.y - AUTO.radius - SKILLBTN.radius - 14;
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 150));
+  resize();
+
+  function resetGame() {
+    gameState = 'playing';
+    deathTimer = 0;
+
+    player.x = 0; player.y = 0;
+    player.vx = 0; player.vy = 0;
+    player.angle = 0;
+    player.hp = player.maxHp;
+    player.displayHp = player.maxHp;
+    player.score = 0;
+    player.aimX = 1; player.aimY = 0;
+    player.autoAim = false;
+    player.alive = true;
+    player.trail.length = 0;
+    player.lastHitT = -99;
+    dodgeCooldownTimer = 0;
+
+    arrows.length = 0;
+    enemyBullets.length = 0;
+    particles.length = 0;
+    popups.length = 0;
+    laserFx.length = 0;
+
+    LASER.charging = false;
+    LASER.chargeAmount = 0;
+    LASER.cooldownTimer = 0;
+    LASER.id = null;
+
+    SHIELD.cooldownTimer = 0;
+    SHIELD.activeTimer = 0;
+
+    ATKSPD.cooldownTimer = 0;
+    ATKSPD.activeTimer = 0;
+
+    TOGETHER.cooldownTimer = 0;
+    TOGETHER.pending = 0;
+    TOGETHER.volleyTimer = 0;
+
+    HOOK.cooldownTimer = 0;
+    HOOK.state = 'idle';
+    HOOK.target = null;
+    HOOK.drainTimer = 0;
+    HOOK.tickTimer = 0;
+
+    INSTAHEAL.cooldownTimer = 0;
+
+    DASH.cooldownTimer = 0;
+    DASH.iframeTimer = 0;
+
+    SHOCKWAVE.cooldownTimer = 0;
+
+    BERSERK.cooldownTimer = 0;
+    BERSERK.activeTimer = 0;
+
+    STICK.active = false; STICK.id = null;
+    ATK.active = false; ATK.id = null; ATK.timer = 0;
+
+    spawnAllEnemies();
+    spawnInitialMapCoins();
+  }
+
+  function returnToMenu() {
+    gameStarted = false;
+    gameState = 'playing';
+    deathTimer = 0;
+    resetGame();
+    menuEl.style.display = 'flex';
+    void menuEl.offsetHeight;
+    menuEl.classList.remove('hidden');
+    refreshCoinLabels();
+    onPlayerLost();
+  }
+
+  // Dipanggil tiap pemain kalah (balik ke menu). Tiap LOSSES_PER_AD kali kalah -> 1 iklan interstitial.
+  async function onPlayerLost() {
+    if (!ADS_ENABLED) return;
+    lossCount++;
+    saveGameData();
+    if (lossCount < LOSSES_PER_AD) return;
+    const shown = await Ads.showInterstitial();
+    if (shown) {
+      lossCount = 0;      // kalau iklan belum siap, hitungan dipertahankan & dicoba lagi di kekalahan berikutnya
+      saveGameData();
+    }
+  }
+
+  function updatePlayer(dt) {
+    let dirx = 0, diry = 0;
+    if (STICK.active) {
+      const dx = STICK.px - STICK.ox, dy = STICK.py - STICK.oy;
+      const len = Math.hypot(dx, dy);
+      if (len > STICK.dead) {
+        const raw = Math.min(len / STICK.radius, 1);
+        const mag = Math.pow(raw, 0.85);
+        dirx = (dx / len) * mag; diry = (dy / len) * mag;
+        const l2 = Math.hypot(dx, dy) || 1;
+        player.aimX = dx / l2; player.aimY = dy / l2;
+      }
+    }
+    player.vx += dirx * ACC * dt;
+    player.vy += diry * ACC * dt;
+    const f = Math.exp(-FRICTION * dt);
+    player.vx *= f; player.vy *= f;
+
+    let sp = Math.hypot(player.vx, player.vy);
+    if (sp > PLAYER_MAXSPEED) {
+      player.vx = player.vx / sp * PLAYER_MAXSPEED;
+      player.vy = player.vy / sp * PLAYER_MAXSPEED;
+      sp = PLAYER_MAXSPEED;
+    }
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+
+    if (sp > 2) {
+      const spinBoost = 1 + (sp / PLAYER_MAXSPEED) * 0.5;
+      player.angle += sp * dt * 0.012 * spinBoost;
+    }
+
+    const h = player.size / 2;
+    player.x = Math.max(arena.x + h, Math.min(arena.x + arena.w - h, player.x));
+    player.y = Math.max(arena.y + h, Math.min(arena.y + arena.h - h, player.y));
+
+    if (settings.playerTrail) pushTail(player);
+    else player.trail.length = 0;
+
+    if (ATK.active) {
+      ATK.timer -= dt;
+      while (ATK.timer <= 0) {
+        shootArrow();
+        let fireRate = ARROW_FIRE_RATE;
+        if (ATKSPD.activeTimer > 0) fireRate = ARROW_FIRE_RATE / ATKSPD.mult;
+        else if (BERSERK.activeTimer > 0) fireRate = ARROW_FIRE_RATE / BERSERK.fireMult;
+        ATK.timer += fireRate;
+      }
+    }
+
+    if (LASER.charging) {
+      LASER.chargeAmount = Math.min(1, LASER.chargeAmount + dt / LASER.chargeTime);
+      if (!LASER.chargeSoundPlayed && LASER.chargeAmount > 0.05) {
+        playLaserCharge();
+        LASER.chargeSoundPlayed = true;
+      }
+    }
+    if (LASER.cooldownTimer > 0) LASER.cooldownTimer -= dt;
+    if (SHIELD.cooldownTimer > 0) SHIELD.cooldownTimer -= dt;
+    if (SHIELD.activeTimer > 0) SHIELD.activeTimer -= dt;
+    if (ATKSPD.cooldownTimer > 0) ATKSPD.cooldownTimer -= dt;
+    if (ATKSPD.activeTimer > 0) ATKSPD.activeTimer -= dt;
+    if (equippedSkill === 'hook') updateHook(dt);
+    if (INSTAHEAL.cooldownTimer > 0) INSTAHEAL.cooldownTimer -= dt;
+    if (DASH.cooldownTimer > 0) DASH.cooldownTimer -= dt;
+    if (DASH.iframeTimer > 0) DASH.iframeTimer -= dt;
+    if (SHOCKWAVE.cooldownTimer > 0) SHOCKWAVE.cooldownTimer -= dt;
+    if (BERSERK.cooldownTimer > 0) BERSERK.cooldownTimer -= dt;
+    if (BERSERK.activeTimer > 0) BERSERK.activeTimer -= dt;
+
+    // pasif panah Healing Swime: gak kena damage selama HEAL_ARROW_IDLE detik -> pulih otomatis
+    if (equippedArrow === 'healingswime' && player.alive &&
+        player.hp < player.maxHp && gameTime - player.lastHitT > HEAL_ARROW_IDLE) {
+      player.hp = Math.min(player.maxHp, player.hp + HEAL_ARROW_RATE * dt);
+    }
+    if (dodgeCooldownTimer > 0) dodgeCooldownTimer -= dt;
+
+    if (TOGETHER.pending > 0) {
+      TOGETHER.volleyTimer -= dt;
+      if (TOGETHER.volleyTimer <= 0) {
+        shootTogetherVolley();
+        TOGETHER.pending -= 1;
+        TOGETHER.volleyTimer = TOGETHER.volleyDelay;
+      }
+    }
+    if (TOGETHER.cooldownTimer > 0) TOGETHER.cooldownTimer -= dt;
+  }
+
+  /* ---------- AI musuh ---------- */
+  // Kepintaran 0.3 (bot pemula) .. 1.0 (bot jago). Naik sesuai skor bot itu sendiri dan level permainan.
+  function enemySkill(e, level) {
+    return Math.min(1, 0.30 + Math.min(1, e.score / 6000) * 0.45 + (level / 6) * 0.25);
+  }
+
+  // Waktu peluru (kecepatan s) mengenai target yang bergerak (vx, vy) dari jarak relatif (rx, ry)
+  function interceptTime(rx, ry, vx, vy, s) {
+    const a = vx * vx + vy * vy - s * s;
+    const b = 2 * (rx * vx + ry * vy);
+    const c = rx * rx + ry * ry;
+    let t;
+    if (Math.abs(a) < 1e-3) {
+      t = b !== 0 ? -c / b : 0;
+    } else {
+      const disc = b * b - 4 * a * c;
+      if (disc < 0) return 0;
+      const sq = Math.sqrt(disc);
+      const t1 = (-b - sq) / (2 * a), t2 = (-b + sq) / (2 * a);
+      t = Math.min(t1, t2) > 0 ? Math.min(t1, t2) : Math.max(t1, t2);
+    }
+    return (t > 0 && t < 1) ? t : 0;
+  }
+
+  // Pilih target: dekat, lebih suka yang lagi luka, bertahan di target lama, balas dendam ke yang nembak duluan
+  function pickTarget(e, skill) {
+    let best = null, bestW = Infinity;
+    function consider(c) {
+      const dx = c.x - e.x, dy = c.y - e.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > AI_SENSE_SQ) return;
+      let w = Math.sqrt(d2);
+      w *= 1.15 - 0.5 * skill * (1 - c.hp / c.maxHp);
+      if (c === e.tgt) w *= 0.7;
+      if (c === e.lastHitBy && gameTime - e.lastHitT < 6) w *= 0.55;
+      if (c === player && SHIELD.activeTimer > 0) w *= 1.6;
+      if (w < bestW) { bestW = w; best = c; }
+    }
+    for (let j = 0; j < enemies.length; j++) {
+      const o = enemies[j];
+      if (o !== e && o.alive) consider(o);
+    }
+    if (player.alive) consider(player);
+    return best;
+  }
+
+  // Cari peluru yang mengarah ke bot, lalu geser tegak lurus dari jalurnya
+  function computeDodge(e) {
+    let dx = 0, dy = 0;
+    function scan(list) {
+      for (let k = 0; k < list.length; k++) {
+        const b = list[k];
+        if (b.ownerId === e.id) continue;
+        const bx = e.x - b.x, by = e.y - b.y;
+        if (bx * bx + by * by > 450 * 450) continue;
+        const sp = Math.hypot(b.vx, b.vy) || 1;
+        const ux = b.vx / sp, uy = b.vy / sp;
+        const along = bx * ux + by * uy;
+        if (along < 0 || along > 420) continue;
+        const perp = bx * -uy + by * ux;
+        if (Math.abs(perp) > 46) continue;
+        const side = perp >= 0 ? 1 : -1;
+        const urg = 1 - along / 420;
+        dx += -uy * side * urg;
+        dy += ux * side * urg;
+      }
+    }
+    scan(arrows);
+    scan(enemyBullets);
+    e.dodgeX = dx; e.dodgeY = dy;
+  }
+
+  function enemyShoot(e, tgt, skill) {
+    let ax = tgt.x, ay = tgt.y;
+    const tvx = tgt.vx || 0, tvy = tgt.vy || 0;
+    const t = interceptTime(tgt.x - e.x, tgt.y - e.y, tvx, tvy, ENEMY_BULLET_SPEED);
+    ax += tvx * t * skill;
+    ay += tvy * t * skill;
+    let nx = ax - e.x, ny = ay - e.y;
+    const nl = Math.hypot(nx, ny) || 1;
+    nx /= nl; ny /= nl;
+    const err = (1 - skill) * 0.16 * (Math.random() * 2 - 1);   // bot pemula sering meleset
+    const c = Math.cos(err), s = Math.sin(err);
+    shootEnemyBullet(e, nx * c - ny * s, nx * s + ny * c);
+  }
+
+  // Tujuan jalan-jalan: sebagian ke bot lain / ke sekitar pemain supaya arena terasa ramai dan sering bentrok
+  function pickWaypoint(e) {
+    const lim = ARENA_SIZE * 0.44;
+    const r = Math.random();
+    let x, y;
+    if (r < 0.30) {
+      const o = enemies[(Math.random() * enemies.length) | 0];
+      if (o && o !== e && o.alive) {
