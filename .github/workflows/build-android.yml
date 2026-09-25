@@ -52,9 +52,20 @@ jobs:
             rewardedId: "$ADMOB_REWARDED_ID"
           };
           EOF
-          cat > www/update-config.js <<EOF
-          window.BZ_UPDATE = { url: "$UPDATE_BASE_URL" };
-          EOF
+          # Server update utama (Pages/Vercel) + mirror otomatis (raw.githubusercontent & jsDelivr).
+          # updater.js mencoba satu per satu sampai ada yang jawab.
+          REPO="${GITHUB_REPOSITORY}"
+          {
+            echo 'window.BZ_UPDATE = {'
+            echo "  url: \"$UPDATE_BASE_URL\","
+            echo "  repo: \"$REPO\","
+            echo '  urls: ['
+            [ -n "$UPDATE_BASE_URL" ] && echo "    \"$UPDATE_BASE_URL\","
+            echo "    \"https://raw.githubusercontent.com/$REPO/update-pkg/\","
+            echo "    \"https://cdn.jsdelivr.net/gh/$REPO@update-pkg/\""
+            echo '  ]'
+            echo '};'
+          } > www/update-config.js
           cat www/ads-config.js www/update-config.js
 
       - name: Versi game bawaan APK

@@ -29,6 +29,31 @@ Game battle royale kotak (Capacitor + HTML5 canvas). Aplikasi Android hanya **pe
 Setelah `UPDATE_BASE_URL` / Pages diatur, jalankan workflow **Build Android** sekali (manual) supaya
 APK tahu alamat server updatenya. Setelah itu tidak perlu build APK lagi untuk update game.
 
+> **Penting:** workflow lain (mis. *Deploy Jekyll to GitHub Pages*, template bawaan GitHub) tidak boleh
+> ikut deploy ke Pages repo ini. Dia akan menimpa paket update dengan isi repo mentah (tanpa
+> `version.json` di root), dan aplikasi diam-diam lanjut main versi lama. Workflow `publish-update.yml`
+> satu-satunya yang boleh deploy ke Pages. Mau hosting situs lain? Pakai repo terpisah atau Vercel.
+
+### Server update & mirror
+
+Updater mencoba **beberapa server** berurutan sampai ada yang menjawab (yang pernah berhasil dicoba
+duluan, alasan kegagalan ditampilkan di toast saat CEK):
+
+1. Server utama: `UPDATE_BASE_URL` (GitHub Pages / Vercel).
+2. `https://raw.githubusercontent.com/OWNER/REPO/update-pkg/` — diisi otomatis oleh workflow
+   **Publish Game Update** (branch `update-pkg` = paket update yang sama).
+3. `https://cdn.jsdelivr.net/gh/OWNER/REPO@update-pkg/` — mirror CDN dari branch yang sama.
+
+Jadi kalau GitHub Pages kebetulan tidak terjangkau dari jaringan pemain (sering terjadi di sebagian
+ISP Indonesia karena Pages/Fastly dibatasi), update tetap bisa masuk lewat mirror.
+
+Game juga bisa **memasang update sendiri dari dalam game** tanpa bergantung pada updater bawaan APK
+(yang masih versi lama di APK pemain lama): kalau semua server updater gagal, `game.html` mencoba
+mirror langsung, memverifikasi ukuran + SHA-256, lalu menyimpannya ke IndexedDB yang sama — launcher
+akan menjalankannya saat aplikasi dibuka ulang.
+
+Logika updater diuji otomatis: `node scripts/test-updater.mjs`.
+
 ## Keystore permanen
 
 Semua APK (debug, release) dan AAB ditandatangani **satu kunci yang sama**:
