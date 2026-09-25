@@ -13,6 +13,8 @@
 
   var DB_NAME = 'bz-updates', STORE = 'kv', KEY_GAME = 'game';
   var LS_BAD = 'bz_bad_build';          // build terunduh yang gagal jalan -> jangan diunduh lagi
+  var LS_BAD_AT = 'bz_bad_at';          // kapan diblacklist; blacklist kedaluwarsa dalam 24 jam
+  var BAD_TTL = 24 * 60 * 60 * 1000;
   var LS_BASE_OK = 'bz_base_ok';        // server update yang terakhir berhasil (dicoba duluan)
   var SS_STORED = 'bz_stored_run';      // sesi ini menjalankan versi terunduh (bukan bawaan APK)
   var CHECK_BUDGET = 15000;             // total anggaran waktu cek versi (semua server)
@@ -74,6 +76,16 @@
   function kvDel(k) { return kv('readwrite', function (s) { return s.delete(k); }); }
   function stored() { return kvGet(KEY_GAME).catch(function () { return null; }); }
 
+  // build yang diblacklist (masih berlaku = diblacklist dalam 24 jam terakhir).
+  // Entri lama tanpa cap waktu diabaikan -> instalasi yang dulu nyangkut otomatis lepas.
+  function badBuild() {
+    var b = Number(ls(LS_BAD)) || 0;
+    if (!b) return 0;
+    var at = Number(ls(LS_BAD_AT)) || 0;
+    if (!at || Date.now() - at > BAD_TTL) return 0;
+    return b;
+  }
+
   /* ---------- versi ---------- */
   function bundled() {
     return fetch('version.json', { cache: 'no-store' })
@@ -109,9 +121,8 @@
             if (!j || !Number(j.build)) throw new Error('version.json tidak valid');
             j._base = b;
             lsSet(LS_BASE_OK, b);
-            var bad = Number(ls(LS_BAD)) || 0;
             var rb = Number(j.build) || 0;
-            return { available: rb > cur.build && rb > bad, remote: j, current: cur, errors: errors };
+            return { available: rb > cur.build && rb > badBuild(), remote: j, current: cur, errors: errors };
           })
           .catch(function (e) {
             errors.push(b + ' ' + String((e && e.message) || e));
@@ -179,7 +190,10 @@
   /* ---------- jalankan game ---------- */
   function rollback() {
     return stored().then(function (st) {
-      if (st) lsSet(LS_BAD, String(st.build));
+      if (st) {
+        lsSet(LS_BAD, String(st.build));
+        lsSet(LS_BAD_AT, String(Date.now()));
+      }
       ssDel(SS_STORED);
       return kvDel(KEY_GAME).catch(function () {});
     });

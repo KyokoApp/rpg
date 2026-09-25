@@ -1432,6 +1432,9 @@
   // Apply translations first time
   applyTranslations();
 
+  // Game sudah hidup -> matikan watchdog updater supaya versi unduhan tidak di-rollback.
+  if (window.BZUpdater) window.BZUpdater.markOk();
+
   /* ================= PEMBARUAN (game diunduh dari dalam game) ================= */
   const btnUpdate = document.getElementById('btnUpdate');
   const updSub = document.getElementById('updSub');
@@ -1551,6 +1554,8 @@
     updState = 'busy';
     btnUpdate.disabled = true;
     btnUpdate.textContent = t('update_checking');
+    // CEK manual = niat pengguna: hapus blacklist build lama supaya boleh dicoba lagi
+    try { localStorage.removeItem('bz_bad_build'); localStorage.removeItem('bz_bad_at'); } catch (e) {}
     try {
       const r = await U.check();
       if (r.reason === 'offline') {

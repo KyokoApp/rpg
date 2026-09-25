@@ -163,5 +163,58 @@ console.log('UJI 5 — bawaan APK lebih baru: unduhan lama dibuang, jalankan baw
   ok(w.__reloaded !== true, 'launch selesai menulis game bawaan');
 }
 
+/* ============================ UJI 6: blacklist rollback ============================ */
+console.log('UJI 6 — blacklist build gagal jalan: berlaku 24 jam, entri lama diabaikan');
+{
+  const routes = new Map([
+    ['version.json', R('{"build": 100, "name": "apk"}')],
+    ['https://main.test/version.json', R(vJson(5000, 'baru'))],
+    ['https://main.test/game.html', gameHtml]
+  ]);
+  // a) entri legacy tanpa cap waktu (pemain lama yang nyangkut) -> diabaikan
+  let w = makeWindow({ update: { url: 'https://main.test/' }, routes });
+  w.localStorage.setItem('bz_bad_build', '5000');   // format lama, tanpa bz_bad_at
+  let c = await w.BZUpdater.check();
+  ok(c.available === true, 'blacklist legacy diabaikan -> update tersedia lagi');
+
+  // b) baru diblacklist -> tidak tersedia
+  w = makeWindow({ update: { url: 'https://main.test/' }, routes });
+  w.localStorage.setItem('bz_bad_build', '5000');
+  w.localStorage.setItem('bz_bad_at', String(Date.now()));
+  c = await w.BZUpdater.check();
+  ok(c.available === false, 'blacklist segar memblokir build 5000');
+
+  // c) kedaluwarsa 24 jam -> tersedia lagi
+  w.localStorage.setItem('bz_bad_at', String(Date.now() - 25 * 3600 * 1000));
+  c = await w.BZUpdater.check();
+  ok(c.available === true, 'blacklist kedaluwarsa setelah 24 jam');
+
+  // d) rollback mencatat cap waktu
+  const idbStore = new Map([['game', { build: 4321, name: 'x', html: '<html></html>' }]]);
+  w.indexedDB = fakeIDB(idbStore);
+  await w.BZUpdater.rollback();
+  ok(w.localStorage.getItem('bz_bad_build') === '4321', 'rollback memblacklist build terunduh');
+  ok(!!w.localStorage.getItem('bz_bad_at'), 'rollback mencatat cap waktu blacklist');
+}
+
+/* ============================ UJI 7: markOk mencegah rollback ============================ */
+console.log('UJI 7 — urutan launcher: unduh -> launch -> game memanggil markOk');
+{
+  const w = makeWindow({ update: { url: 'https://main.test/' }, routes: new Map([['version.json', R('{"build": 100, "name": "apk"}')]]) });
+  const routes2 = new Map([
+    ['version.json', R('{"build": 100, "name": "apk"}')],
+    ['https://main.test/version.json', R(vJson(7000, 'baru-banget'))],
+    ['https://main.test/game.html', gameHtml]
+  ]);
+  globalThis.fetch = makeFetch(routes2);
+  const c = await w.BZUpdater.check();
+  await w.BZUpdater.download(c.remote, () => {});
+  await w.BZUpdater.launch();
+  w.BZUpdater.markOk();
+  ok(w.sessionStorage.getItem('bz_stored_run') === '7000', 'versi terunduh ditandai sedang berjalan');
+  const cur = await w.BZUpdater.current();
+  ok(cur.build === 7000 && cur.source === 'stored', 'versi terunduh TIDAK dihapus setelah markOk');
+}
+
 console.log(`\n${pass} lulus, ${fail} gagal`);
 process.exit(fail ? 1 : 0);
